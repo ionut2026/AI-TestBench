@@ -1,8 +1,9 @@
 # Windchill RV&S MCP Server
 
-An [MCP](https://modelcontextprotocol.io) server that gives GitHub Copilot (CLI and VS Code) **read-only** access
-to Windchill RV&S (formerly PTC Integrity / MKS): projects, user stories, requirements, specifications, documents,
-test cases, test sessions/results, complaints, saved queries, and more — in **any** project.
+An [MCP](https://modelcontextprotocol.io) server that provides **read-only** access to Windchill RV&S (formerly PTC
+Integrity / MKS) from GitHub Copilot, the included no-AI `rvs` terminal client, MCP Inspector, or another MCP client:
+projects, user stories, requirements, specifications, documents, test cases, test sessions/results, complaints,
+saved queries, and more — in **any** project.
 
 You ask Copilot in plain English ("list all Draft user stories for PRA in Replicant"); Copilot finds the right
 projects, types, states and fields by itself and answers from live RV&S data.
@@ -12,6 +13,7 @@ projects, types, states and fields by itself and answers from live RV&S data.
 * [How it works](#how-it-works)
 * [Installation](#installation)
 * [Autonomous use with Copilot](#autonomous-use-with-copilot)
+* [Use without AI](docs/windchill-without-ai.md)
 * [Using it to query Integrity / Windchill RV&S](#using-it-to-query-integrity--windchill-rvs)
 * [Tools](#tools)
 * [Loose name resolution](#loose-name-resolution)
@@ -22,7 +24,7 @@ projects, types, states and fields by itself and answers from live RV&S data.
 ## How it works
 
 ```
-Copilot (CLI / VS Code) ──stdio──> Node MCP server (src/server.js)
+MCP client (Copilot / rvs / Inspector) ──stdio──> Node MCP server (src/server.js)
                                           │ line-delimited JSON
                                           ▼
                      Java bridge (java/RvsBridge.java) + mksapi.jar
@@ -38,6 +40,7 @@ so no separate JDK is required.
 | File                                    | Purpose                                                                 |
 |-----------------------------------------|-------------------------------------------------------------------------|
 | `src/server.js`                         | MCP tools, filter engine (`where`, relationship filters, counting)      |
+| `src/cli.js`                            | No-AI terminal client for calling the MCP tools directly                |
 | `src/resolve.js`                        | Cached catalogs and loose name resolution (types, states, projects, fields, users) |
 | `src/instructions.js`                   | Search playbook sent to Copilot (also installed as a Copilot instructions file) |
 | `src/bridge.js`                         | Starts/compiles the Java bridge and talks to it                         |
@@ -239,6 +242,12 @@ So Copilot can find RV&S data without your help:
   them, start Copilot with `copilot --allow-tool windchill`, or choose "approve for the rest of the
   session" the first time a tool runs.
 * **After changing the server code**, restart Copilot (or reload the server via `/mcp`) so the new process is used.
+
+## Use without AI
+
+You can connect to the same server without Copilot or any AI client. Use the MCP Inspector to choose a tool and enter
+its arguments yourself, use the included `rvs` terminal CLI, or write a small Node.js script to call the tools
+directly. See the [step-by-step guide](docs/windchill-without-ai.md) for setup, examples, and troubleshooting.
 
 ## Using it to query Integrity / Windchill RV&S
 

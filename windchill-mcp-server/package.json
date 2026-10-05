@@ -8,6 +8,7 @@
     "setup": "node scripts/setup.mjs",
     "install-instructions": "node scripts/install-copilot-instructions.mjs",
     "start": "node src/server.js",
+    "rvs": "node src/cli.js",
     "postinstall": "node scripts/build-bridge.mjs"
   },
   "keywords": [],
@@ -19,6 +20,7 @@
   },
   "type": "module",
   "bin": {
+    "rvs": "src/cli.js",
     "rvs-mcp-server": "src/server.js"
   }
 }
