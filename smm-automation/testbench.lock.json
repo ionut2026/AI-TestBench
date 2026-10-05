@@ -1,0 +1,6 @@
+{
+  "$comment": "The SMM TestBench engine (simulator + hwsim) is consumed from source at this pinned commit. The service refuses to start on a different commit unless SMM_TESTBENCH_ALLOW_UNPINNED=1. Bump the commit deliberately and re-run the contract tests.",
+  "repository": "git@github.com:ionut2026/SMM-TestBench.git",
+  "commit": "c55073075f06ba28e7c2d934d8a20a9e73931a06",
+  "defaultDir": "D:\\projects\\SMM TestBench"
+}

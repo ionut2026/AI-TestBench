@@ -1,0 +1,24 @@
+{
+  "name": "smm-automation-service",
+  "version": "0.1.0",
+  "description": "Headless SMM automation service: drives appSMM as the SMM Bridge through the SMM TestBench engine and controls the hardware twin",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node build.mjs && node dist/smm-automation-service.mjs",
+    "serve": "node dist/smm-automation-service.mjs",
+    "test": "vitest run",
+    "typecheck": "node build.mjs --paths-only && tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "aedes": "^1.2.0",
+    "mqtt": "^5.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.25.12",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.4"
+  }
+}

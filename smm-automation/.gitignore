@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+results/
+generated/
+service/node_modules/
+service/dist/
+service/tsconfig.testbench.json

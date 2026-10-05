@@ -1,0 +1,104 @@
+name: smm-automation
+
+# Framework CI: service contract tests, pipeline unit tests, drift check and the mock tier (framework self-test).
+# The offline/rig jobs run on a self-hosted Windows runner labelled `smm-rig`, which has appSMM (offline tier)
+# or network access to the automation instrument (rig tier, SMM_RIG_BROKER set on the runner), and the SMM TestBench
+# at the pinned commit with `npm ci` done in simulator/ and hwsim/ (SMM_TESTBENCH_DIR set on the runner).
+#
+# Secrets: SMM_TESTBENCH_TOKEN (read access to ionut2026/SMM-TestBench).
+
+on:
+  push:
+    paths: ["smm-automation/**", ".github/workflows/smm-automation.yml"]
+  pull_request:
+    paths: ["smm-automation/**", ".github/workflows/smm-automation.yml"]
+  schedule:
+    - cron: "0 2 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: Tier for the hardware job
+        type: choice
+        options: [offline, rig]
+        default: offline
+
+jobs:
+  framework:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      SMM_TESTBENCH_DIR: ${{ github.workspace }}\smm-testbench
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pinned SMM TestBench commit
+        id: lock
+        run: |
+          $lock = Get-Content smm-automation/testbench.lock.json | ConvertFrom-Json
+          "commit=$($lock.commit)" >> $env:GITHUB_OUTPUT
+      - uses: actions/checkout@v4
+        with:
+          repository: ionut2026/SMM-TestBench
+          ref: ${{ steps.lock.outputs.commit }}
+          path: smm-testbench
+          token: ${{ secrets.SMM_TESTBENCH_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          npm ci --prefix smm-testbench/simulator
+          npm ci --prefix smm-testbench/hwsim
+          npm ci --prefix smm-automation/service
+          python -m pip install -e "smm-automation[dev]"
+      - name: Service typecheck, build and contract tests
+        working-directory: smm-automation/service
+        run: |
+          npm run typecheck
+          npm run build
+          npm test
+      - name: Pipeline unit tests
+        working-directory: smm-automation
+        run: python -m pytest -q
+      - name: Drift check (suites vs committed catalog)
+        working-directory: smm-automation
+        run: smm-auto drift --strict
+      - name: Mock tier (framework self-test, not product evidence)
+        working-directory: smm-automation
+        run: smm-auto run --tier mock --outdir results/mock
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smm-mock-results
+          path: smm-automation/results/mock
+
+  hardware:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: framework
+    runs-on: [self-hosted, windows, smm-rig]
+    timeout-minutes: 120
+    concurrency: smm-rig
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install
+        run: |
+          npm ci --prefix smm-automation/service
+          npm run build --prefix smm-automation/service
+          python -m venv .venv
+          .venv/Scripts/pip install -e "smm-automation[dev]"
+      - name: Run ${{ inputs.tier || 'offline' }} tier
+        working-directory: smm-automation
+        run: ../.venv/Scripts/smm-auto run --tier ${{ inputs.tier || 'offline' }} --outdir results/hardware
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smm-${{ inputs.tier || 'offline' }}-results
+          path: smm-automation/results/hardware

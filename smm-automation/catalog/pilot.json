@@ -1,0 +1,1690 @@
+{
+ "schema": 1,
+ "scope": {
+  "name": "pilot",
+  "title": "Pilot: Initialization, Recover, Shutdown and System Status (7251 SDS Workflow / SDS Event Handling)"
+ },
+ "generatedAt": "2026-10-05T11:58:34+00:00",
+ "source": "Windchill RV&S (windchill MCP server, read-only)",
+ "counts": {
+  "specifications": 26,
+  "requirements": 22,
+  "userStories": 10,
+  "explorativeTests": 16
+ },
+ "specifications": {
+  "2955303": {
+   "id": 2955303,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "If the SystemStatusRequest message is received over the is/iw/rx topic before the initialization starts, appSMM software responds with the SystemStatusResponse having the current status: \"NotInitialized\".",
+   "hash": "f1521b2711611fe9e407e67250938d04c3d8df72357e6c8c2c431738ab9d4a82",
+   "modified": "2026-07-23T15:34:53+03:00",
+   "traceStatus": "none",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [
+    2384148
+   ],
+   "userStories": [
+    2404069
+   ],
+   "explorativeTests": [
+    2431923
+   ],
+   "messages": [
+    "SystemStatusRequest",
+    "SystemStatusResponse"
+   ],
+   "area": "initialization",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  },
+  "2854281": {
+   "id": 2854281,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Event Handling",
+   "documentId": 2384280,
+   "text": "If the connection to SMMBridge is re-established and appSMM software restarts following the RecoverRequest message (see 2653094), appSMM software publishes an event over the is/iw/tx topic, with the following details:\n- \"Category\": \"Operator\"\n- \"EventId\": ??\n- \"Severity\": \"Warning\"\n- \"TimeStamp\": time when the event was detected\n- \"Message\": \"The SMM system went to E-Stop because the connection to SMMBridge was lost. Connection is re-established now.\"\n- \"EventArgs\": none",
+   "hash": "ae9110fff9b7a4d96a94a3152e9f8c69abbca2aae42bb714fc15cf78392765ff",
+   "modified": "2025-05-08T16:09:35+03:00",
+   "traceStatus": "none",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [],
+   "userStories": [
+    2837620
+   ],
+   "explorativeTests": [
+    2855849,
+    2855850
+   ],
+   "messages": [
+    "RecoverRequest"
+   ],
+   "area": "bridge_connection",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  },
+  "2752658": {
+   "id": 2752658,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Event Handling",
+   "documentId": 2384280,
+   "text": "After restart appSMM software publishes the SystemStatusNotification message over the is/iw/tx topic, to notify the Bridge that the current system state is \"NotInitialized\".",
+   "hash": "e492fe7ead52b043d56c8d9792fd42e95cf93dc3442d1c63375ac693563a6818",
+   "modified": "2025-05-08T16:09:35+03:00",
+   "traceStatus": "none",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [
+    1939068
+   ],
+   "userStories": [
+    2741405
+   ],
+   "explorativeTests": [
+    2806610
+   ],
+   "messages": [
+    "SystemStatusNotification"
+   ],
+   "area": "system_status",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  },
+  "2653094": {
+   "id": 2653094,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Event Handling",
+   "documentId": 2384280,
+   "text": "If the system is shut down following a fatal error event, the SMM system can be re-started if the RecoverRequest message is received over the is/iw/rx topic.\nAfter the RecoverRequest message is received over the is/iw/rx topic, the SMM system follows the recovery procedure, as described in 2532492, 2532504, 2532508, 2532510.",
+   "hash": "590de9f9a1438b38c4263299b6ff6671ed5325d02f22a36887fd210252dc7541",
+   "modified": "2025-05-08T15:01:35+03:00",
+   "traceStatus": "upstream suspect",
+   "suspectCount": 1,
+   "verificationMethod": "None",
+   "satisfies": [
+    1932310,
+    1853226,
+    1932312
+   ],
+   "userStories": [
+    1783271
+   ],
+   "explorativeTests": [],
+   "messages": [
+    "RecoverRequest"
+   ],
+   "area": "recover",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  },
+  "2653086": {
+   "id": 2653086,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Event Handling",
+   "documentId": 2384280,
+   "text": "If the SMM system goes to E-Stop following a fatal error, appSMM software publishes a SystemStatusNotification message which notifies that system status changed from \"Idle\" (PreviousState) to \"E-Stop\" (CurrentState).",
+   "hash": "068ff31d5bc0600bd3f0c358d5f55fd6dad2566895051a50949a5a71df61f919",
+   "modified": "2025-05-08T15:01:35+03:00",
+   "traceStatus": "upstream suspect",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [
+    1932308,
+    1853225,
+    1853224,
+    1932314,
+    1932397
+   ],
+   "userStories": [
+    1783271
+   ],
+   "explorativeTests": [],
+   "messages": [
+    "SystemStatusNotification"
+   ],
+   "area": "system_status",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  },
+  "2551270": {
+   "id": 2551270,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "If the SetConfigurationResponse message was published over the is/iw/tx topic, appSMM software automatically publishes the SystemStatusNotification message over the is/iw/tx topic, which notifies that system state changed from \"Configuring\" to \"NotInitialized\".",
+   "hash": "9f824f08c458353cc46387766d9c07811df20e5791ff9aa124b43202dcbf5deb",
+   "modified": "2026-07-23T15:46:05+03:00",
+   "traceStatus": "upstream suspect",
+   "suspectCount": 1,
+   "verificationMethod": "None",
+   "satisfies": [
+    2384071,
+    2384148,
+    1853225,
+    1853224
+   ],
+   "userStories": [
+    2492146
+   ],
+   "explorativeTests": [
+    2534066,
+    2534601,
+    2534758,
+    2568719
+   ],
+   "messages": [
+    "SetConfigurationResponse",
+    "SystemStatusNotification"
+   ],
+   "area": "system_status",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  },
+  "2535547": {
+   "id": 2535547,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "If a loaded rack was picked up by the Distributor either from Input lane or from FrontIn while the system status is \"Idle\", appSMM software publishes a SystemStatusNotification message over the is/iw/tx topic with the following details:\n- \"PreviousState\":\"Idle\"\n- \"CurrentState\":\"NormalOperation\"",
+   "hash": "1ccfe824b647889e7cf907cc32271e2a20f5a7d8eb80699c909e2220bc8963ab",
+   "modified": "2025-05-08T15:01:35+03:00",
+   "traceStatus": "upstream suspect",
+   "suspectCount": 2,
+   "verificationMethod": "None",
+   "satisfies": [
+    2384148,
+    2384071,
+    1853225,
+    1853224,
+    1853226
+   ],
+   "userStories": [
+    2488626
+   ],
+   "explorativeTests": [
+    2510136
+   ],
+   "messages": [
+    "SystemStatusNotification"
+   ],
+   "area": "system_status",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  },
+  "2532492": {
+   "id": 2532492,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "If the RecoverRequest message is received over the is/iw/rx topic, appSMM software sends the \"DeInitializeCmd\" command to RTC, in order to initiate system de-initialization. The \"DeInitializeCmd\" command is sent only if the system status is \"E-Stop\".",
+   "hash": "69c84bb6cee4e5f4e9c8ff33cbe1cb7f941fb046f1cd2fd50f209d6fe2f6a125",
+   "modified": "2025-05-08T15:01:35+03:00",
+   "traceStatus": "none",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [
+    2389460,
+    2384146
+   ],
+   "userStories": [
+    2419846
+   ],
+   "explorativeTests": [
+    2441275,
+    2442193
+   ],
+   "messages": [
+    "RecoverRequest"
+   ],
+   "area": "recover",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  },
+  "2532404": {
+   "id": 2532404,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "If SMM initialization does not start within 20 seconds after the InitializationRequest message is received, appSMM software publishes the InitializationResponse message with Status \"Error\" over the is/iw/tx topic.",
+   "hash": "05d98e459a2ad4b4685e423d5faea20016dd3d1af79366f2cb004d9169aa936d",
+   "modified": "2026-09-24T15:42:54+03:00",
+   "traceStatus": "upstream related",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [
+    2387196
+   ],
+   "userStories": [
+    2403408
+   ],
+   "explorativeTests": [
+    2430841,
+    2439674
+   ],
+   "messages": [
+    "InitializationRequest",
+    "InitializationResponse"
+   ],
+   "area": "initialization",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": "Needs RTC fault injection (rtc_appl not starting initialization); the hardware twin has no such fault mode yet"
+  },
+  "2528710": {
+   "id": 2528710,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "The InitializationRequest and InitializationResponse messages are logged in appSMM log files. The message topic and content of each exchanged message is included in the log files.",
+   "hash": "82a5ea1a5b177d6af05b91e4ad6f21f1a1ae24b4bd6feb2702b19f8bdabd591a",
+   "modified": "2025-05-08T15:01:35+03:00",
+   "traceStatus": "none",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [],
+   "userStories": [
+    2403408
+   ],
+   "explorativeTests": [
+    2430841,
+    2439674
+   ],
+   "messages": [
+    "InitializationRequest",
+    "InitializationResponse"
+   ],
+   "area": "initialization",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": "Checks appSMM log files: appSMM logs to SmartInspect .sil files, a SIL reader is not available yet"
+  },
+  "2528708": {
+   "id": 2528708,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "The SystemStatusRequest, SystemStatusResponse and SystemStatusNotification messages are logged in appSMM log files. The message topic and content of each exchanged message is included in the log files.",
+   "hash": "4786b9fb75c5fe2f4c5d565315ca4f266a780c829d8209eae86ecfd1c2deb43c",
+   "modified": "2026-07-23T15:34:53+03:00",
+   "traceStatus": "none",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [],
+   "userStories": [
+    2404051,
+    2404069
+   ],
+   "explorativeTests": [
+    2430842,
+    2431923
+   ],
+   "messages": [
+    "SystemStatusRequest",
+    "SystemStatusResponse",
+    "SystemStatusNotification"
+   ],
+   "area": "system_status",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": "Checks appSMM log files: appSMM logs to SmartInspect .sil files, a SIL reader is not available yet"
+  },
+  "2528706": {
+   "id": 2528706,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "If all SMM lanes are successfully initialized, appSMM software publishes two SystemStatusNotification messages, which notifiy that the CurrentState of the system changed firstly to \"Idle\" and then to \"Clearing\".",
+   "hash": "fd1f48cdd0554b0fd1e47710a3ec69357986f9f2587c2452581eb246c6c25d51",
+   "modified": "2025-05-08T15:01:35+03:00",
+   "traceStatus": "upstream suspect",
+   "suspectCount": 3,
+   "verificationMethod": "None",
+   "satisfies": [
+    2384148,
+    1853226,
+    2384136,
+    1853241,
+    2384071,
+    1853225,
+    1853224
+   ],
+   "userStories": [
+    2404069
+   ],
+   "explorativeTests": [
+    2431923
+   ],
+   "messages": [
+    "SystemStatusNotification"
+   ],
+   "area": "system_status",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  },
+  "2528703": {
+   "id": 2528703,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "If system clearing is completed (all racks detected during initialization were moved to Output), appSMM software publishes a SystemStatusNotification message which notifies that the CurrentState of the system changed to \"Idle\".",
+   "hash": "440acdc290f58ffb41117de8d681f3c30f5a0e926fd9a36a72f2ef90bced84e8",
+   "modified": "2025-05-08T15:01:35+03:00",
+   "traceStatus": "upstream suspect",
+   "suspectCount": 3,
+   "verificationMethod": "None",
+   "satisfies": [
+    2384148,
+    1853245,
+    1853241,
+    2384071,
+    2384136,
+    1853225,
+    1853224,
+    1853226
+   ],
+   "userStories": [
+    2403408
+   ],
+   "explorativeTests": [
+    2430841,
+    2439674
+   ],
+   "messages": [
+    "SystemStatusNotification"
+   ],
+   "area": "initialization",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  },
+  "2528698": {
+   "id": 2528698,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "After publishing the InitializationResponse message with Status \"OK\", appSMM software sends a SystemStatusNotification message over the is/iw/tx topic, which notifies that system state changed from \"NotInitialized\" to \"Initializing\".",
+   "hash": "c4283482a2cf8b5dfeb1064d46b643aaa839f65b4fb0c344562817fc4a5a6583",
+   "modified": "2025-05-08T15:01:35+03:00",
+   "traceStatus": "upstream suspect",
+   "suspectCount": 2,
+   "verificationMethod": "None",
+   "satisfies": [
+    2384071,
+    2384148,
+    1853241,
+    1853225,
+    1853224,
+    1853226
+   ],
+   "userStories": [
+    2404069
+   ],
+   "explorativeTests": [
+    2431923
+   ],
+   "messages": [
+    "InitializationResponse",
+    "SystemStatusNotification"
+   ],
+   "area": "initialization",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  },
+  "2525423": {
+   "id": 2525423,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "SMM begins the initialization process only after the InitializationRequest message is received over the is/iw/rx topic and the system state is \"NotInitialized\".\nNote:\nWhen the InitializationRequest message is received over the is/iw/rx topic, appSMM transmits the 'InitializeCmd' command to rtc_appl, only when the system state is 'NotInitialized'.",
+   "hash": "9bb164c67ec5b71884288c7a1aef3298e60a551abdfc842a0f1dd81f130e2f5d",
+   "modified": "2026-09-24T15:42:54+03:00",
+   "traceStatus": "upstream related",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [
+    1853239,
+    2387196
+   ],
+   "userStories": [
+    2403408
+   ],
+   "explorativeTests": [
+    2430841,
+    2439674
+   ],
+   "messages": [
+    "InitializationRequest"
+   ],
+   "area": "initialization",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  },
+  "2525392": {
+   "id": 2525392,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "After it gets connected to the MQTT Broker, the appSMM software automatically publishes a SystemStatusResponse message each time when a SystemStatusRequest message is received over the is/iw/rx topic. The SystemStatusResponse message is always published over the is/iw/tx topic.",
+   "hash": "5865c681fd6fcb4cf06220ed32a492f8679c2da57242d762818081aea9816b26",
+   "modified": "2026-07-23T15:34:53+03:00",
+   "traceStatus": "none",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [
+    2386628
+   ],
+   "userStories": [
+    2404051
+   ],
+   "explorativeTests": [
+    2430842
+   ],
+   "messages": [
+    "SystemStatusResponse",
+    "SystemStatusRequest"
+   ],
+   "area": "system_status",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  },
+  "2525390": {
+   "id": 2525390,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "The structure of the SystemStatusNotification message published by appSMM software matches the structure of the message file attached under Properties.\nThe SystemStatusNotification message is always published over the is/iw/tx topic.",
+   "hash": "156f1bba12bad958ca2795cb76d2496d91050ea8db3dc2037d68bd907ab470d1",
+   "modified": "2026-07-23T15:34:53+03:00",
+   "traceStatus": "none",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [
+    2384148
+   ],
+   "userStories": [
+    2404069
+   ],
+   "explorativeTests": [
+    2431923
+   ],
+   "messages": [
+    "SystemStatusNotification"
+   ],
+   "area": "system_status",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  },
+  "2525388": {
+   "id": 2525388,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "Following appSMM connection to MQTT Broker, the appSMM software publishes two SystemStatusNotification messages over the is/iw/tx topic, to notify that CurrentState of the system changed first to \"PowerOn\", and then to \"NotInitialized\".",
+   "hash": "ba57a70444b3e2e1d90706e4c7366328fb8dbfac65771241ad924de6b40c2bdf",
+   "modified": "2026-07-23T15:34:53+03:00",
+   "traceStatus": "upstream suspect",
+   "suspectCount": 2,
+   "verificationMethod": "None",
+   "satisfies": [
+    2384071,
+    2384148,
+    1853226,
+    1853225,
+    1853224
+   ],
+   "userStories": [
+    2404069
+   ],
+   "explorativeTests": [
+    2431923
+   ],
+   "messages": [
+    "SystemStatusNotification"
+   ],
+   "area": "system_status",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  },
+  "2428419": {
+   "id": 2428419,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "After sending the ShutdownResponse, appSMM software publishes a SystemStatusNotification message which notifies that system status changed from \"Idle\" (PreviousState) to \"E-Stop\" (CurrentState)",
+   "hash": "3fab7cb6cf5d6e27b646ff999430081fc640bb1a9c6579e1a09dcfc2f4990944",
+   "modified": "2025-05-08T15:01:35+03:00",
+   "traceStatus": "none",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [
+    2384154,
+    1939072
+   ],
+   "userStories": [
+    2404361
+   ],
+   "explorativeTests": [
+    2441248,
+    2469925
+   ],
+   "messages": [
+    "ShutdownResponse",
+    "SystemStatusNotification"
+   ],
+   "area": "shutdown",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  },
+  "2427781": {
+   "id": 2427781,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "If the SetConfigurationRequest message is received over the is/iw/rx topic and the system state is 'NotInitialized', appSMM software automatically publishes the SystemStatusNotification message over the is/iw/tx topic, which notifies that system state changed from \"NotInitialized\" to \"Configuring\".",
+   "hash": "56b72b642ce026b490c9a66f44150ebcf7e31740fe5addb535db83219758b1eb",
+   "modified": "2026-07-23T15:46:05+03:00",
+   "traceStatus": "upstream suspect",
+   "suspectCount": 2,
+   "verificationMethod": "None",
+   "satisfies": [
+    2384071,
+    2384148,
+    1853225,
+    1853224,
+    1853226
+   ],
+   "userStories": [
+    2492146
+   ],
+   "explorativeTests": [
+    2534066,
+    2534601,
+    2534758,
+    2568719
+   ],
+   "messages": [
+    "SetConfigurationRequest",
+    "SystemStatusNotification"
+   ],
+   "area": "system_status",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  },
+  "2327588": {
+   "id": 2327588,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251-PDS SMM",
+   "documentId": 2101142,
+   "text": "The SMM: \n- Responsible for association of sample ID to tube position and rack.\n- Moves racks efficiently through the system.\n- Dynamically routes racks through the system as FIFO, while respecting constraints provided per rack via the Bridge for priorities and destinations.\n- Actively requests the route for each rack in the system, at each destination decision checkpoint and state change (based on the current SMM and track state, rack location and/or bridge's reroute notification).\nThe Bridge: \n- The single point of interface for all SMM to analyzer and IW communications.\n- Upon request from the SMM, calculates the next destination analyzer for the rack. The algorithm to determine the route is Werfen’s responsibility and is independent of the track logic. The route (next analyzer) is calculated based on the analyzers' capabilities, analyzer's current schedule, analyzer's material expiration, configuration options on the IW and test orders coming from the IW.\n- Upon request from the SMM, calculates the next analyzer for the rack. The algorithm to determine the route is Werfen’s responsibility and is independent of the track logic. Currently the route (next analyzer) is calculated based on a multitude of considerations e.g. analyzers' capabilities, analyzers' current schedule, analyzers' material expiration, configuration options, resource utilization and sample test orders.\n- Assigns the priority and destination analyzer specific for each requested rack.\nThe IW: \n- Assigns test orders to the samples (via LIS or manual entry).\n- Cancels test orders.\n- Recalls a sample.\n- Manages jobs for each test order.\n- Creates Rerun/Reflex jobs when necessary.\n- Handles the completion and release for each sample.\n- Initiates system operating commands and settings, e.g. change of states, configuration, shutdown, etc.\n- Collects and responds to system monitoring and error management information.\n- Is a system module external to the SMM, and therefore not in the scope of this requirement document.",
+   "hash": "1d72095ac8a6ea0ae1f7f8e90c0b8ebcae1b99444382d44edfe779124abfcccb",
+   "modified": "2026-08-31T17:00:15+03:00",
+   "traceStatus": "none",
+   "suspectCount": 0,
+   "verificationMethod": null,
+   "satisfies": [],
+   "userStories": [],
+   "explorativeTests": [],
+   "messages": [],
+   "area": "other",
+   "testable": false,
+   "notTestableReason": "PDS overview statement: no observable behaviour at the ICD",
+   "deferredReason": null
+  },
+  "2532504": {
+   "id": 2532504,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "If rtc_appl replies with 'DeInitializeRsp' within 20 seconds, appSMM software publishes the RecoverResponse message with Status \"OK\" over the is/iw/tx topic. The structure of the RecoverResponse message published by appSMM software matches the structure of the message file attached under Properties.",
+   "hash": "bba306d8e3285d45aa96e75a6c69e0a1b6b47d6f5c0ca51923a3b9bbeda99bb8",
+   "modified": "2025-05-08T15:01:35+03:00",
+   "traceStatus": "upstream",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [
+    2384146
+   ],
+   "userStories": [
+    2419846
+   ],
+   "explorativeTests": [
+    2441275,
+    2442193
+   ],
+   "messages": [
+    "RecoverResponse"
+   ],
+   "area": "recover",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  },
+  "2532508": {
+   "id": 2532508,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "If rtc_appl does not reply with \"DeInitializeRsp\" during 20 seconds (see 2532504), appSMM software publishes the RecoverResponse message with Status \"Error\" over the is/iw/tx topic.\nNote:\nThe timeout for receiving the rtc_appl reply for any command (\"CommandResponseTimeoutMilliseconds\") is configured in the appSMM.yaml file, which can be viewed/updated in appSMM folder.",
+   "hash": "54f35f789e60598055dc3e29b19c0c2b328756fd4dd3dc25d473e46928c923ff",
+   "modified": "2025-05-08T15:01:35+03:00",
+   "traceStatus": "none",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [
+    2384146
+   ],
+   "userStories": [
+    2419846
+   ],
+   "explorativeTests": [
+    2441275,
+    2442193
+   ],
+   "messages": [
+    "RecoverResponse"
+   ],
+   "area": "recover",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": "Needs RTC fault injection (no DeInitializeRsp within 20 s); the hardware twin has no such fault mode yet"
+  },
+  "2532510": {
+   "id": 2532510,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "After publishing the RecoverResponse message, appSMM software sends the 'InitializeCmd' command to RTC, in order to initiate system initialization.",
+   "hash": "f56cd48693fb29acb6032348ef3ce78b8343cbb7b2ff884518bc0f70ddce60bb",
+   "modified": "2025-05-08T15:01:35+03:00",
+   "traceStatus": "none",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [
+    1932312
+   ],
+   "userStories": [
+    2419846
+   ],
+   "explorativeTests": [
+    2441275,
+    2442193
+   ],
+   "messages": [
+    "RecoverResponse"
+   ],
+   "area": "recover",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  },
+  "2854109": {
+   "id": 2854109,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Event Handling",
+   "documentId": 2384280,
+   "text": "If the SMMBridge gets disconnected, the SMM system goes to default E-Stop state (i.e. system follows the behaviour described under Default E-Stop chapter).",
+   "hash": "293117f8547a4663daebeb1a3d4aa5df7a03906e43ed4037eccf3e9f7776c146",
+   "modified": "2025-05-08T16:09:35+03:00",
+   "traceStatus": "none",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [],
+   "userStories": [
+    2837620
+   ],
+   "explorativeTests": [
+    2855849,
+    2855850
+   ],
+   "messages": [],
+   "area": "bridge_connection",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  },
+  "2428417": {
+   "id": 2428417,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "If rtc_appl replies with \"StopRsp\" within 20 seconds, appSMM software publishes the ShutDownResponse with Status \"OK\", over the is/iw/tx topic. The structure of the ShutDownResponse message published by appSMM software matches the structure of the message file attached under Properties.",
+   "hash": "01efab86599cb5f207ba834651f5e9e20b95974f6eb9416e84c20d79389e7e46",
+   "modified": "2025-05-08T15:01:35+03:00",
+   "traceStatus": "upstream suspect",
+   "suspectCount": 1,
+   "verificationMethod": "None",
+   "satisfies": [
+    2384154,
+    1853226,
+    1640380
+   ],
+   "userStories": [
+    2404361
+   ],
+   "explorativeTests": [
+    2441248,
+    2469925
+   ],
+   "messages": [],
+   "area": "shutdown",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null
+  }
+ },
+ "requirements": {
+  "1640380": {
+   "id": 1640380,
+   "state": "Accepted",
+   "text": "The Sample Tube Identification Software shall perform a controlled shutdown of the software and OS when requested over the external interface.",
+   "document": "7251 SDR Camera Sample Tube Identification",
+   "specifications": [
+    2428417
+   ]
+  },
+  "1853224": {
+   "id": 1853224,
+   "state": "Accepted",
+   "text": "The system shall operate in the following states:",
+   "document": "7251 SDR Workflow",
+   "specifications": [
+    2427781,
+    2525388,
+    2528698,
+    2528703,
+    2528706,
+    2535547,
+    2551270,
+    2653086
+   ]
+  },
+  "1853225": {
+   "id": 1853225,
+   "state": "Accepted",
+   "text": null,
+   "document": "7251 SDR Workflow",
+   "specifications": [
+    2427781,
+    2525388,
+    2528698,
+    2528703,
+    2528706,
+    2535547,
+    2551270,
+    2653086
+   ]
+  },
+  "1853226": {
+   "id": 1853226,
+   "state": "Accepted",
+   "text": "State\tPurpose\t\nPowerd On\tOperator powers up the device.\nThe operating system starts up and launches the instrument control software.\t\nNotInitializedReady to initialize or configure\t\nInitializingInstrument mechanics and electronics are initialized, brought to home position and prepared for proper usage.\nConfiguringConfiguration changes of the system can be made within this state.\nE-Stopped (Halted)After a fatal error the device stops.\nInstrument can be initialized as a recovery action.\t\nIdle (Ready)Device is ready to be used. \nClearing (Maintenance)Device is performing additional tasks after initializing to put the system into a defined state (e.g. removal of racks).\nNormal Operation (Active, AllJobsRunning)Device enters this state once the first rack is loaded and processed.\nShutdownDevice is shutting down.",
+   "document": "7251 SDR Workflow",
+   "specifications": [
+    2427781,
+    2428417,
+    2525388,
+    2528698,
+    2528703,
+    2528706,
+    2535547,
+    2653094
+   ]
+  },
+  "1853239": {
+   "id": 1853239,
+   "state": "Accepted",
+   "text": "The user shall be able to request SMM system initialization from the IL software.",
+   "document": "7251 SDR Workflow",
+   "specifications": [
+    2525423
+   ]
+  },
+  "1853241": {
+   "id": 1853241,
+   "state": "Accepted",
+   "text": "The user shall be able to identify that the system was successfully initialized.",
+   "document": "7251 SDR Workflow",
+   "specifications": [
+    2528698,
+    2528703,
+    2528706
+   ]
+  },
+  "1853245": {
+   "id": 1853245,
+   "state": "Accepted",
+   "text": "The SMM system shall complete initialization when all SMM modules could be successfully initialized and all racks, excepting the ones occupied in the pipettor lanes of offline analyzers (see Requirement 2394906), have been moved to the Output lane.",
+   "document": "7251 SDR Workflow",
+   "specifications": [
+    2528703
+   ]
+  },
+  "1932308": {
+   "id": 1932308,
+   "state": "Accepted",
+   "text": "If a Fatal Error is generated the system shall suspend all SMM running rack processing jobs.",
+   "document": "7251 SDR Event Handling",
+   "specifications": [
+    2653086
+   ]
+  },
+  "1932310": {
+   "id": 1932310,
+   "state": "Accepted",
+   "text": "If a Fatal Error is generated a user interaction is required for recovery (see 2389460).",
+   "document": "7251 SDR Event Handling",
+   "specifications": [
+    2653094
+   ]
+  },
+  "1932312": {
+   "id": 1932312,
+   "state": "Accepted",
+   "text": "After a fatal error and possible user recovery an initialization must be performed.",
+   "document": "7251 SDR Event Handling",
+   "specifications": [
+    2532510,
+    2653094
+   ]
+  },
+  "1932314": {
+   "id": 1932314,
+   "state": "Accepted",
+   "text": "After a Fatal Error the system shall abort any pending rack processing job during initialization.",
+   "document": "7251 SDR Event Handling",
+   "specifications": [
+    2653086
+   ]
+  },
+  "1932397": {
+   "id": 1932397,
+   "state": "Accepted",
+   "text": "The system execution shall stop after reporting a Fatal event and the system status goes to E-Stop (Halted).",
+   "document": "7251 SDR Event Handling",
+   "specifications": [
+    2653086
+   ]
+  },
+  "1939068": {
+   "id": 1939068,
+   "state": "Accepted",
+   "text": "SMM shall automatically restart after an unexpected software failure.\nSMM shall inform IW about the fact that the SW was not shut down properly.\nAfterwards the instrument will be in status \"Powered On\" / NotInitialized and Initialization is required to continue normal operation.",
+   "document": "7251 SDR Event Handling",
+   "specifications": [
+    2752658
+   ]
+  },
+  "1939072": {
+   "id": 1939072,
+   "state": "Accepted",
+   "text": "SMM shall publish the following changes in system information and configuration so that it can be shown and appropriate action can be taken if needed: \n- SMM system status changes\n- system connections changes (e.g. when an analyzer is disconnected)\n- I/O module status changes\n- occupying status of Input/Output lanes and FrontIn/FrontOut ports\n- track status changes\n- location changes for a given rack within the SMM system (when the rack is moved)",
+   "document": "7251 SDR Event Handling",
+   "specifications": [
+    2428419
+   ]
+  },
+  "2384071": {
+   "id": 2384071,
+   "state": "Accepted",
+   "text": "The system shall operate in the following states: \n- Powered On: Booting OS and SW\n- Not Initialized: Ready to initialize or configure\n- Initializing: Homing all modules & self test\n- Configuring: Ready to update configuration\n- E-Stopped: Error state - all motors stoped\n- Idle: Ready to accept racks\n- Clearing: Perform maintenance tasks - e.g. remove racks\n- Normal Operation: Process racks - Identify - Dispatch - Notify progress",
+   "document": "7251 SDR Interface Definition",
+   "specifications": [
+    2427781,
+    2525388,
+    2528698,
+    2528703,
+    2528706,
+    2535547,
+    2551270
+   ]
+  },
+  "2384136": {
+   "id": 2384136,
+   "state": "Changed",
+   "text": "appSMM shall publish system status Clearing when racks are moved to the output.\nIn case of success appSMM shall publish system status Idle after clearing finished.\nIn case of error appSMM shall publish system status E-Stop.",
+   "document": "7251 SDR Interface Definition",
+   "specifications": [
+    2528703,
+    2528706
+   ]
+  },
+  "2384146": {
+   "id": 2384146,
+   "state": "Accepted",
+   "text": "appSMM shall initiate recovery from fatal error codition (E-Stopped) when requested.\nAfter recovery the state will be not initialized (2387196).",
+   "document": "7251 SDR Interface Definition",
+   "specifications": [
+    2532492,
+    2532504,
+    2532508
+   ]
+  },
+  "2384148": {
+   "id": 2384148,
+   "state": "Accepted",
+   "text": "appSMM shall automatically publish system status (2384071) changes as they occur.",
+   "document": "7251 SDR Interface Definition",
+   "specifications": [
+    2427781,
+    2525388,
+    2525390,
+    2528698,
+    2528703,
+    2528706,
+    2535547,
+    2551270,
+    2955303
+   ]
+  },
+  "2384154": {
+   "id": 2384154,
+   "state": "Accepted",
+   "text": "appSMM shall initiate an immediate shutdown of the software and OS when requested.",
+   "document": "7251 SDR Interface Definition",
+   "specifications": [
+    2428417,
+    2428419
+   ]
+  },
+  "2386628": {
+   "id": 2386628,
+   "state": "Accepted",
+   "text": "appSMM shall publish system status (2384071) when requested.",
+   "document": "7251 SDR Interface Definition",
+   "specifications": [
+    2525392
+   ]
+  },
+  "2387196": {
+   "id": 2387196,
+   "state": "Accepted",
+   "text": "appSMM shall initiate system initialization when requested.\n(Only possible when state is not initialized)",
+   "document": "7251 SDR Interface Definition",
+   "specifications": [
+    2525423,
+    2532404
+   ]
+  },
+  "2389460": {
+   "id": 2389460,
+   "state": "Accepted",
+   "text": "The user shall be able to initiate error recovery from the IL software, after fatal error scenario (see 1932312 and 1932314 for more details).",
+   "document": "7251 SDR Workflow",
+   "specifications": [
+    2532492
+   ]
+  }
+ },
+ "userStories": {
+  "1783271": {
+   "id": 1783271,
+   "summary": "Error Handling - Default - E-Stop",
+   "state": "Accepted",
+   "description": "As a user I want SMM to go into E-Stop (1710297) in case of an error situation that cannot be automatically recovered.\nRecoverable scenarios need to be explicitly defined by user stories/requirements. Otherwise default error handling will apply.\n \nRelated:\nASD-User Story 1722622: System Recovery",
+   "explorativeTests": []
+  },
+  "2403408": {
+   "id": 2403408,
+   "summary": "StartUp: Initialization Response",
+   "state": "Tested",
+   "description": "Definition:\n*. As a system user I need to know if the initialization of the SMM system was successfully initiated during the StartUp sequence, so that I can manage the system.\n \nAcceptance Criteria:\n*. The appSMM software shall process the InitializationRequest message when received.\n*. The appSMM shall automatically respond with InitializationResponse message when requested, regardless if:\n\t*. there are analyzers connected or not\n\t*. there are available pippetors or not.\n*. The InitializationResponse message shall include:\n\t*. OK - if the SMM Initialization can start\n\t*. Error - if the SMM Initialization cannot start (e.g. when a hardware error prevents initialization of the system)\n*. The InitializationResponse message content and structure shall correspond to the expected schema, which can be found at:\n\t*. https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas\n*. The message shall include the 'version' property as mandatory property, by referencing the current JSON schema version (see request 2272789)\n*. \n\nNotes for testing were added in the Notes section. Diagram showing the sequence of exchanged messages is attached under the Notes section.\n \nOut of Scope:\n*. The initialization process of teh SMM system will be handled in a different user story. The current user story handles only the InitializationResponse message.",
+   "explorativeTests": [
+    2430841,
+    2439674
+   ]
+  },
+  "2404051": {
+   "id": 2404051,
+   "summary": "StartUp: System Status Response",
+   "state": "Tested",
+   "description": "Definition:\n*. As a system user I need to know the status of the SMM system during the Start-Up, so that I can manage the system.\n \nAcceptance Criteria:\n*. The appSMM software shall process the SystemStatusRequest message when received.\n*. The appSMM shall automatically respond with SystemStatusResponse message when requested.\n*. The SystemStatusResponse message shall report one of the following statuses, depending on the state of the system on that moment:\n\t*. \"PowerOn\"\n\t*. \"NotInitialized\"\n\t*. \"Initializating\"\n\t*. \"Idle\"\n\t*. \"NormalOperation\"\n\t*. \"E-Stop\"\n\t*. \"Configuring\"\n\t*. \"Clearing\"\n*. The SystemStatusResponse message content and structure shall correspond to the expected schema, which can be found at:\n\t*. https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas\n*. The message shall include the 'version' property as mandatory property, by referencing the current JSON schema version (see request 2272789)\n*. \nNote:\nOnly one of the system states mentioned above is send by the appSMM in the SystemStatusResponse during the Start-Up sequence; afterwards, any system change will be send in the SystemStatusNotification message.\nDiagram showing the sequence of exchanged messages is attached under the Notes section.\n \nOut of Scope:\n*. The use case when the analyzer sends SystemStatusNotification each time when changes occur in the system status is handled under a different user story (ASD-User Story 2404069). The current user story is related only to the Start-Up sequence.",
+   "explorativeTests": [
+    2430842
+   ]
+  },
+  "2404069": {
+   "id": 2404069,
+   "summary": "StartUp: System Status Notification",
+   "state": "Tested",
+   "description": "Definition:\n*. As a system user I need to be notified about changes in SMM system status during the Start-Up sequence, so that I can manage the system.\n \nAcceptance Criteria:\n*. The appSMM software shall notify the Bridge when its system status changes during the Start-Up sequence.\n*. The appSMM shall automatically publish a SystemStatusNotification message when its status changes (see the diagram attached under the Notes section).\n*. The SystemStatusNotification message shall report both the previouse and current system status.\n*. The following statuses shall be considered to be reported in the SystemStatusNotification message during start up and initialization:\n\t*. \"PowerOn\"\n\t*. \"NotInitialized\"\n\t*. \"Initializating\"\n\t*. \"Idle\"\n\t*. \"E-Stop\"\n\t*. \"Clearing\"\n*. The SystemStatusNotification message content and structure shall correspond to the expected schema, which can be found at:\n\t*. https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas\n*. The message shall include the 'version' property as mandatory property, by referencing the current JSON schema version (see request 2272789)\n*. \n\nDiagram showing the sequence of exchanged messages is attached under the Notes section.\n \nOut of Scope:\n*. The use case when the analyzer sends SystemStatusResponse when requested is handled under a different user story (ASD-User Story 2404051).\n*. The use case when the appSMM sends a SystemStatusNotification while the system is in normal operation mode will be handled under a different user story. The current user story is related to the Start-Up sequence (i.e. reporting statuses as PowerOn, NotInitialized, Initializing).\n*. System state \"Configuring\"",
+   "explorativeTests": [
+    2431923
+   ]
+  },
+  "2404361": {
+   "id": 2404361,
+   "summary": "Shut Down the appSMM",
+   "state": "Accepted",
+   "description": "Definition:\n*. As a SMM system user, I want to be able to initiate shut down the appSMM software, so that all SMM system components are safely stopped.\n \nAcceptance Criteria:\n*. The appSMM software shall automatically initiate the shut down when requested.\n*. The appSMM system shall process the ShutDownRequest message when received.\n*. The appSMM software shall respond with ShutDownResponse message.\n*. The ShutDownResponnse message shall correspond to the expected schema, which can be found at:\n\t*. https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas/IcdGetversionResponse_schema.json\n*. The ShutDownResponse message shall include:\n\t*. OK - if the SMM system can initiate the shut down\n\t*. Error - if the SMM shut down cannot start (e.g. when a hardware error prevents shut down of the system)\n*. The message shall include the 'version' property as mandatory property, by referencing the current JSON schema version (see request 2272789)\n*. \n*. When the shut down procedure is innitiated, the appSMM shall do the followings:\n1. de-initialize\n2. close all connections\n3. shut down\n\nDiagram showing the sequence of exchanged messages is attached under the Notes section.\n\nOut of Scope:\n*. Scenario when the appSMM system goes to E-stop (Halted) state due to a fatal error will be handled in a separate user story.\n*. There is no use case for Error response code - cannot be tested.",
+   "explorativeTests": [
+    2441248,
+    2469925
+   ]
+  },
+  "2419846": {
+   "id": 2419846,
+   "summary": "Recover the appSMM upon request",
+   "state": "Accepted",
+   "description": "Definition:\n*. As a SMM system user, I want to be able to recover the appSMM system after E-stop, so that the system starts safely after a fatal error.\n \nAcceptance Criteria:\n*. The appSMM software shall automatically initiate the system recovery from E-Stopped state when requested.\n*. The appSMM system shall process the IcdRecoverRequest message when received.\n*. The appSMM software shall respond with IcdRecoverResponse message.\n*. The IcdRecoverResponse message shall correspond to the expected schema, which can be found at:\n\t*. https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas/IcdGetversionResponse_schema.json\n*. The IcdRecoverResponse message shall include:\n\t*. OK - if the SMM system can initiate the system recovery (State is E-Stopped)\n\t*. Error - if the SMM system recovery cannot start (State is not E-Stopped)\n*. The message shall include the 'version' property as mandatory property, by referencing the current JSON schema version (see request 2272789)\n*. When the system recovery procedure is initiated, the appSMM shall automatically start without the need to apply power off/power on\n*. After successful start, the system shall switch to state Not initialized\n\n Out of Scope:\n*. N/A",
+   "explorativeTests": [
+    2441275,
+    2442193
+   ]
+  },
+  "2488626": {
+   "id": 2488626,
+   "summary": "New routing: SystemStatusNotification during normal operation mode (appSMM)",
+   "state": "Accepted",
+   "description": "Definition:\n*. As a system user I need to be notified about changes in SMM system status during operation mode, so that I can manage the system.\n \nAcceptance Criteria:\n*. The appSMM software shall automatically publish a SystemStatusNotification message each time when its system status changes during normal operation mode.\n*. The following statuses shall be considered for the current user story, to be reported in the SystemStatusNotification message:\n\t*. \"Idle\" - after successful initialization and clearing, when the system is ready to accept racks\n\t*. \"NormalOperation\" - while the system is processing racks\n\t*. \"E-Stop\" - when the system goes to E-stop (Halted) state due to a fatal error\n*. The SystemStatusNotification message content and structure shall correspond to the expected schema, which can be found at:\n\t*. https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas\n*. \n\nDiagram showing the sequence of exchanged messages is attached under the Notes section.\n \nOut of Scope:\n*. The use case when the appSMM sends a SystemStatusNotification during Start-Up, configuration changes or clearing are handled under different user stories. The current user story is related only to reporting the above mentioned statuses.\n*.",
+   "explorativeTests": [
+    2510136
+   ]
+  },
+  "2492146": {
+   "id": 2492146,
+   "summary": "Configuration: SetConfigurationResponse (appSMM)",
+   "state": "Accepted",
+   "description": "Definition:\n*. As a system user, I need to be able to change the appSMM configuration settings.\n \nAcceptance Criteria:\n*. The appSMM software shall process the SetConfigurationRequest message when received.\t\n*. The appSMM software shall accept and persist the configuration changes, only if the SetConfigurationRequest message is received when the system state is NotInitialized.\n*. The appSMM software shall ignore the changes requested in the SetConfigurationRequest message if received when system state is other than NotInitialized (in such case we respond with 'Fail' for all configuration settings included in the message).\n*. The SMM software shall automatically reply with SetConfigurationResponse when the SetConfigurationRequest is received.\t\n*. The SetConfigurationResponse message shall report success (Ok - when the system state is NotInitialized) or failure (Fail - for any system state other than NotInitialized) of updating the following configuration settings:\n\n\t*. Tube identification failure strategy\t\n\t*. barcode symbology configuration\t\n\t*. hematocrit mode configuration\t\n*. When the SetConfigurationRequest is received, appSMM software shall automatically publish a SystemStatusNotification message to notify that the CurrentState of the system changed to 'Configuring'.\t\n*. After the SetConfigurationResponse is published, the system status will change back to 'NotInitialized'\t\n*. The SetConfigurationResponse message content and structure shall correspond to the expected schema, which can be found at: https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas\t\n*. The message shall include the 'version' property as mandatory property, by referencing the current JSON schema version (see request 2272789).\t\n*. appSMM shall update the configuration on the Camera STI software when changes are requested by Werfen on barcode symbologies or Hct.\t\n*.  In case the Camera STI cannot apply the requested configuration(s) (e.g. Camera STI is offline), appSMM replies with 'Fail' for those specific configuration(s) only\t\n*. The appSMM software shall persist the last configuration settings upon restart\t\n*. The default configuration values shall be (according to meeting minutes from 28.Oct.2021 Werfen weekly software meeting, attached to notes, called \"2021-10-28 Meeting notes - SW weekly.pdf\"):\n\n\t*. Tube identification failure strategy: process known samples\t\n\t*. Barcode symbology enabled:\n\n\t\t*. Code128\t\n\t\t*. Code128Checksum\t\n\t*. Hct configuration: enabled",
+   "explorativeTests": [
+    2534066,
+    2534601,
+    2534758,
+    2568719
+   ]
+  },
+  "2741405": {
+   "id": 2741405,
+   "summary": "Error Handling - Unexpected software failures (appSMM)",
+   "state": "Defined",
+   "description": "Definition:\n*. As a user I need that the system automatically recovers after an unexpected software failure\n \nAcceptance Criteria:\n*. appSMM shall detect when the system was not shut down gracefully, but because of an unexpected software error.\nHint: This can be done by storing a running flag in the config file, which is set to OFF when the system is shut down gracefully. If the software is shut down unexpectadly, this flag is still ON upon restart\nThe flag will be set to ON each time when the system starts.\n*. When the software shuts down following an unexpected software failure the SMM system shall automatically restart afterwards\n*. After the the appSMM software restarts following an unexpected software failure, appSMM shall detect that the system was not shut down properly and shall publish a Warning event to notify the Bridge that SW was not shut down properly:\n*. \n\t*. Category: Operator\n\t*. EventId: F00008\n\t*. Severity: Warning\n\t*. Timestamp: the time when the event was detected\n\t*. Message: \"Software was restarted after unexpected error. Initialization is required\"\n\t*. EventArgs: none\n*. The system will require initialization.\n*. \n \nOut of Scope:\n*. N/A",
+   "explorativeTests": [
+    2806610
+   ]
+  },
+  "2837620": {
+   "id": 2837620,
+   "summary": "Error Handling - Disconnect from SMMBridge (appSMM)",
+   "state": "Tested",
+   "description": "Definition:\n*. As a user I need SMM to go to E-Stop when connection to the Bridge is lost.\n \nAcceptance Criteria:\n*. When the connection to the Bridge is lost, the SMM system shall go to E-Stop\n*. SMM shall try to re-establish the connection to the Bridge, for indefinite time.\n*. After the connection is re-established, in order to restart the system after going to E-Stop, the user has to trigger system recovery (i.e. trigger the RecoverRequest message) - handled under u.s. 2419846\n*. When the connection to the Bridge was re-established, appSMM shall publish a Warning:\nCategory: Operator\nEventId: as specified in the Event list\nSeverity: Warning\nTimestamp: the time when the event was detected\nMessage: \"The SMM system went to E-Stop because the connection to SMMBridge was lost. Connection is re-established now.\"\nEventArgs: none\n*. \n  \nOut of Scope:\n*. System recovery is handled under u.s. 2419846",
+   "explorativeTests": [
+    2855849,
+    2855850
+   ]
+  }
+ },
+ "explorativeTests": {
+  "2430841": {
+   "id": 2430841,
+   "summary": "[Instrument ]Test Case 1 - Verify that the InitializationRequest message is triggered only when the appSMM status is NotInitialized",
+   "state": "Closed",
+   "result": "Passed",
+   "testedIn": null,
+   "of": [
+    2403408
+   ],
+   "preconditions": [
+    "Make sure you installed the needed version of appSMM on the RTC Board and Integrated Simulator."
+   ],
+   "steps": [
+    "1. Start the instrument",
+    "2. Open PUTTY ,login to RTC using the root/3edcft6 credentials and run docker stop <name_of_appsmm_container> , to stop appSMM container",
+    "3. Open WINSCP and delete all files from the /home/root/dockerLogs folder",
+    "4. Within PUTTY run the following command docker start <name_of_appsmm_container>, to start the appSMM container",
+    "5. Open Integrated Simulator and click on the power button in the Bridge tab",
+    "6. Open WINSCP and navigate to /home/root/dockerLogs folder",
+    "7. Open the Bridge log check that there are 2 messages : SystemStatusRequest and SystemStatusResponse",
+    "8. Open appSMM log using Smart Inspect and Bridge log from the Integrated Simulator - Bridge tab.",
+    "9. Wait for the status of SMM to change to Idle and check again the appSMM and Bridge logs."
+   ],
+   "expected": [
+    "7. In the Bridge log there should be 2 messages displayed corresponding to SystemStatusRequest and SystemStatusResponse actions and the SystemStatusResponse message should display 'NotInitialized'",
+    "8. In both appSMM and Bridge logs there should be 2 messages of type: InitializationRequest and InitializationResponse , displayed after the SystemStatusResponse one.",
+    "9. No InitializationRequest and InitializationResponse should be displayed after the status is changed to Idle."
+   ]
+  },
+  "2430842": {
+   "id": 2430842,
+   "summary": "[Instrument][Test Case1]Verify the SMM statuses during the system Start-Up",
+   "state": "Closed",
+   "result": "Passed",
+   "testedIn": "[Pop, Ionut (IPop), Jul 6, 2021 1:50:13 PM CEST]\nil_smm-simulator-win-x64_0.3.2107.05.01\nappsmm_linux-arm_0.2.2107.02001-alpha\n",
+   "of": [
+    2404051
+   ],
+   "preconditions": [
+    "Make sure you installed the needed version of appSMM on the RTC Board and Integrated Simulator."
+   ],
+   "steps": [
+    "1. Start the instrument",
+    "2. Open PUTTY ,login to RTC using the root/3edcft6 credentials and run docker stop appsmm , to stop appSMM container",
+    "3. Open WINSCP and delete all files from the /home/root/dockerLogs folder.",
+    "4. Within PUTTY run the following command docker start appsmm to start appsmmcontainer.",
+    "5. Open Integrated Simulator and click on the power button in the Bridge tab.",
+    "6. Open WINSCP and navigate to /home/root/dockerLogs folder.",
+    "7. Open appSMM log using Smart Inspect and Bridge log from the Integrated Simulator - Bridge tab.",
+    "8. Close Integrated Simulator.",
+    "9. Stop the STI and appSMM containers. Start the appSMM container.",
+    "10. Start Integrated Simulator and click on the Power button(on the Bridge tab)",
+    "11. Open appSMM log using Smart Inspect and Bridge log from the Integrated Simulator - Bridge tab.",
+    "Note: The message shall include the 'version' property as mandatory, by referencing the current JSON schema version(see request 2272789)."
+   ],
+   "expected": [
+    "8. There should be one \"SystemStatusRequest\" and one \"SystemStatusResponse\" messages for every status, both in appSMM and Bridge logs, displayed as per the ICD schema found at: \"https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas/IcdSystemStatusRequest_schema.json\" and \"https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas/IcdSystemStatusResponse_schema.json\"."
+   ]
+  },
+  "2431923": {
+   "id": 2431923,
+   "summary": "[Instrument]Test Case 1: Verify that SystemStatusNotification message is triggered every time the SMM status changes",
+   "state": "Closed",
+   "result": "Passed",
+   "testedIn": null,
+   "of": [
+    2404069
+   ],
+   "preconditions": [
+    "Make sure you installed the needed version of appSMM, Integrated Simulator and simRTC."
+   ],
+   "steps": [
+    "1. Start the instrument",
+    "2. Open PUTTY ,login to RTC using the root/3edcft6 credentials and run docker stop appsmm , to stop appSMM container",
+    "3. Open WINSCP and delete all files from the /home/root/dockerLogs folder.",
+    "4. Within PUTTY run the following command docker start appsmm to start appsmmcontainer.",
+    "5. Open Integrated Simulator and click on the power button in the Bridge tab.",
+    "6. Open WINSCP and navigate to /home/root/dockerLogs folder.",
+    "7. Open appSMM log using Smart Inspect and Bridge log from the Integrated Simulator - Bridge tab.",
+    "8. Close Integrated Simulator.",
+    "9. Stop the STI and appSMM containers. Start the appSMM container.",
+    "10. Start Integrated Simulator and click on the Power button(on the Bridge tab)",
+    "11. Open appSMM log using Smart Inspect and Bridge log from the Integrated Simulator - Bridge tab.",
+    "Note: The message shall include the 'version' property as mandatory, by referencing the current JSON schema version(see request 2272789)."
+   ],
+   "expected": [
+    "7. There should be one \"SystemStatusNotification\" messages, both in appSMM and Bridge logs, for each of the SMM statuses(PowerOn, notInitialized, initializing, Idle, Clear), displayed as per the ICD schema found at: \"https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas/IcdSystemStatusNotification_schema.json\"."
+   ]
+  },
+  "2439674": {
+   "id": 2439674,
+   "summary": "[Instrument ][Extra Scenarios] Verify that the InitializationRequest message is triggered regardless the status of the analyzers and pipettors",
+   "state": "Closed",
+   "result": "Passed",
+   "testedIn": "[Boldor, Gabriela (gboldor), Jul 15, 2021 2:12:18 PM CEST]\nappsmm_linux-arm_0.3.2107.14003-alpha\nil_smm-simulator-win-x64_0.3.2107.08.01",
+   "of": [
+    2403408
+   ],
+   "preconditions": [
+    "Make sure you installed the needed version of appSMM on the RTC Board and Integrated Simulator."
+   ],
+   "steps": [
+    "1. Start the instrument",
+    "2. Open PUTTY ,login to RTC using the root/3edcft6 credentials and run docker stop <name_of_appsmm_container> , to stop appSMM container",
+    "3. Open WINSCP and delete all files from the /home/root/dockerLogs folder",
+    "4. Within PUTTY run the following command docker start <name_of_appsmm_container>, to start the appSMM container",
+    "5. Open Integrated Simulator, configure the analyzers as below and then click on the power button in the Bridge tab:",
+    "5.1. The appSMM automatically responds with an InitializationResponse message when neither of the analyzers are connected",
+    "5.2.The appSMM automatically responds with an InitializationResponse message when only one of the analyzers is connected",
+    "5.3.The appSMM automatically responds with an InitializationResponse message when all pipettors are Occupied",
+    "5.4. The appSMM automatically responds with an InitializationResponse message when the pipettors are NotOccupied",
+    "5.5. The appSMM automatically responds with an InitializationResponse message when only one pipettor is Occupied",
+    "5.6. The appSMM automatically responds with an InitializationResponse message when the analyzer is PowerOff but only one pipettor is Occupied",
+    "6. Open WINSCP and navigate to /home/root/dockerLogs folder",
+    "7. Open the Bridge log check that there are 2 messages : SystemStatusRequest and SystemStatusResponse",
+    "8. Open appSMM log using Smart Inspect and Bridge log from the Integrated Simulator - Bridge tab.",
+    "9. Wait for the status of SMM to change to Idle and check again the appSMM and Bridge logs."
+   ],
+   "expected": []
+  },
+  "2441248": {
+   "id": 2441248,
+   "summary": "[Instrument]Test Case 1: Verify that the system Shut Down can be initiated",
+   "state": "Closed",
+   "result": "Passed",
+   "testedIn": "[Boldor, Gabriela (gboldor), Aug 16, 2021 3:34:48 PM CEST]\nRe-tested in version 0.4.2107.28003-alpha\n\n[Pop, Ionut (IPop), Jul 23, 2021 7:54:29 AM CEST]\nappsmm_linux-arm_0.3.2107.21012-alpha.tar\nil_smm-simulator-win-x64_0.3.2106.24.01\n\n[Boldor, Gabriela (gboldor), Jul 12, 2021 3:24:56 PM CEST]\n[Boldor, Gabriela (gboldor), Jul 2, 2021 1:21:46 PM CEST]\nTested also in version appSMM_win10-x64_0.2.2107.01002-alpha\n\n[Boldor, Gabriela (gboldor), Jun 30, 2021 3:25:21 PM CEST]\n[Pop, Ionut (IPop), Jun 30, 2021 3:21:59 PM CEST]\nsimRTC and appSMM: 0.2.2106.24003-alpha\nIS: 0.3.2106.24.01",
+   "of": [
+    2404361
+   ],
+   "preconditions": [
+    "Make sure you installed the needed version of appSMM on the RTC Board and Integrated Simulator."
+   ],
+   "steps": [
+    "1.Start the instrument",
+    "2. Open PUTTY ,login to RTC using the root/3edcft6 credentials and run docker stop <name_of_appsmm_container> , to stop appSMM container",
+    "3. Open WINSCP and delete all files from the /home/root/dockerLogs folder",
+    "4. Within PUTTY run the following command docker start <name_of_appsmm_container>, to start the appSMM container. Run in a sepparate Putty window the following command:",
+    "docker logs -f appsmm -- tail 500.",
+    "5. Open Integrated Simulator, click Power on in the Bridge tab ,wait for the Initializtion to finish and then navigate to the IW tab and click on the Shut Down button.",
+    "6. Open the appSMM and Bridge logs and search for the ShutDownRequest message."
+   ],
+   "expected": [
+    "5.",
+    "The RTC should stop working. The leds on the gripper and presenter modules should stop as well.",
+    "a. There should be 1 \"ShutdownRequest\" and \"ShutdownResponse\"messages, both in appSMM and Bridge logs, displayed as per the ICD schema found at:",
+    "https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas/IcdShutdownRequest_schema.json",
+    "https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas/IcdShutdownResponse_schema.json",
+    "b. The appSMM application should close, check that a similar message like the one below is displayed in the docker logs -f appsmm window.",
+    "\"appSMM, Information, ShutDown modules\""
+   ]
+  },
+  "2441275": {
+   "id": 2441275,
+   "summary": "[Instrument]Test Case 1: Verify that the system recovery can be initiated",
+   "state": "Closed",
+   "result": "Passed",
+   "testedIn": "[Boldor, Gabriela (gboldor), Jul 13, 2021 3:07:13 PM CEST]\ntested on :\nappsmm_linux-arm_0.3.2107.13001-alpha\nil_smm-simulator-win-x64_0.3.2107.08.01\n\n[Boldor, Gabriela (gboldor), Jul 12, 2021 3:39:03 PM CEST]\n[Pop, Ionut (IPop), Jun 30, 2021 3:21:59 PM CEST]\nsimRTC and appSMM: 0.2.2106.24003-alpha\nIS: 0.3.2106.24.01",
+   "of": [
+    2419846
+   ],
+   "preconditions": [
+    "Make sure you installed the needed version of appSMM on the RTC Board and Integrated Simulator."
+   ],
+   "steps": [
+    "1. Start the instrument",
+    "2. Open PUTTY ,login to RTC using the root/3edcft6 credentials and run docker stop appsmm , to stop appSMM container",
+    "3. Open WINSCP and delete all files from the /home/root/dockerLogs folder",
+    "4. Within PUTTY run the following command docker start appsmm, to start the appSMM container.",
+    "DO NOT START THE STI CONTAINER.( this way the appsmm should go into E-Stop state)",
+    "5. START the STI Container and navigate to the IW tab and click on the Recover button.",
+    "6. Open the appSMM and Bridge logs and search for the RecoverRequest , RecoverResponse and SystemStatusNotification messages.",
+    "7. Verify that tthe system re-initializes succefully and the final state is Idle"
+   ],
+   "expected": [
+    "6.",
+    "a. There should be 1 \"RecoverRequest\" ,1 \"RecoverResponse\" messages and 1 SystemStatusNotificationMessage, both in appSMM and Bridge logs, displayed as per the ICD schema found at: \"https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas/IcdRecoverResponse_schema.json\" and \"https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas/IcdRecoverRequest_schema.json\".",
+    "7. The current state should be Idle"
+   ]
+  },
+  "2442193": {
+   "id": 2442193,
+   "summary": "[Instrument]Test Case 2: Verify that the system recovery message if the SMM system recovery cannot start (State is not E-Stopped)",
+   "state": "Closed",
+   "result": "Passed",
+   "testedIn": "[Boldor, Gabriela (gboldor), Jul 15, 2021 8:03:21 AM CEST]\nRe-tested on \nappsmm_linux-arm_0.3.2107.14003-alpha\nil_smm-simulator-win-x64_0.3.2107.08.01\n\n\n\n[Boldor, Gabriela (gboldor), Jul 13, 2021 3:21:00 PM CEST]\n[Boldor, Gabriela (gboldor), Jul 13, 2021 3:07:13 PM CEST]\ntested on :\nappsmm_linux-arm_0.3.2107.13001-alpha\nil_smm-simulator-win-x64_0.3.2107.08.01\n\n[Boldor, Gabriela (gboldor), Jul 12, 2021 3:39:03 PM CEST]\n[Pop, Ionut (IPop), Jun 30, 2021 3:21:59 PM CEST]\nsimRTC and appSMM: 0.2.2106.24003-alpha\nIS: 0.3.2106.24.01",
+   "of": [
+    2419846
+   ],
+   "preconditions": [
+    "Make sure you installed the needed version of appSMM on the RTC Board and Integrated Simulator."
+   ],
+   "steps": [
+    "1. Start the instrument",
+    "2. Open PUTTY ,login to RTC using the root/3edcft6 credentials and run docker stop appsmm , to stop appSMM container",
+    "3. Open WINSCP and delete all files from the /home/root/dockerLogs folder",
+    "4. Within PUTTY run the following command docker start appsmm, to start the appSMM container.",
+    "5. START the STI Container and navigate to the IW tab and click on the Recover button.",
+    "6. Open the appSMM and Bridge logs and search for the RecoverRequest , RecoverResponse and SystemStatusNotification messages.",
+    "7. Verify that clicking twice on the Power button from the Bridge tab, the system re-initializes succefully."
+   ],
+   "expected": [
+    "6.",
+    "a. There should be 1 \"RecoverRequest\" ,1 \"RecoverResponse\" with ERROR content, acoording to the schemas:",
+    "\"https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas/IcdRecoverResponse_schema.json\" and \"https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas/IcdRecoverRequest_schema.json\".",
+    "7. The current state should remain Idle"
+   ]
+  },
+  "2469925": {
+   "id": 2469925,
+   "summary": "[Testing][Integrated Simulator][Shut Down]Verify that appSMM shuts down when in the Normal Operation state",
+   "state": "Closed",
+   "result": "Passed",
+   "testedIn": "[Pop, Ionut (IPop), Jan 28, 2022 11:18:20 AM CET]\nTested on:\nil_smm-simulator-win-x64_0.5.2112.06.01\nappSMM_win10-x64_0.4.2112.03002-il_develop\nsimRTC_win10-x64_0.4.2112.03002-il_develop\n",
+   "of": [
+    2404361
+   ],
+   "preconditions": [
+    "Make sure you installed the needed version of appSMM on the RTC Board and Integrated Simulator."
+   ],
+   "steps": [
+    "5. Open Integrated Simulator, click Power on in the Bridge tab ,wait for the Initializtion to finish",
+    "6. Open simRTC and click on the Insert Racl To Input Queuea. AppSMM is in the NormalOperation status.",
+    "7. On IS, navigate to the IW tab and click on the Shut Down button.",
+    "8. Open the appSMM and Bridge logs and search for the ShutDownRequest message."
+   ],
+   "expected": [
+    "8.",
+    "a. There should be 1 \"ShutdownRequest\" and \"ShutdownResponse\"messages, both in appSMM and Bridge logs, displayed as per the ICD schema found at:",
+    "https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas/IcdShutdownRequest_schema.json",
+    "https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas/IcdShutdownResponse_schema.json"
+   ]
+  },
+  "2510136": {
+   "id": 2510136,
+   "summary": "[Integrated Simulator]Test Case 1: Verify the SystemStatusNotification message for the Idle, NormalOperation and E-Stop statuses",
+   "state": "Closed",
+   "result": "Passed",
+   "testedIn": "[Pop, Ionut (IPop), Oct 15, 2021 8:27:48 AM CEST]\nTested on:\nil_smm-simulator-win-x64_0.4.2110.11.01\nsimRTC_win10-x64_0.4.2110.07003-alpha\nappSMM_win10-x64_0.4.2110.07003-alpha\n",
+   "of": [
+    2488626
+   ],
+   "preconditions": [
+    "Make sure you installed the needed version of appSMM, Integrated Simulator and simRTC.",
+    "Stop appSMM and simRTC apps and delete all files from the var/log folder",
+    "Make sure MQTT is up and running"
+   ],
+   "steps": [
+    "1. Start simRTC app.",
+    "2. Start appSMM software.",
+    "3. Open Integrated Simulator, click on the power button in the Bridge tab - wait for the system to initialize.",
+    "4. Open simRTC and load rack A001 wchich should go both to Analyzer 01 and Analyzer 02 for processing.",
+    "5. Wait for the rack to be identified and then close the appSMM connection.",
+    "5. Wait a minute and then open appSMM(var/log/) log using Smart Inspect and Bridge log from the Integrated Simulator - Bridge tab."
+   ],
+   "expected": [
+    "5. The SystemStatusNotification message should be sent for all 3 statuses: Idle, NormalOperation and E-Stop"
+   ]
+  },
+  "2534066": {
+   "id": 2534066,
+   "summary": "[Integrated Simulator]Test Case 1:Verify that integrated simulator is able to trigger a GetConfigurationRequest and shall process the GetConfigurationResponse message, when received",
+   "state": "Closed",
+   "result": "Passed",
+   "testedIn": null,
+   "of": [
+    2492110,
+    2491981,
+    2492146
+   ],
+   "preconditions": [
+    "Make sure you installed the needed version of appSMM on the simRTC and Integrated Simulator."
+   ],
+   "steps": [
+    "1. Start simRTC app.",
+    "2. Start appSMM software.",
+    "3. Open Integrated Simulator and click on the Power button in the Bridge tab - wait for the system to initialize.",
+    "4. Verify the appSMM and Bridge logs",
+    "5. In Integrated Simulator -> click Get Configuration button",
+    "6. Edit the Hematocrit mode to Disabled and then click the SetConfiguration button",
+    "7. Open appSMM log(var/log/) using Smart Inspect and Bridge log from the Integrated Simulator - Bridge tab.",
+    "8. In Integrated simulator ->Bridge tab click the Initialize SMM button",
+    "9. Verify the appSMM and Bridge logs",
+    "10. In Integrated Simulator -> click Get Configuration button",
+    "11. Verify appSMM and Bridge logs",
+    "12. In Integrated Simulator edit the Hematocrit mode to Enabled and click Set Configuration button",
+    "13. Open appSMM log(var/log/) using Smart Inspect and Bridge log from the Integrated Simulator - Bridge tab."
+   ],
+   "expected": [
+    "4. In the appSMM and Bridge logs the following messages should exist :",
+    "- ConnectionNotification messages corresponding to IW, both Analyzers an SMM",
+    "- GetVersionRequest and GetVersionResponse messages",
+    "-SystemStatusRequest and SystemStatusResponse messages",
+    "-The SystemStatusResponse message should mention the status of 'NotInitialized'",
+    "-In the Integrated Simulator ->SMM tab->The icons for all configuration settings should be grey",
+    "7. In The appSMM and Bridge log there should be:",
+    "-a GetConfigurationRequest message sent from IW to appSMM (with the schema    https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas/IcdGetConfigurationRequest_schema.json) followed by",
+    "-a GetConfigurationResponse message sent from appSMM to IW",
+    "with the schema: https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas/IcdGetConfigurationResponse_schema.json",
+    "-In the Integrated Simulator ->SMM tab->The icons for all configuration settings should turn green",
+    "-A SetConfigurationRequest message , specifing that the Hematocrit mode is Enabled, the message should have the following                                                          schema:https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas/IcdSetConfigurationRequest_schema.json",
+    "-A SetConfigurationResponse message with Ok status for the Hematocrit setting, the message should have the following schema:                                                             https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas/IcdSetConfigurationResponse_schema.json",
+    "- A SystemStatusNotification message to notify that the CurrentState of the system changed to 'Configuring'",
+    "9. In the appSMM and Bridge logs there should be:",
+    "- SystemStatusNotification messages from appSMM with NotInitialized status.",
+    "- SystemStatusNotification messages from appSMM with Initializing and Idle states.",
+    "11. In the appSMM and Bridge log there should be:",
+    "-a GetConfigurationRequest message sent from IW to appSMM followed by",
+    "-a GetConfigurationResponse message sent from appSMM to IW",
+    "with the schema: https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas/IcdGetConfigurationResponse_schema.json",
+    "- the GetConfigfurationResponse message should include the edited hematocrit value set to Disabled.",
+    "13. In The appSMM and Bridge log there should be:",
+    "A SetConfigurationRequest message , specifing that the Hematocrit mode is Enabled",
+    "A SetConfigurationResponse message with Failed status for the Hematocrit setting.",
+    "-In the Integrated Simulator ->SMM tab->The icon for Hematocrit mode should be red"
+   ]
+  },
+  "2534601": {
+   "id": 2534601,
+   "summary": "[Integrated Simulator]Test Case 2: Verify that the user shall be able to change all  the configuration settings under the configuration viewer and to send them to appSMM",
+   "state": "Closed",
+   "result": "Passed",
+   "testedIn": null,
+   "of": [
+    2492110,
+    2491981,
+    2492146,
+    2441579
+   ],
+   "preconditions": [
+    "Make sure you installed the needed version of appSMM on the simRTC and Integrated Simulator."
+   ],
+   "steps": [
+    "1. Start simRTC app.",
+    "2. Start appSMM software.",
+    "3. Open Integrated Simulator and click on the Power button in the Bridge tab - wait for the system to initialize.",
+    "4. Verify the appSMM and Bridge logs",
+    "5. In Integrated Simulator -> click Get Configuration button",
+    "6. In the Integrated Simulator->SMM page Edit the all the settings as follows:",
+    "- HCT mode (enabled by default) -> set it to disabled",
+    "- the TubeIndetificationSetting (by default is set to Process known samples ) -> set it to Eject rack",
+    "7. Click the SetConfiguration button",
+    "8. Open appSMM log(var/log/) using Smart Inspect and Bridge log from the Integrated Simulator - Bridge tab.",
+    "9. Click on the Initialize SMM button",
+    "9. Click the GetConfiguration button",
+    "10. Open appSMM log(var/log/) using Smart Inspect and Bridge log from the Integrated Simulator - Bridge tab."
+   ],
+   "expected": [
+    "8. In The appSMM and Bridge log there should be:",
+    "A SetConfigurationRequest message , specifing the new edited values for all the configuration settings.",
+    "A SetConfigurationResponse message with Ok status for all the configuration settings edited.",
+    "10. In The appSMM and Bridge log there should be:",
+    "-a GetConfigurationRequest message sent from IW to appSMM followed by",
+    "-a GetConfigurationResponse message sent from appSMM to IW with the schema:                   https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas/IcdGetConfigurationResponse_schema.json",
+    "- The GetConfigurationResponse message should include all the settings that were edited, out of which",
+    "the HCT mode should be disabled",
+    "the Tube identification failure strategy should be set to : Eject Rack"
+   ]
+  },
+  "2534758": {
+   "id": 2534758,
+   "summary": "[Integrated Simulator]Test Case 3: Verify that the appSMM shall persist the configuration setting received from Il after it is restarted",
+   "state": "Closed",
+   "result": "Passed",
+   "testedIn": null,
+   "of": [
+    2492146
+   ],
+   "preconditions": [
+    "Make sure you installed the needed version of appSMM on the simRTC and Integrated Simulator."
+   ],
+   "steps": [
+    "1. Start simRTC app.",
+    "2. Start appSMM software.",
+    "3. Open Integrated Simulator and click on the Power button in the Bridge tab - wait for the system to initialize.",
+    "5. In Integrated Simulator -> click Get Configuration button",
+    "6. In the Integrated Simulator->SMM page Edit the all the settings as follows:",
+    "- set HCT mode to Disabled( by default is set to Enabled)",
+    "- the TubeIndetificationSetting - if by default is set to EjectRack (by default is set to ProcessKnownSamples)",
+    "7. Click the SetConfiguration button",
+    "8. In Integrated simulator ->Bridge tab click the Initialize SMM button",
+    "9. Stop appSMM and simRTC applications",
+    "10. Start appSMM and simRTC applications",
+    "11.In Integrated simulator ->Bridge tab click the Initialize SMM button",
+    "12. In Integrated Simulator -> click Get Configuration button"
+   ],
+   "expected": [
+    "12. In the appSMM and Bridge log there should be a GetConfigurationResponse message, acoording to the schema:       https://git.stratec.com:8443/projects/P7251/repos/beacon_icd/browse/schemas/IcdGetConfigurationResponse_schema.json",
+    "containing all the edited configuration settings."
+   ]
+  },
+  "2568719": {
+   "id": 2568719,
+   "summary": "[Instrument]: Verify that appSMM shall update the configuration on the Camera STI software when changes are requested by Werfen on barcode symbologies",
+   "state": "Closed",
+   "result": "Passed",
+   "testedIn": "[Pop, Ionut (IPop), Sep 16, 2022 2:23:44 PM CEST]\nstratec/sampletubeidentification/arm:0.2.2208.09002         \nDocker AppSMM version                     : 0.7.2208.30002-il_develop\nil_smm-simulator-win-x64_0.7.2208.30.01\n7251.PC.ServiceSw_1.0.2208.3001_x64",
+   "of": [
+    2441572,
+    2491981,
+    2492146
+   ],
+   "preconditions": [],
+   "steps": [
+    "1. Start the instrument.",
+    "2. Enter the current sti container: docker container, navigate /SMM/sampletubeidentification_arm_master/persistent_configuration# nano system_config_override.json",
+    "3. Observe the values for the Code39 barcode(index:1539) and Checksum.Code39(index: 1555).",
+    "4. Open Integrated Simulator and click on the Power button connect it to Bridge.",
+    "5. Go to SMM Config page and enable the STI>Barcode.Code39 and STI.BarcodeChecksum.Code39.",
+    "6. Click on the Set Configuration button.",
+    "7. Open the system_config_override.json file in the STI container and check again the values for the Code39 barcode(index:1539) and Checksum.Code39(index: 1555)."
+   ],
+   "expected": [
+    "3. The current Barcode39 value for index 1539 in the sti build ->system_config_override.json file is: false.",
+    "The current Checksum.Barcode39 value for index 1555 in the sti build ->system_config_override.json file should be: 0(false) because the barcode is currently disabled.",
+    "7. The current Barcode39 value for index 1555 in the sti build ->system_config_override.json file should: true.",
+    "The current Checksum.Barcode39 value for index 1555 in the sti build ->system_config_override.json file is: 1(true) because the checksum has been enabled."
+   ]
+  },
+  "2806610": {
+   "id": 2806610,
+   "summary": "[Instrument]Test Case 1:Verfiy that if the system shuts down unexpectedly appSMM automatically restarts and publishes a FatalError",
+   "state": "New",
+   "result": null,
+   "testedIn": null,
+   "of": [
+    2741405
+   ],
+   "preconditions": [
+    "appSMM, STI build are installed."
+   ],
+   "steps": [
+    "1. Start the instrument.",
+    "2. Open Integrated Simulator and initialize the system.",
+    "3. Add step for the system to unexpectedly shut down. Such case was not given ar the time of writing this scenario.",
+    "Note: The flag for telling whether the system shut down properly(flag in the config file set to ON) or unexpectedly(flag in the config file set to OFF).",
+    "4. Observe what happens and verify the appsmm logs."
+   ],
+   "expected": [
+    "4. It should be visible in a config file to know if the system shut down properly or because of unexpected SW error. In this case, the flag should be set to OFF.",
+    "After the system shut down unexpectedly the SMM system should automatically restart.",
+    "After the SMM restarts it should detect that the system was not shut down properly and publish a FatalError:",
+    "Category: Operator",
+    "EventId: as specified in the Event list",
+    "Severity: FatalError",
+    "Timestamp: the time when the event was detected",
+    "Message: \"Software was restarted after unexpected error. Initialization is requested\"",
+    "EventArgs: none",
+    "When appSMM restarts after an unexpected software failure, appSMM should send a SystemStatusNotification message to notify Bridge that the current state is NotInitialized.",
+    "The system should require re-initialization."
+   ]
+  },
+  "2855849": {
+   "id": 2855849,
+   "summary": "[Simulator][TC1] Verify that when SMMBridge is disconneted the SMM system goes to E-Stop",
+   "state": "Closed",
+   "result": "Passed",
+   "testedIn": "[Pop, Ionut (IPop), Mar 16, 2023 8:11:54 AM CET]\nappsmm: 0.7.2303.13001-il_develop\nil_smm-simulator-win-x64_0.7.2303.13.01",
+   "of": [
+    2837620
+   ],
+   "preconditions": [
+    "Make sure you installed the needed version of appSMM, Integrated Simulator."
+   ],
+   "steps": [
+    "1. Start mqtt, appsmm and simRTC applications.",
+    "2. Start the Integrated Simulator and initialize the system.",
+    "3. Run the taskkill command to see all running processes and search for the mosquitto process.",
+    "4. Run the taskkill /IM mosquitto.exe /F command fo forcefully kill the process.",
+    "5. Start mqtt again."
+   ],
+   "expected": [
+    "4. The system should go to E-Stop.",
+    "SMM should try to re-establish the connection for an indefinite time(it should be seen in the logs).",
+    "When the connection to the Bridge has been established again, appsmm should publish a Warning message:",
+    "Category: Operator",
+    "EventId: as specified in the Event list",
+    "Severity: Warning",
+    "Timestamp: the time when the event was detected",
+    "Message: \"The SMM system went to E-Stop because the connection to SMMBridge was lost. Connection is re-established now.\"",
+    "EventArgs: none",
+    "When the connection has been re-established the user should be able to trigger the system recovery."
+   ]
+  },
+  "2855850": {
+   "id": 2855850,
+   "summary": "[Instrument][TC2] Verify that when Bridge is disconneted the SMM system goes to E-Stop(disconnect Bridge by using the docker kill command)",
+   "state": "Closed",
+   "result": "Skipped",
+   "testedIn": null,
+   "of": [
+    2837620
+   ],
+   "preconditions": [
+    "Make sure you installed the needed version of appSMM, Integrated Simulator and sti."
+   ],
+   "steps": [
+    "1. Connect the Werfen SW to the RTC board.",
+    "2. Start the instrument.",
+    "3. Start the Integrated Simulator and initialize the system.",
+    "4. Run the docker kill smmbridge(????) command in order to stop the bridge container.",
+    "5. Verify the appsmm log file.",
+    "6. Start the smmbridge container to re-establish the connection.",
+    "7. Verify the appsmm log file.",
+    "8. Within Integrated SImulator, click the Recover button and the re-initialize the system."
+   ],
+   "expected": [
+    "5. The Smmbridge should be disconnected.",
+    "SMM should try to re-establish the connection for an indefinite time(it should be seen in the logs).",
+    "7.",
+    "The system should go to E-Stop.",
+    "When the connection to the Bridge has been established again, appsmm should publish a Warning message:",
+    "Category: Operator",
+    "EventId: as specified in the Event list",
+    "Severity: Warning",
+    "Timestamp: the time when the event was detected",
+    "Message: \"The SMM system went to E-Stop because the connection to SMMBridge was lost. Connection is re-established now.\"",
+    "EventArgs: none",
+    "8. When the connection has been re-established the user should be able to trigger the system recovery."
+   ]
+  }
+ },
+ "changes": {
+  "since": "2026-10-05T11:48:43+00:00",
+  "added": [],
+  "removed": [],
+  "textChanged": [],
+  "stateChanged": []
+ }
+}

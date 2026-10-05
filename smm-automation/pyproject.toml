@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smm-automation"
+version = "0.1.0"
+description = "SMM test automation: RV&S ingestion, Robot Framework keywords over the SMM automation service, traceability reports"
+requires-python = ">=3.11"
+dependencies = [
+  "robotframework>=7.0",
+  "requests>=2.31",
+  "mcp>=1.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+smm-auto = "smm_automation.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+smm_automation = ["pipeline/templates/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

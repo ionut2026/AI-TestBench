@@ -111,3 +111,27 @@ Copilot (CLI/VS Code) --stdio--> Node MCP server (src/server.js)
 - Repo history is a single "initial commit" — most context lives in the code itself.
 - Setup/connection against a live RV&S server has not been verified from this environment (requires the
   actual Windchill RV&S client + `alm.stratec.com` access).
+  *Update:* verified live. `smm-auto ingest` reads 26 specifications, 22 requirements, 10 user stories and
+  16 Explorative Tests through this server over MCP stdio.
+
+## SMM test automation framework (`smm-automation/`)
+
+The first consumer of the MCP server. Full details are in `smm-automation/README.md`.
+
+- **Ingest.** `smm-automation/src/smm_automation/pipeline/ingest.py` starts `windchill-mcp-server/src/server.js`
+  as an MCP stdio client and uses `rvs_get_items` / `rvs_search_items`. It builds `catalog/<scope>.json` with:
+  - the specifications in scope and a SHA-256 of each normalized text;
+  - their requirements (`Satisfies`) and user stories (`Described In`);
+  - the Explorative Tests, parsed into preconditions, steps and expected results.
+- **Generation.** `smm-auto briefs` turns each catalog entry into a brief for the
+  `.github/agents/smm-test-author.agent.md` agent. The agent writes the Robot tests tagged `review:pending`, and a
+  human reviews them.
+- **Execution.** `smm-automation/service/` is a headless TypeScript service bundled from the SMM TestBench sources
+  at a pinned commit:
+  - It acts as the SMM Bridge and runs the tier environment: a mock appSMM, the real appSMM.exe plus the hardware
+    twin, or the instrument.
+  - It exposes HTTP API v1, which the Robot library `SMMTestbench.py` drives.
+- **Traceability.** Tests only carry `SDS-<id>` and `spechash:`; all other links come from RV&S at report time.
+  - `smm-auto drift` flags stale, orphan and uncovered tests.
+  - `smm-auto run` writes `traceability.html/json` next to Robot's log, with specification verdicts rolled up to
+    requirements and user stories.

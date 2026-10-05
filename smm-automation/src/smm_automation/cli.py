@@ -1,0 +1,165 @@
+"""smm-auto: command line of the SMM test automation framework.
+
+  smm-auto ingest   [--scope catalog/pilot.scope.toml]          RV&S -> catalog/<scope>.json
+  smm-auto briefs   [--spec 2528698 ...]                         catalog -> generated/briefs/SDS-<id>.md
+  smm-auto drift    [--strict]                                   suites vs catalog (stale/orphan/uncovered)
+  smm-auto run      [--tier mock|offline|rig] [robot args...]    run suites, then the traceability report
+  smm-auto report   --output results/.../output.xml              traceability report for an existing run
+  smm-auto service                                               run the automation service in the foreground
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+from smm_automation import FRAMEWORK_ROOT
+
+DEFAULT_SCOPE = FRAMEWORK_ROOT / "catalog" / "pilot.scope.toml"
+TIER_EXCLUDES = {"mock": ["needs:twin"], "offline": [], "rig": ["needs:twin", "requires:restart"]}
+
+
+def _catalog_path(args) -> Path:
+    if args.catalog:
+        return Path(args.catalog)
+    import tomllib
+
+    with open(args.scope, "rb") as f:
+        name = tomllib.load(f).get("name", "pilot")
+    return FRAMEWORK_ROOT / "catalog" / f"{name}.json"
+
+
+def _suites(args) -> list[Path]:
+    return [Path(s) for s in args.suites] if args.suites else [FRAMEWORK_ROOT / "robot" / "suites"]
+
+
+def cmd_ingest(args) -> int:
+    from smm_automation.pipeline.ingest import ingest
+
+    out = _catalog_path(args)
+    catalog = ingest(Path(args.scope), out)
+    print(f"Catalog written to {out}: {json.dumps(catalog['counts'])}")
+    changes = catalog.get("changes")
+    if changes and any(changes[k] for k in ("added", "removed", "textChanged", "stateChanged")):
+        print(f"Changes since {changes['since']}: {json.dumps({k: v for k, v in changes.items() if k != 'since'})}")
+    return 0
+
+
+def cmd_briefs(args) -> int:
+    from smm_automation.pipeline.briefs import write_briefs
+    from smm_automation.pipeline.drift import collect_tests
+    from smm_automation.pipeline.ingest import load_catalog
+
+    catalog = load_catalog(_catalog_path(args))
+    tests = collect_tests(_suites(args))
+    name = (catalog.get("scope") or {}).get("name") or "pilot"
+    paths = write_briefs(catalog, Path(args.out), tests, [int(s) for s in args.spec] if args.spec else None, name)
+    print(f"{len(paths)} brief(s) written to {args.out}")
+    return 0
+
+
+def cmd_drift(args) -> int:
+    from smm_automation.pipeline.drift import check, collect_tests, format_text, problems
+    from smm_automation.pipeline.ingest import load_catalog
+
+    result = check(load_catalog(_catalog_path(args)), collect_tests(_suites(args)))
+    if args.json:
+        Path(args.json).write_text(json.dumps(result, indent=1, ensure_ascii=False), encoding="utf-8")
+    print(format_text(result))
+    return 1 if args.strict and problems(result) else 0
+
+
+def _report(catalog_path: Path, output_xml: Path, out_dir: Path, suites: list[Path]) -> dict:
+    from smm_automation.pipeline.drift import collect_tests
+    from smm_automation.pipeline.ingest import load_catalog
+    from smm_automation.pipeline.report import write_report
+
+    report = write_report(load_catalog(catalog_path), output_xml, out_dir, collect_tests(suites))
+    print(f"Traceability report: {out_dir / 'traceability.html'}")
+    print("Specifications: " + ", ".join(f"{k} {v}" for k, v in report["summary"].items() if v))
+    if not report["productEvidence"]:
+        print("NOTE: mock tier - the verdicts check the framework, they are not evidence about the product.")
+    return report
+
+
+def cmd_report(args) -> int:
+    output = Path(args.output)
+    _report(_catalog_path(args), output, Path(args.outdir) if args.outdir else output.parent, _suites(args))
+    return 0
+
+
+def cmd_run(args, robot_args: list[str]) -> int:
+    import robot
+
+    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    out_dir = Path(args.outdir) if args.outdir else FRAMEWORK_ROOT / "results" / f"{args.tier}-{stamp}"
+    excludes = list(TIER_EXCLUDES[args.tier])
+    if not args.include_pending:
+        excludes.append("review:pending")
+    options = {
+        "variablefile": [str(FRAMEWORK_ROOT / "robot" / "environments" / f"{args.tier}.py")],
+        "exclude": excludes,
+        "outputdir": str(out_dir),
+        "name": f"SMM {args.tier}",
+        "metadata": [f"Run:{stamp}"],
+    }
+    argv = []
+    for key, values in options.items():
+        for value in values if isinstance(values, list) else [values]:
+            argv += [f"--{key}", value]
+    argv += robot_args + [str(p) for p in _suites(args)]
+    print("robot " + " ".join(argv))
+    rc = robot.run_cli(argv, exit=False)
+    output = out_dir / "output.xml"
+    if output.exists() and not args.no_report:
+        _report(_catalog_path(args), output, out_dir, _suites(args))
+    return rc
+
+
+def cmd_service(args) -> int:
+    dist = FRAMEWORK_ROOT / "service" / "dist" / "smm-automation-service.mjs"
+    if not dist.exists():
+        print(f"{dist} not found: run `npm install && npm run build` in {dist.parent.parent}", file=sys.stderr)
+        return 2
+    return subprocess.call(["node", str(dist), "--port", str(args.port)])
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="smm-auto", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, allow_abbrev=False)
+    parser.add_argument("--scope", default=str(DEFAULT_SCOPE), help="scope file (default: catalog/pilot.scope.toml)")
+    parser.add_argument("--catalog", help="catalog JSON (default: catalog/<scope name>.json)")
+    parser.add_argument("--suites", action="append", help="suite file/directory, repeatable (default: robot/suites)")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser("ingest", allow_abbrev=False, help="read specifications, requirements, user stories and ETs from RV&S")
+    p = sub.add_parser("briefs", allow_abbrev=False, help="write generation briefs for the test-authoring agent")
+    p.add_argument("--spec", nargs="*", help="only these specification IDs")
+    p.add_argument("--out", default=str(FRAMEWORK_ROOT / "generated" / "briefs"))
+    p = sub.add_parser("drift", allow_abbrev=False, help="compare suites with the catalog")
+    p.add_argument("--strict", action="store_true", help="exit code 1 on stale/orphan/untagged/uncovered")
+    p.add_argument("--json", help="also write the result as JSON")
+    p = sub.add_parser("run", allow_abbrev=False, help="run suites against a tier and write the traceability report (extra args go to robot)")
+    p.add_argument("--tier", choices=sorted(TIER_EXCLUDES), default="mock")
+    p.add_argument("--outdir")
+    p.add_argument("--include-pending", action="store_true", help="also run tests tagged review:pending")
+    p.add_argument("--no-report", action="store_true")
+    p = sub.add_parser("report", allow_abbrev=False, help="traceability report for an existing output.xml")
+    p.add_argument("--output", required=True)
+    p.add_argument("--outdir")
+    p = sub.add_parser("service", allow_abbrev=False, help="run the automation service in the foreground")
+    p.add_argument("--port", type=int, default=8765)
+
+    args, extra = parser.parse_known_args(argv)
+    if extra and args.command != "run":
+        parser.error(f"unrecognized arguments: {' '.join(extra)}")
+    if args.command == "run":
+        return cmd_run(args, extra)
+    return {"ingest": cmd_ingest, "briefs": cmd_briefs, "drift": cmd_drift, "report": cmd_report, "service": cmd_service}[args.command](args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

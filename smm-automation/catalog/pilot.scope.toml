@@ -1,0 +1,39 @@
+# Test scope: which RV&S specifications the framework covers, and how they are grouped into suites.
+# `python -m smm_automation ingest --scope catalog/pilot.scope.toml` turns this into catalog/pilot.json.
+
+name = "pilot"
+title = "Pilot: Initialization, Recover, Shutdown and System Status (7251 SDS Workflow / SDS Event Handling)"
+
+# /SMM/Specifications items (explicit list keeps the pilot stable; add `[[searches]]` to grow it).
+specifications = [
+  2955303, 2854281, 2752658, 2653094, 2653086, 2551270, 2535547, 2532492, 2532404, 2528710, 2528708,
+  2528706, 2528703, 2528698, 2525423, 2525392, 2525390, 2525388, 2428419, 2427781, 2327588,
+  # Recover / Shutdown / Bridge connection handling
+  2532504, 2532508, 2532510, 2854109, 2428417,
+]
+
+# Example of a query-based selection (arguments of the rvs_search_items MCP tool):
+# [[searches]]
+# projects = ["/SMM/Specifications"]
+# types = ["Specification"]
+# text = "RecoverRequest"
+# textFields = ["Text"]
+
+# Specifications this framework cannot verify at the ICD/hardware boundary (kept in the report as "not testable").
+[not_testable]
+2327588 = "PDS overview statement: no observable behaviour at the ICD"
+
+# Testable in principle, but not automated yet: the reason is shown in the traceability report.
+[deferred]
+2528710 = "Checks appSMM log files: appSMM logs to SmartInspect .sil files, a SIL reader is not available yet"
+2528708 = "Checks appSMM log files: appSMM logs to SmartInspect .sil files, a SIL reader is not available yet"
+2532404 = "Needs RTC fault injection (rtc_appl not starting initialization); the hardware twin has no such fault mode yet"
+2532508 = "Needs RTC fault injection (no DeInitializeRsp within 20 s); the hardware twin has no such fault mode yet"
+
+# Suite assignment: the first area whose keywords appear in the specification text.
+[areas]
+bridge_connection = ["SMMBridge"]
+recover = ["RecoverRequest", "RecoverResponse", "DeInitialize", "recover"]
+shutdown = ["ShutdownRequest", "ShutdownResponse"]
+initialization = ["InitializationRequest", "InitializationResponse", "Initializing", "initialization"]
+system_status = ["SystemStatus", "Configuring", "NormalOperation", "Clearing", "E-Stop"]
