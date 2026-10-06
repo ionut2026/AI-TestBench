@@ -9,6 +9,7 @@ description = "SMM test automation: RV&S ingestion, Robot Framework keywords ove
 requires-python = ">=3.11"
 dependencies = [
   "robotframework>=7.0",
+  "robotframework-pabot>=5",
   "requests>=2.31",
   "mcp>=1.2",
 ]

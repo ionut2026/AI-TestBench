@@ -660,6 +660,7 @@ connects a Bridge to the instrument, so use it only when the instrument's owner 
 | Fail the run on every failure, also known issues | add `--fail-on any` (default `new`: only failures without `known-issue:` count) |
 | Choose the output folder | add `--outdir results\my-run` |
 | Skip the traceability report | add `--no-report` |
+| Run the mock tier faster, in parallel | add `--processes 3` (mock tier only, one process per suite; see 7.3) |
 | Check the environment before a long run | `.\.venv\Scripts\smm-auto doctor --tier offline` (add `--deep` to ask appSMM) |
 | Run the operator tests on the rig | add `--operator console` (or `dialog`) after `run` |
 | Re-run only failed tests of a run | `.\.venv\Scripts\smm-auto run --tier offline --rerunfailed results\offline-…\output.xml` |
@@ -667,7 +668,8 @@ connects a Bridge to the instrument, so use it only when the instrument's owner 
 Rules for the command line:
 
 - **Options for `smm-auto` itself** (`--scope`, `--catalog`, `--suites`, `--reviews`) go **before** the word `run`.
-- **Options for `run`** (`--tier`, `--operator`, `--outdir`, `--fail-on`, `--exclude-pending`, `--no-report`) go after `run`.
+- **Options for `run`** (`--tier`, `--operator`, `--outdir`, `--fail-on`, `--exclude-pending`, `--no-report`,
+  `--processes`) go after `run`.
 - **Anything else after `run`** is passed straight to Robot Framework (`--include`, `--exclude`, `--test`,
   `--loglevel DEBUG`, `--rerunfailed`, …). See `.\.venv\Scripts\robot --help`.
 - `--include` can be repeated (tests matching any of them run). Tag patterns accept `*`, e.g. `--include SDS-2525*`.
@@ -685,6 +687,16 @@ Rules for the command line:
    specification, so every mock failure is new.
 
 It prints the exact `robot …` command it runs, so you can copy and adapt it.
+
+**Parallel runs (mock tier only).** `--processes N` runs the suites with **pabot**, one robot process per suite and
+at most N at a time (the pilot: 7 suites; `--processes 3` takes about 1 minute instead of 2–3). Each process claims
+a free **worker slot** n by locking `smm-automation\.service\worker-<n>.lock` and starts its own automation service
+on port 8775+n with its own embedded broker on 1894+n, so suites never share an environment. The per-process
+results are in `pabot_results\` inside the output folder; `output.xml`, `log.html`, `report.html` and the
+traceability report there are merged as usual. `smm-auto` refuses `--processes` above 1 on **offline** and **rig**:
+offline workers would share one appSMM installation (its config files are rewritten for every run), the Mosquitto
+port configured in appSMM, the COP port of the hardware twin and the appSMM log folder; the rig is one instrument.
+Offline therefore stays serial (≈17 min for the pilot).
 
 ### 7.4 Running Robot directly (without `smm-auto`)
 
@@ -2178,7 +2190,8 @@ changed). In case (b): ingest → drift shows STALE → update the test (Section
   `Bring SMM To State`.
 - **Only one Bridge** may be connected: close the TestBench GUI during runs.
 - Topics: appSMM publishes on `/is/iw/tx` and `/is/hcaN/tx`; the Bridge publishes on `/is/iw/rx` and `/is/hcaN/rx`.
-- A full offline run takes about **17 minutes** (state transitions in real appSMM take seconds).
+- A full offline run takes about **17 minutes** (state transitions in real appSMM take seconds) and cannot run in
+  parallel (one appSMM installation, fixed ports; 7.3).
 - appSMM keeps working after a broker restart but reconnects with a delay — use the longer timeouts from the
   environment files.
 
@@ -2194,6 +2207,8 @@ See checklist 18.3.
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
+| `--processes 3: parallel runs are only possible on the mock tier` | `--processes` above 1 on offline or rig | Run offline and rig without `--processes` (7.3) |
+| `No free parallel worker slot` | 32 parallel robot processes already hold `.service\worker-<n>.lock` (or a stuck run) | Stop the other runs (by PID); the locks are released when their processes end |
 | `Port 1883 is already in use: stop the other broker first` | Mosquitto from an earlier run, or the TestBench GUI is running | Close the TestBench GUI; stop leftover processes (17.2) |
 | `…smm-automation-service.mjs is missing: run 'npm install' and 'npm run build'` | Service not built | `cd service; npm run build` |
 | Build says the TestBench commit does not match the pin | TestBench checkout is at a different commit | `git checkout <commit from testbench.lock.json>` in the TestBench, or (only for experiments) `$env:SMM_TESTBENCH_ALLOW_UNPINNED = "1"` |
@@ -2306,6 +2321,7 @@ cd D:\projects\AI-TestBench\smm-automation
 
 # --- run
 .\.venv\Scripts\smm-auto run --tier mock                 # fast, no appSMM, framework check
+.\.venv\Scripts\smm-auto run --tier mock --processes 3   # same, suites in parallel (~1 min)
 .\.venv\Scripts\smm-auto run --tier offline              # real appSMM + digital twin (~17 min)
 .\.venv\Scripts\smm-auto run --tier rig                  # real lab (SMM_RIG_BROKER)
 .\.venv\Scripts\smm-auto run --tier offline --include SDS-2428419        # one spec

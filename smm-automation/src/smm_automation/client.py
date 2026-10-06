@@ -7,6 +7,7 @@ import os
 import secrets
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,57 @@ SERVICE_BUNDLE = SERVICE_DIR / "dist" / "smm-automation-service.mjs"
 # Where a local service writes its API token (service/src/main.ts): .service/token-<port>.
 TOKEN_DIR = FRAMEWORK_ROOT / ".service"
 TOKEN_ENV = "SMM_AUTOMATION_TOKEN"
+
+
+# Parallel runs (smm-auto run --processes N, mock tier only): the worker in slot n gets its own service and embedded
+# broker. pabot's PABOTEXECUTIONPOOLID is handed out round-robin and is not exclusive, so a worker claims a slot by
+# locking .service/worker-<n>.lock for the life of its robot process (the OS releases it even on a hard kill).
+WORKER_PORT_OFFSET = 10
+WORKER_SLOTS = 32
+MOCK_BROKER_PORT = 1884
+LOOPBACK = ("127.0.0.1", "localhost", "::1")
+
+
+def claim_worker_slot(directory: Path | None = None, slots: int = WORKER_SLOTS) -> tuple[int, Any]:
+    """Claims the lowest free worker slot: returns (slot, handle); the slot is held until the handle is closed."""
+    directory = directory or TOKEN_DIR
+    directory.mkdir(parents=True, exist_ok=True)
+    for slot in range(slots):
+        handle = open(directory / f"worker-{slot}.lock", "a+b")  # noqa: SIM115 - held for the process lifetime
+        try:
+            _lock(handle)
+        except OSError:
+            handle.close()
+            continue
+        return slot, handle
+    raise ServiceError(0, f"No free parallel worker slot (all {slots} locked in {directory})")
+
+
+def _lock(handle: Any) -> None:
+    if sys.platform == "win32":
+        import msvcrt
+
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def worker_url(url: str, worker: int) -> str:
+    """The URL of parallel worker ``worker``'s own local service: the port moved by 10 + worker."""
+    parsed = urlparse(url)
+    if parsed.hostname not in LOOPBACK:
+        raise ServiceError(0, f"Parallel runs need a local automation service, not {url}")
+    port = (parsed.port or 8765) + WORKER_PORT_OFFSET + worker
+    host = f"[{parsed.hostname}]" if ":" in parsed.hostname else parsed.hostname
+    return parsed._replace(netloc=f"{host}:{port}").geturl()
+
+
+def worker_broker_port(worker: int) -> int:
+    """The embedded MQTT broker port of parallel worker ``worker`` (mock tier)."""
+    return MOCK_BROKER_PORT + WORKER_PORT_OFFSET + worker
 
 
 def token_file(url: str) -> Path:

@@ -188,6 +188,16 @@ service and written to `smm-automation\.service\token-<port>` (gitignored, remov
 reads the variable or that file and re-reads the file once after a 401; a service the library starts gets a fresh
 token from it.
 
+*8.2 status:* done for the **mock** tier, **deviation for offline**. `smm-auto run --processes N` runs the suites
+with pabot (one robot process per suite); each process claims a worker slot n through an OS file lock
+(`.service\worker-<n>.lock`; pabot's own pool ids are round-robin and not exclusive) and starts its own service
+(port 8775+n) with its own embedded broker (1894+n). The pilot mock run takes 53 s with 3 processes instead of 135 s,
+same verdicts (37 pass, 5 skip). Offline is **not** parallelised and the "< 8 min" target is dropped: all workers would
+share one appSMM installation (`trace.config` / `InstrumentControl.config` are rewritten per run in the exe folder),
+the Mosquitto port configured in that file, the fixed Mosquitto config, the hardware twin's COP port and the SIL log
+folder. Parallel offline runs would need one appSMM copy per worker with its own configs and ports; `smm-auto`
+refuses `--processes` > 1 on offline and rig. CI runs the mock tier with `--processes 3`.
+
 *8.4 status:* done. `smm_automation.icd` asks the service (GET `/icd`, `/schemas/:name`, cached per process,
 service started on demand) for the ICD message names used by ingest and the schemas shown in briefs; Python no longer
 reads the TestBench path. Side effect: the names now match the TestBench SchemaRegistry exactly (`GetVersionRequest`/

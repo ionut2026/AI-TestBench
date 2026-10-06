@@ -83,6 +83,7 @@ override with `WINDCHILL_MCP_SERVER`) with the `RVS_*` settings from the environ
 .\.venv\Scripts\smm-auto briefs --spec 2528698  # generated/briefs/SDS-2528698.md for the authoring agent
 .\.venv\Scripts\smm-auto doctor --tier offline   # can the tier run? (exit 1 on FAIL)
 .\.venv\Scripts\smm-auto run --tier mock        # results/mock-<ts>/: log.html, report.html, traceability.html/json
+.\.venv\Scripts\smm-auto run --tier mock --processes 3   # suites in parallel with pabot (mock only; own service + broker per worker)
 .\.venv\Scripts\smm-auto run --tier offline --include initialization   # extra args go to robot
 .\.venv\Scripts\smm-auto --suites robot\suites\pilot\recover.robot run --tier offline
 .\.venv\Scripts\smm-auto run --tier rig --operator console   # operator at the instrument does the E-Stop steps

@@ -139,8 +139,11 @@ rich==15.0.0
     #   typer
 robotframework==7.5
     # via
+    #   robotframework-pabot
     #   robotframework-robocop
     #   smm-automation (pyproject.toml)
+robotframework-pabot==5.2.2
+    # via smm-automation (pyproject.toml)
 robotframework-robocop==9.1.0
     # via smm-automation (pyproject.toml)
 rpds-py==2026.9.1

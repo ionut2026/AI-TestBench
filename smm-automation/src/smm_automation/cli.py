@@ -9,7 +9,7 @@
                                                                  record a review in catalog/reviews.toml (at the test's spechash)
   smm-auto lint                                                  test rules (no Sleep, documentation, timing variables, tier tags)
   smm-auto matrix   [--check]                                     state x request matrix suite + open questions from catalog/state-matrix.toml
-  smm-auto run      [--tier mock|offline|rig] [--operator none|console|dialog] [--fail-on new|any|none] [robot args...]
+  smm-auto run      [--tier mock|offline|rig] [--operator none|console|dialog] [--fail-on new|any|none] [--processes N] [robot args...]
                                                                  run suites (tests needing a missing capability are excluded),
                                                                  then the traceability report
   smm-auto doctor   [--tier mock|offline|rig] [--operator ...] [--deep]
@@ -240,9 +240,22 @@ def _exit_code(rc: int, output: Path, fail_on: str) -> int:
     return rc
 
 
+# Why only the mock tier runs in parallel: offline workers would share one appSMM installation (its config files are
+# rewritten per run), the Mosquitto port in appSMM's InstrumentControl.config, the COP port and the SIL log folder;
+# the rig is one instrument.
+PARALLEL_TIERS = ("mock",)
+
+
 def cmd_run(args, robot_args: list[str]) -> int:
     from robot.run import run_cli
 
+    if args.processes < 1:
+        print("--processes must be at least 1", file=sys.stderr)
+        return 2
+    if args.processes > 1 and args.tier not in PARALLEL_TIERS:
+        print(f"--processes {args.processes}: parallel runs are only possible on the {', '.join(PARALLEL_TIERS)} tier "
+              f"(offline: one appSMM installation with fixed MQTT/COP ports and log folder; rig: one instrument)", file=sys.stderr)
+        return 2
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     out_dir = Path(args.outdir) if args.outdir else FRAMEWORK_ROOT / "results" / f"{args.tier}-{stamp}"
     from smm_automation.operator_prompt import ENV as OPERATOR_ENV
@@ -271,8 +284,23 @@ def cmd_run(args, robot_args: list[str]) -> int:
         for value in values if isinstance(values, list) else [values]:
             argv += [f"--{key}", str(value)]
     argv += robot_args + [str(p) for p in _suites(args)]
-    print("robot " + " ".join(argv))
-    rc = run_cli(argv, exit=False)
+    if args.processes > 1:
+        from pabot.pabot import main_program
+
+        # One robot process per suite, with this Python (the venv need not be on PATH); PabotLib (port 8270) is not used.
+        argv = ["--processes", str(args.processes), "--no-pabotlib",
+                "--command", sys.executable, "-m", "robot", "--end-command", *argv]
+        print("pabot " + " ".join(argv))
+        cache = Path(".pabotsuitenames")  # pabot's suite-name cache, always in the current directory
+        cached = cache.exists()
+        try:
+            rc = main_program(argv)
+        finally:
+            if not cached:
+                cache.unlink(missing_ok=True)
+    else:
+        print("robot " + " ".join(argv))
+        rc = run_cli(argv, exit=False)
     output = out_dir / "output.xml"
     if output.exists() and not args.no_report:
         _report(_catalog_path(args), output, out_dir, _suites(args), Path(args.reviews))
@@ -393,6 +421,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--exclude-pending", action="store_true", help="do not run tests tagged review:pending (they run and are labelled UNREVIEWED by default)")
     p.add_argument("--include-pending", action="store_true", help=argparse.SUPPRESS)  # pre-1.1 option, now the default
     p.add_argument("--no-report", action="store_true")
+    p.add_argument("--processes", type=int, default=1,
+                   help="run suites in N parallel processes with pabot (mock tier only; each worker gets its own service and broker)")
     p = sub.add_parser("report", allow_abbrev=False, help="traceability report for an existing output.xml")
     p.add_argument("--output", required=True)
     p.add_argument("--outdir")

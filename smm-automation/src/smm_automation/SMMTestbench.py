@@ -39,7 +39,15 @@ from robot.libraries.BuiltIn import BuiltIn
 from robot.utils import timestr_to_secs
 
 from smm_automation import operator_prompt, sil
-from smm_automation.client import DEFAULT_URL, ServiceClient, ServiceError, ensure_service
+from smm_automation.client import (
+    DEFAULT_URL,
+    ServiceClient,
+    ServiceError,
+    claim_worker_slot,
+    ensure_service,
+    worker_broker_port,
+    worker_url,
+)
 from smm_automation.rigcontrol import RigControl, RigControlError
 
 STATES = ("PowerOn", "NotInitialized", "Initializing", "Idle", "NormalOperation", "E-Stop", "Configuring", "Clearing")
@@ -83,6 +91,18 @@ class SMMTestbench:
         self._rig_control_loaded = False
         self._log_fetches = 0
         self._log_fetched = False
+        self._slot: int | None = None
+        self._slot_handle: Any = None
+
+    def _worker(self) -> int | None:
+        """The worker slot in a parallel run (``smm-auto run --processes N``, pabot), else None. The worker uses its
+        own local service (port + 10 + slot) and broker so parallel suites never share an environment."""
+        if self._slot is None and str(_robot_var("${PABOTEXECUTIONPOOLID}", "")).strip():
+            self._slot, self._slot_handle = claim_worker_slot()
+            self.client.url = worker_url(self.client.url, self._slot)
+            self.client.token = None
+            logger.info(f"Parallel worker slot {self._slot}: automation service {self.client.url}")
+        return self._slot
 
     # ================================================================== service and environment
 
@@ -92,8 +112,7 @@ class SMMTestbench:
         from smm_automation import FRAMEWORK_ROOT
 
         out_dir = _robot_var("${OUTPUT DIR}", str(FRAMEWORK_ROOT / "results"))
-        from pathlib import Path
-
+        self._worker()
         health = ensure_service(self.client, self.autostart, Path(out_dir) / "automation-service.log")
         tb = health["testbench"]
         pin = f"{(tb.get('commit') or '?')[:12]}{' (dirty)' if tb.get('dirty') else ''}"
@@ -111,7 +130,14 @@ class SMMTestbench:
         automation instrument; broker and appSMM run on it). ``overrides`` is a dict or JSON, e.g.
         ``{"broker": {"host": "10.0.1.20"}}``."""
         self.ensure_automation_service_is_running()
-        status = self.client.start_environment(tier, _as_obj(overrides) or {})
+        overrides = _as_obj(overrides) or {}
+        worker = self._worker()
+        if worker is not None:
+            if tier != "mock":
+                raise AssertionError(f"Parallel runs are only possible on the mock tier, not {tier}")
+            broker = {"port": worker_broker_port(worker), **(overrides.get("broker") or {})}
+            overrides = {**overrides, "broker": broker}
+        status = self.client.start_environment(tier, overrides)
         self._tier = tier
         self._kinds = {part: str((status.get(part) or {}).get("kind")) for part in ("broker", "appSmm", "hardware")}
         _metadata("Tier", tier + (" (framework self-test: NOT product evidence)" if tier == "mock" else ""))
