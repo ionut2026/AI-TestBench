@@ -288,6 +288,7 @@ they are and what would break if they were changed.
 D:\projects\AI-TestBench\
 ├── .github\
 │   ├── agents\smm-test-author.agent.md   AI agent instructions for writing tests
+│   ├── agents\smm-test-reviewer.agent.md AI agent instructions for reviewing tests
 │   └── workflows\smm-automation.yml      CI (automatic checks on GitHub)
 ├── docs\
 │   ├── ARCHITECTURE.md                   Technical summary (MCP server + framework)
@@ -356,6 +357,7 @@ D:\projects\AI-TestBench\
 | `service\src\**` | TypeScript developer | New hardware action or API | Higher — run `npm test` |
 | `testbench.lock.json` | Maintainer | When adopting a new TestBench version | Higher — Section 13.8 |
 | `.github\agents\smm-test-author.agent.md` | Maintainer | When authoring rules change | Low |
+| `.github\agents\smm-test-reviewer.agent.md` | Maintainer | When authoring or review rules change | Low |
 
 ### 5.3 Each file in one paragraph
 
@@ -445,7 +447,13 @@ the appSMM handlers and the SDS texts but is **not** a reference for correct beh
 They test the framework, not appSMM.
 
 **`.github\agents\smm-test-author.agent.md`** — Instructions for the AI test author (input = brief, output = test
-tagged `review:pending`, self-checks, hand-over notes for the reviewer). Also a good checklist for human authors.
+tagged `review:pending`, self-checks, hand-over notes for the reviewer). It contains the full authoring method: spec
+analysis, precondition recipes, which assertion keyword proves which kind of spec sentence, measured appSMM behaviour,
+a self-review checklist and the verification steps. Also the best checklist for human authors.
+
+**`.github\agents\smm-test-reviewer.agent.md`** — Instructions for the AI test reviewer: an independent, read-only
+second opinion that maps every spec outcome to an assertion, looks for false passes/false fails, runs the mock tier and
+returns APPROVE / CHANGES REQUESTED / REJECT per test. The human still decides and removes `review:pending`.
 
 **`.github\workflows\smm-automation.yml`** — CI definition (Section 15).
 
@@ -1015,12 +1023,19 @@ runs and a colleague reviews.
 1. `smm-auto briefs --spec <id>`.
 2. In GitHub Copilot (CLI or VS Code), select the agent **smm-test-author** and ask:
    *"Write the test for SDS-<id> from its brief."*
-3. The agent adds the test with `review:pending`, runs drift and the mock tier, and lists for the reviewer which
-   sentence each assertion checks.
-4. You review exactly as in 9.8. The agent never removes `review:pending`.
+3. The agent analyses the specification (precondition, trigger, outcomes, constraints, open values), adds the test with
+   `review:pending`, runs drift and the mock tier, and hands over a table showing which sentence each assertion
+   checks, its assumptions, and any suspected appSMM deviation ("candidate finding").
+4. Optional but recommended: select the agent **smm-test-reviewer** and ask
+   *"Review the review:pending tests for SDS-<id>."* It does not change files; it returns a verdict per test
+   (APPROVE / CHANGES REQUESTED / REJECT) with concrete line-by-line change proposals. Give its change requests back
+   to smm-test-author (or fix them yourself) and repeat.
+5. You review exactly as in 9.8 and decide. No agent ever removes `review:pending` — that is the human's sign-off.
 
-The agent's instructions are in `.github\agents\smm-test-author.agent.md`; the binding rules are in
-`pipeline\briefs.py` (`RULES`). Keep both in sync with Section 11.
+The agents' instructions are in `.github\agents\smm-test-author.agent.md` and
+`.github\agents\smm-test-reviewer.agent.md`; the binding rules are in `pipeline\briefs.py` (`RULES`). Keep all
+three in sync with Section 11. Even without AI, the author agent file is the most complete written guide to writing a
+good test, and the reviewer file is a ready-made review checklist.
 
 ### 9.12 Creating a new suite (new area)
 

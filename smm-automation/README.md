@@ -74,7 +74,8 @@ override with `WINDCHILL_MCP_SERVER`) with the `RVS_*` settings from the environ
 2. `smm-auto briefs --spec <id>`: the brief holds the spec text, linked requirements/user stories/ETs, the ICD
    schemas of the messages it mentions, the keyword documentation, the tags to use and the target suite.
 3. The `smm-test-author` agent (`.github/agents/smm-test-author.agent.md`) writes the test from the brief, tagged
-   `review:pending`.
+   `review:pending`. Optionally the `smm-test-reviewer` agent (`.github/agents/smm-test-reviewer.agent.md`)
+   gives an independent, read-only review (APPROVE / CHANGES REQUESTED / REJECT).
 4. A test engineer reviews it against the specification (and runs it on `offline`/`rig`), then removes `review:pending`.
 5. When RV&S changes the specification text, `drift` reports the test as **stale**: re-review, then update `spechash:`.
 
