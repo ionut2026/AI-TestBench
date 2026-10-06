@@ -1,3 +1,6 @@
+import pytest
+
+from smm_automation.SMMTestbench import SMMTestbench
 from smm_automation.SMMTestbench import _command_matches as m
 
 
@@ -8,11 +11,6 @@ def test_command_matches():
     assert not m("AppMan.DeInitializeCmd", "InitializeCmd")
     assert not m("AppMan.DeInitializeCmd", "Initialize")
     assert m("AppMan.DeInitializeCmd", "DeInitialize")
-
-
-import pytest
-
-from smm_automation.SMMTestbench import SMMTestbench
 
 
 class FakeSmm(SMMTestbench):

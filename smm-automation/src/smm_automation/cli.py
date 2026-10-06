@@ -68,7 +68,6 @@ def cmd_briefs(args) -> int:
 def cmd_drift(args) -> int:
     from smm_automation.pipeline.drift import check, collect_tests, format_text, load_reviews, problems
     from smm_automation.pipeline.ingest import load_catalog
-
     from smm_automation.pipeline.lint import lint
 
     catalog = load_catalog(_catalog_path(args))
@@ -133,7 +132,7 @@ def _exit_code(rc: int, output: Path, fail_on: str) -> int:
 
 
 def cmd_run(args, robot_args: list[str]) -> int:
-    import robot
+    from robot.run import run_cli
 
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     out_dir = Path(args.outdir) if args.outdir else FRAMEWORK_ROOT / "results" / f"{args.tier}-{stamp}"
@@ -147,13 +146,13 @@ def cmd_run(args, robot_args: list[str]) -> int:
         "name": f"SMM {args.tier}",
         "metadata": [f"Run:{stamp}"],
     }
-    argv = []
+    argv: list[str] = []
     for key, values in options.items():
         for value in values if isinstance(values, list) else [values]:
-            argv += [f"--{key}", value]
+            argv += [f"--{key}", str(value)]
     argv += robot_args + [str(p) for p in _suites(args)]
     print("robot " + " ".join(argv))
-    rc = robot.run_cli(argv, exit=False)
+    rc = run_cli(argv, exit=False)
     output = out_dir / "output.xml"
     if output.exists() and not args.no_report:
         _report(_catalog_path(args), output, out_dir, _suites(args), Path(args.reviews))

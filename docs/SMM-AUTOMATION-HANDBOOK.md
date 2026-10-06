@@ -363,8 +363,10 @@ D:\projects\AI-TestBench\
 ### 5.3 Each file in one paragraph
 
 **`smm-automation\pyproject.toml`** — Defines the Python package `smm-automation`: its dependencies
-(Robot Framework, `mcp` for RV&S access, `requests`, …), the `dev` extras (pytest), and the command
-`smm-auto` (which runs `smm_automation.cli:main`). `pip install -e ".[dev]"` reads this file.
+(Robot Framework, `mcp` for RV&S access, `requests`, …), the `dev` extras (pytest, ruff, mypy, Robocop, pip-tools),
+the tool settings (ruff, mypy, coverage floor, Robocop) and the command `smm-auto` (which runs
+`smm_automation.cli:main`). **`smm-automation\requirements-dev.lock`** pins the exact version of every Python package
+(generated from `pyproject.toml` with `pip-compile`); installs use it so every PC and CI get the same versions.
 
 **`testbench.lock.json`** — The exact git commit of the SMM TestBench that the service is built from
 (`c55073075f06…`) and its default folder (`D:\projects\SMM TestBench`). The build refuses another commit unless
@@ -444,7 +446,7 @@ and implements the waits.
 **`service\src\mock\mockAppSmm.ts`** — A scripted imitation of appSMM's state machine for the mock tier. It follows
 the appSMM handlers and the SDS texts but is **not** a reference for correct behaviour.
 
-**`service\test\*.test.ts`** and **`tests\*.py`** — Self-tests of the framework (21 vitest tests, 19 pytest tests).
+**`service\test\*.test.ts`** and **`tests\*.py`** — Self-tests of the framework (21 vitest tests, 34 pytest tests).
 They test the framework, not appSMM.
 
 **`.github\agents\smm-test-author.agent.md`** — Instructions for the AI test author (input = brief, output = test
@@ -535,15 +537,18 @@ ends with all tests passed (21 at the time of writing).
 cd D:\projects\AI-TestBench\smm-automation
 py -3.12 -m venv .venv
 .\.venv\Scripts\python -m pip install --upgrade pip
-.\.venv\Scripts\pip install -e ".[dev]"
+.\.venv\Scripts\pip install -r requirements-dev.lock
+.\.venv\Scripts\pip install --no-deps -e .
 .\.venv\Scripts\python -m pytest
 ```
 
-**Check:** pytest reports all tests passed (19 at the time of writing), and `.\.venv\Scripts\smm-auto --help` prints
+**Check:** pytest reports all tests passed (34 at the time of writing), and `.\.venv\Scripts\smm-auto --help` prints
 the list of commands.
 
 > `-e` means "editable": the venv uses the files in `src\` directly, so your changes to Python files take effect
-> without reinstalling. Re-run the `pip install` line only when `pyproject.toml` changes.
+> without reinstalling. Re-run the two `pip install` lines only when `pyproject.toml` or `requirements-dev.lock` changes.
+> When you change a dependency in `pyproject.toml`, regenerate the lock and commit both:
+> `.\.venv\Scripts\pip-compile --extra dev --strip-extras --no-emit-index-url -o requirements-dev.lock pyproject.toml`.
 
 ### 6.6 First run: the mock tier
 
@@ -1476,8 +1481,9 @@ Before any change: run the self-tests so you know the starting point is green, a
 
 ```powershell
 cd D:\projects\AI-TestBench\smm-automation
-cd service; npm test; cd ..
-.\.venv\Scripts\python -m pytest
+cd service; npm run lint; npm run typecheck; npm run coverage; cd ..
+.\.venv\Scripts\ruff check src tests; .\.venv\Scripts\mypy
+.\.venv\Scripts\python -m pytest --cov
 .\.venv\Scripts\smm-auto drift --strict
 .\.venv\Scripts\smm-auto run --tier mock
 ```
@@ -1755,9 +1761,13 @@ always runs the built file.
 
 | Suite | Command | Covers |
 |---|---|---|
-| vitest (`service\test`) | `npm test` in `service` | API contract against the mock tier, message filter rules |
-| pytest (`tests`) | `.\.venv\Scripts\python -m pytest` | Library keywords with a fake client, ingest helpers (hash, ET parsing, refs, areas), drift, report verdicts |
+| vitest (`service\test`) | `npm test` in `service` (`npm run coverage` with floors) | API contract against the mock tier, message filter rules |
+| pytest (`tests`) | `.\.venv\Scripts\python -m pytest` (`--cov` with floor) | Library keywords with a fake client, ingest helpers (hash, ET parsing, refs, areas), drift, report verdicts, briefs, lint rules |
 | mock tier | `smm-auto run --tier mock` | Whole chain end-to-end without appSMM |
+
+Static checks: `npm run lint` (eslint) and `npm run typecheck` in `service`; `ruff check src tests` and `mypy` in
+`smm-automation`. Coverage floors sit just below the measured values (Python 55 %, service 75 % lines / 73 %
+branches): raise them when you add tests, never lower them to make CI green.
 
 ---
 
@@ -1777,9 +1787,11 @@ File: `.github\workflows\smm-automation.yml`. CI = GitHub runs the checks automa
 
 1. Checks out this repository and the SMM TestBench at the **pinned commit** (the TestBench repository is public,
    so no secret is needed; if it ever becomes private, add a repository secret `SMM_TESTBENCH_TOKEN` with read access to it).
-2. Installs Node 24 and Python 3.12; `npm ci` in TestBench simulator + hwsim and in `service`; `pip install -e`.
-3. Typecheck, build, vitest, pytest, `smm-auto lint`, `robocop check robot`, `smm-auto drift --strict`, **mock tier** run.
-4. Uploads the results as artifact **smm-mock-results** (download it from the run page → *Artifacts*).
+2. Installs Node 24 and Python 3.12; `npm ci` in TestBench simulator + hwsim and in `service`; Python packages from
+   `requirements-dev.lock`, then the package itself.
+3. Typecheck, eslint, build, vitest with coverage floors, ruff, mypy, pytest with coverage floor, `smm-auto lint`,
+   `robocop check robot`, `smm-auto drift --strict`, **mock tier** run.
+4. Uploads the results as artifacts **smm-mock-results** and **smm-coverage** (download them from the run page → *Artifacts*).
 
 A red framework job on a pull request means: do not merge until fixed. The most common reason is `drift --strict`
 (e.g. a test was added without `spechash:`).
@@ -1846,7 +1858,7 @@ See checklist 18.3.
 | Build says the TestBench commit does not match the pin | TestBench checkout is at a different commit | `git checkout <commit from testbench.lock.json>` in the TestBench, or (only for experiments) `$env:SMM_TESTBENCH_ALLOW_UNPINNED = "1"` |
 | `Run npm ci in …simulator` (or hwsim) | TestBench dependencies missing | `npm ci` in that folder |
 | `SMM automation service not reachable at …` or `The automation service exited with code …` | Service crashed, port 8765 taken, or Node missing | Read `automation-service.log` in the results folder; run `smm-auto service` in a separate window to see errors |
-| `Service API x is not supported` | Service and Python library from different versions | `git pull`, `npm run build`, `.\.venv\Scripts\pip install -e ".[dev]"` again |
+| `Service API x is not supported` | Service and Python library from different versions | `git pull`, `npm run build`, `.\.venv\Scripts\pip install --no-deps -e .` again |
 | `appSMM did not start` | Wrong `SMM_APPSMM_EXE`, missing DLLs, appSMM already running | Check the path; stop old appSMM (17.2); start it once by hand to see the error |
 | appSMM behaves strangely outside the tests | Its config files point at the service's broker/COP | The TestBench `Runner` saved the originals as `*.orig` next to them — restore them if needed |
 | `No keyword with name 'Send ICD Message InitializationRequest'` | Only one space between keyword and argument | Use **at least 2 spaces** (or a tab) between cells |
@@ -1928,7 +1940,9 @@ findings section and in Section 16.
 ### 18.5 Node or Python upgrade
 
 - [ ] Node: `npm ci` everywhere, `npm run build`, `npm test`. Python: recreate the venv
-  (`Remove-Item -Recurse .venv; py -3.12 -m venv .venv; .\.venv\Scripts\pip install -e ".[dev]"`), `pytest`
+  (`Remove-Item -Recurse .venv; py -3.12 -m venv .venv; .\.venv\Scripts\pip install -r requirements-dev.lock;
+  .\.venv\Scripts\pip install --no-deps -e .`), `pytest`. To move to newer Python packages, regenerate the lock with
+  `pip-compile --upgrade` (Section 6.5) and run everything.
 - [ ] Mock and offline runs
 - [ ] Update the versions in the CI workflow if needed
 
@@ -1960,8 +1974,9 @@ cd D:\projects\AI-TestBench\smm-automation
 .\.venv\Scripts\smm-auto briefs --spec 2428419           # writing aid for one spec
 
 # --- after code changes
-cd service; npm run build; npm test; cd ..
-.\.venv\Scripts\python -m pytest
+cd service; npm run lint; npm run build; npm run coverage; cd ..
+.\.venv\Scripts\ruff check src tests; .\.venv\Scripts\mypy
+.\.venv\Scripts\python -m pytest --cov
 ```
 
 | Need | Where |

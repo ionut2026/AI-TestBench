@@ -175,7 +175,7 @@ def ensure_service(client: ServiceClient, autostart: bool = True, log_file: Path
                 break
             except ServiceError:
                 if _spawned.poll() is not None:
-                    raise ServiceError(0, f"The automation service exited with code {_spawned.returncode}; see {log_file or 'its output'}")
+                    raise ServiceError(0, f"The automation service exited with code {_spawned.returncode}; see {log_file or 'its output'}") from None
                 if time.monotonic() > deadline:
                     raise
                 time.sleep(0.3)

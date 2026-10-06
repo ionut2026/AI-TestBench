@@ -6,4 +6,10 @@ results/
 generated/
 service/node_modules/
 service/dist/
+service/coverage/
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+.ruff_cache/
 service/tsconfig.testbench.json

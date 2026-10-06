@@ -15,6 +15,7 @@ import datetime as dt
 import html
 import json
 from pathlib import Path
+from typing import Any
 
 from smm_automation.pipeline.drift import HASH_TAG, KNOWN_ISSUE_TAG, PENDING_TAG, SDS_TAG, TestRef, check
 
@@ -77,7 +78,7 @@ def read_results(output_xml: Path) -> tuple[list[dict], dict]:
             walk(child)
 
     walk(result.suite)
-    meta = {str(k): str(v) for k, v in result.suite.metadata.items()}
+    meta: dict[str, Any] = {str(k): str(v) for k, v in result.suite.metadata.items()}
     stats = result.statistics.total
     meta["_totals"] = {"pass": stats.passed, "fail": stats.failed, "skip": stats.skipped}
     meta["_start"] = str(getattr(result.suite, "starttime", None) or getattr(result.suite, "start_time", ""))
@@ -160,7 +161,7 @@ def build_report(catalog: dict, tests: list[dict], meta: dict, known: list[TestR
     summary = {v: sum(1 for s in specs_out if s["verdict"] == v) for v in ORDER}
     testable = [s for s in specs_out if s["verdict"] != "NOT TESTABLE"]
     return {
-        "generatedAt": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+        "generatedAt": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
         "catalogGeneratedAt": catalog.get("generatedAt"),
         "scope": catalog.get("scope"),
         "tier": tier,

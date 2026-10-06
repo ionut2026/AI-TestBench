@@ -19,15 +19,18 @@ RULES = """\
 3. Tags: exactly the tags under "Tags" below, plus `review:pending`, plus capability tags:
    `needs:twin` when the test drives the simulated hardware (Trigger Hardware Action, Wait For Hardware
    Command as a *required* step), `requires:restart` when it restarts appSMM or the broker.
-4. Only use keywords from the list below and Robot BuiltIn/Collections. No `Sleep` as a synchronisation:
-   wait for messages (`Wait For Message`, `Wait For Message Sequence`, `Wait For System State`).
+4. Only use keywords from the list below and Robot BuiltIn/Collections. No `Sleep` (`smm-auto lint` rejects it):
+   wait for messages (`Wait For Message`, `Wait For Message Sequence`, `Wait For System State`), prove absence
+   with `Message Should Not Arrive`, simulate a lost Bridge with `Interrupt Bridge Connection`.
 5. Preconditions with `Bring SMM To State`, `Bring SMM To E-Stop With Shutdown` or
    `Restart appSMM And Wait Until NotInitialized`; they are not verification steps.
 6. Assert what the specification says and nothing more: states, message order, fields, topic (`@topic=/is/iw/tx`),
    ICD schema validity (`Received Messages Should Be Schema Valid`). Values the specification leaves open
    (e.g. "EventId": ??) are logged, not asserted.
 7. Timeouts come from variables (`${RESPONSE_TIMEOUT}`, `${STARTUP_TIMEOUT}`, `${INIT_TIMEOUT}`,
-   `${RECOVER_TIMEOUT}`, `${QUIET_PERIOD}`); use a literal only when the specification states the time.
+   `${RECOVER_TIMEOUT}`, `${QUIET_PERIOD}`, `${SHORT_QUIET_PERIOD}`). A time stated by the specification goes into a
+   suite variable `${SDS_<id>_LIMIT}` (quote it in the documentation); literal `timeout=`/`duration=` values are
+   rejected by `smm-auto lint`.
 8. If the behaviour cannot be observed through the ICD or the hardware twin, do not write a test: say why,
    so the specification can be listed under `[deferred]` in the scope file.
 9. Add the test to the suite file named under "Target"; keep the suite's Settings unchanged.

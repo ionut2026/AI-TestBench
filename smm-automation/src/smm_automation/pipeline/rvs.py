@@ -6,6 +6,8 @@ import asyncio
 import json
 import os
 import shutil
+from collections.abc import Sequence
+from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import Any
 
@@ -40,12 +42,10 @@ class RvsClient:
 
     def __init__(self, server_js: Path | None = None):
         self.server_js = Path(server_js) if server_js else _default_server_js()
-        self._stack = None
-        self.session = None
+        self._stack: AsyncExitStack | None = None
+        self.session: Any = None
 
-    async def __aenter__(self) -> "RvsClient":
-        from contextlib import AsyncExitStack
-
+    async def __aenter__(self) -> RvsClient:
         from mcp import ClientSession, StdioServerParameters
         from mcp.client.stdio import stdio_client
 
@@ -64,6 +64,8 @@ class RvsClient:
             await self._stack.aclose()
 
     async def call(self, tool: str, **args: Any) -> Any:
+        if self.session is None:
+            raise RuntimeError("RvsClient is not open (use 'async with RvsClient()')")
         result = await self.session.call_tool(tool, {k: v for k, v in args.items() if v is not None}, read_timeout_seconds=300)
         text = "".join(getattr(c, "text", "") for c in (result.content or []))
         if getattr(result, "isError", False) or getattr(result, "is_error", False):
@@ -73,7 +75,7 @@ class RvsClient:
         except ValueError:
             return text
 
-    async def get_items(self, ids: list[int | str], **opts: Any) -> list[dict]:
+    async def get_items(self, ids: Sequence[int | str], **opts: Any) -> list[dict]:
         out: list[dict] = []
         for i in range(0, len(ids), 50):
             data = await self.call("rvs_get_items", ids=[str(x) for x in ids[i : i + 50]], **opts)

@@ -14,7 +14,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "robotframework-robocop>=6"]
+dev = [
+  "pytest>=8",
+  "pytest-cov>=5",
+  "robotframework-robocop>=6",
+  "ruff>=0.6",
+  "mypy>=1.10",
+  "types-requests",
+  "pip-tools>=7",
+]
 
 [project.scripts]
 smm-auto = "smm_automation.cli:main"
@@ -22,11 +30,35 @@ smm-auto = "smm_automation.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.setuptools.package-data]
-smm_automation = ["pipeline/templates/*"]
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["smm_automation"]
+branch = true
+
+[tool.coverage.report]
+# Floor just below the measured value; raise it when tests are added, never lower it.
+fail_under = 55
+show_missing = false
+skip_covered = true
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+# Bug-oriented rules; line length is not enforced (long HTML/f-strings), prefer <= 120.
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["smm_automation"]
+mypy_path = "src"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
 
 # Generic Robot Framework lint (`robocop check robot`); the SMM-specific rules are `smm-auto lint`.
 [tool.robocop.lint]

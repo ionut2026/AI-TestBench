@@ -9,6 +9,8 @@
     "start": "node build.mjs && node dist/smm-automation-service.mjs",
     "serve": "node dist/smm-automation-service.mjs",
     "test": "vitest run",
+    "coverage": "vitest run --coverage",
+    "lint": "eslint .",
     "typecheck": "node build.mjs --paths-only && tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
@@ -16,9 +18,13 @@
     "mqtt": "^5.16.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "^3.2.7",
     "esbuild": "^0.25.12",
+    "eslint": "^10.12.0",
     "typescript": "^5.9.0",
-    "vitest": "^3.2.4"
+    "typescript-eslint": "^8.71.1",
+    "vitest": "^3.2.7"
   }
 }

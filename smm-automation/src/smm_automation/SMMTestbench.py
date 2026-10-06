@@ -347,7 +347,7 @@ class SMMTestbench:
     def clear_hardware_twin_racks(self) -> list:
         """Clean-up: takes every rack off the hardware twin by hand (trays, FrontIn/Out, lanes, buffers),
         so later tests start with an empty instrument. Returns the removed rack ids."""
-        removed = []
+        removed: list[str] = []
         try:
             racks = self.client.hardware().get("racks", [])
         except ServiceError as err:
@@ -447,7 +447,7 @@ class SMMTestbench:
         if failed:
             try:
                 logs = self.client.environment_logs()[-80:]
-                logger.info("<pre>" + html.escape("\n".join(f"{l['source']}: {l['line']}" for l in logs)) + "</pre>", html=True)
+                logger.info("<pre>" + html.escape("\n".join(f"{ln['source']}: {ln['line']}" for ln in logs)) + "</pre>", html=True)
             except ServiceError:
                 pass
 

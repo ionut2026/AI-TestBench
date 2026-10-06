@@ -57,16 +57,23 @@ jobs:
           npm ci --prefix smm-testbench/simulator
           npm ci --prefix smm-testbench/hwsim
           npm ci --prefix smm-automation/service
-          python -m pip install -e "smm-automation[dev]"
-      - name: Service typecheck, build and contract tests
+          python -m pip install -r smm-automation/requirements-dev.lock
+          python -m pip install --no-deps -e smm-automation
+      - name: Service typecheck, lint, build and contract tests (with coverage floors)
         working-directory: smm-automation/service
         run: |
           npm run typecheck
+          npm run lint
           npm run build
-          npm test
-      - name: Pipeline unit tests
+          npm run coverage
+      - name: Python static checks (ruff, mypy)
         working-directory: smm-automation
-        run: python -m pytest -q
+        run: |
+          ruff check src tests
+          mypy
+      - name: Pipeline unit tests (with coverage floor)
+        working-directory: smm-automation
+        run: python -m pytest -q --cov --cov-report=term --cov-report=xml
       - name: Test rules (SMM lint + Robocop)
         working-directory: smm-automation
         run: |
@@ -83,6 +90,13 @@ jobs:
         with:
           name: smm-mock-results
           path: smm-automation/results/mock
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smm-coverage
+          path: |
+            smm-automation/coverage.xml
+            smm-automation/service/coverage
 
   hardware:
     if: vars.SMM_RIG_RUNNER == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
@@ -100,7 +114,8 @@ jobs:
           npm ci --prefix smm-automation/service
           npm run build --prefix smm-automation/service
           python -m venv .venv
-          .venv/Scripts/pip install -e "smm-automation[dev]"
+          .venv/Scripts/pip install -r smm-automation/requirements-dev.lock
+          .venv/Scripts/pip install --no-deps -e smm-automation
       - name: Run ${{ inputs.tier || 'offline' }} tier
         working-directory: smm-automation
         run: ../.venv/Scripts/smm-auto run --tier ${{ inputs.tier || 'offline' }} --outdir results/hardware

@@ -52,6 +52,10 @@ user's explicit go and an operator at the instrument (no racks or samples loaded
 | 1.7 | Thin static quality | ruff + mypy (Python), eslint + `tsc --noEmit` (service), coverage (pytest-cov, vitest coverage) with floors in CI | CI job green, coverage published |
 | 1.8 | Reproducibility | Lock Python deps (`uv lock` or pip-tools `requirements.lock`), CI installs from lock; fix `pyproject` package-data `pipeline/templates/*` | Fresh venv from lock reproduces results |
 
+*1.7–1.8 status:* done with pip-tools (`requirements-dev.lock`); the stale `templates` package-data entry was removed
+(there are no templates). Follow-up: `npm audit` still reports advisories in the vitest 3 toolchain (tinypool,
+@vitest/mocker; dev-only, local test runs) that need the breaking upgrade to vitest 4.
+
 ## Phase 2 — Library and pipeline correctness — 2–3 days
 
 | # | Finding | Work |

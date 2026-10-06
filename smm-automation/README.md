@@ -51,9 +51,15 @@ npm ci --prefix "D:\projects\SMM TestBench\simulator"; npm ci --prefix "D:\proje
 # 2. Service
 cd smm-automation\service; npm ci; npm run build; npm test
 
-# 3. Python
-cd ..; py -3.12 -m venv .venv; .\.venv\Scripts\pip install -e ".[dev]"; .\.venv\Scripts\python -m pytest
+# 3. Python (pinned versions from the lock file, then the package itself)
+cd ..; py -3.12 -m venv .venv; .\.venv\Scripts\pip install -r requirements-dev.lock; .\.venv\Scripts\pip install --no-deps -e .
+.\.venv\Scripts\python -m pytest
 ```
+
+Code quality checks (all in CI): `npm run lint`, `npm run typecheck`, `npm run coverage` in `service`;
+`ruff check src tests`, `mypy`, `python -m pytest --cov` (coverage floors in `pyproject.toml` and
+`service\vitest.config.ts`). After changing dependencies in `pyproject.toml`, re-create the lock:
+`.\.venv\Scripts\pip-compile --extra dev --strip-extras --no-emit-index-url -o requirements-dev.lock pyproject.toml`.
 
 RV&S access (`ingest` only) uses the windchill MCP server of this repository (`windchill-mcp-server/src/server.js`,
 override with `WINDCHILL_MCP_SERVER`) with the `RVS_*` settings from the environment or `~/.copilot/mcp-config.json`.

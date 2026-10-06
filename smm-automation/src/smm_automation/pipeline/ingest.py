@@ -66,11 +66,11 @@ def parse_explorative_test(description: str | None) -> dict:
     out: dict[str, Any] = {k: [] for k, _ in ET_SECTIONS}
     for i, (_start, end, key) in enumerate(found):
         stop = found[i + 1][0] if i + 1 < len(found) else len(text)
-        lines = [l.strip() for l in text[end:stop].split("\n")]
-        out[key] = [l for l in lines if l]
+        lines = [ln.strip() for ln in text[end:stop].split("\n")]
+        out[key] = [ln for ln in lines if ln]
     if not found:
         out["preconditions"] = []
-        out["steps"] = [l.strip() for l in text.split("\n") if l.strip()]
+        out["steps"] = [ln.strip() for ln in text.split("\n") if ln.strip()]
     return out
 
 
@@ -133,8 +133,6 @@ def build_catalog(scope: dict, specs: list[dict], requirements: list[dict], stor
     deferred = {int(k): v for k, v in (scope.get("deferred") or {}).items()}
     areas = scope.get("areas") or {}
 
-    reqs_by_id = {int(r["ID"]): r for r in requirements}
-    stories_by_id = {int(s["ID"]): s for s in stories}
     et_parent: dict[int, set[int]] = {}
     for item in [*specs, *requirements, *stories]:
         for r in refs(item, "Relevant Explorative Test"):
@@ -209,7 +207,7 @@ def build_catalog(scope: dict, specs: list[dict], requirements: list[dict], stor
     return {
         "schema": 1,
         "scope": {k: scope.get(k) for k in ("name", "title")},
-        "generatedAt": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+        "generatedAt": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
         "source": "Windchill RV&S (windchill MCP server, read-only)",
         "counts": {"specifications": len(out_specs), "requirements": len(out_reqs), "userStories": len(out_stories), "explorativeTests": len(out_ets)},
         "specifications": out_specs,

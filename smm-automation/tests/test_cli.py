@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import robot
-
 from smm_automation.cli import _exit_code
 
 SUITE = """*** Test Cases ***
