@@ -116,7 +116,9 @@ Copilot (CLI/VS Code) --stdio--> Node MCP server (src/server.js)
 
 ## SMM test automation framework (`smm-automation/`)
 
-The first consumer of the MCP server. Full details are in `smm-automation/README.md`.
+The first consumer of the MCP server. Full details are in `smm-automation/README.md`. The complete handbook for
+users and maintainers (non-technical friendly: installation, running, writing tests, extending, internals,
+troubleshooting) is [`docs/SMM-AUTOMATION-HANDBOOK.md`](SMM-AUTOMATION-HANDBOOK.md).
 
 - **Ingest.** `smm-automation/src/smm_automation/pipeline/ingest.py` starts `windchill-mcp-server/src/server.js`
   as an MCP stdio client and uses `rvs_get_items` / `rvs_search_items`. It builds `catalog/<scope>.json` with:

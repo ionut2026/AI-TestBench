@@ -2,6 +2,9 @@
 
 Automated system tests for the SMM (7251 Sample Management Module), traced to Windchill RV&S.
 
+> **New to this framework?** Read the [SMM Automation Handbook](../docs/SMM-AUTOMATION-HANDBOOK.md): a step-by-step guide
+> for installing, running, writing and maintaining the tests, written for non-specialists.
+
 ```mermaid
 flowchart LR
   RVS[(Windchill RV&S)] -- windchill MCP server, read-only --> ING[smm-auto ingest]
