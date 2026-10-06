@@ -90,7 +90,8 @@ SDS-2528698 Initializing Is Notified After InitializationResponse OK
 - **Tags:** exactly the brief's `SDS-<id>` and `spechash:<8 hex>` (never invent or recompute a hash), `review:pending`,
   plus capability tags: `needs:twin` when the test *requires* the hardware twin, `requires:restart` when it restarts
   appSMM or the broker (including via `Restart appSMM And Wait Until NotInitialized`). Do not repeat the suite's
-  `Test Tags` (`area:…`, `pilot`).
+  `Test Tags` (`area:…`, `pilot`). In the rare test that truly proves several specifications, tag each one with
+  `SDS-<id>` and the per-specification form `spechash:<id>:<8 hex>` from its brief (a plain `spechash:` is then NO HASH).
 - **Body:** Given (precondition) → When (one trigger) → Then (assertions). Short `#` comments on the Given/When/Then
   lines are welcome when the intent is not obvious.
 - **Teardown:** the suite's `Finish SMM Test` is automatic. Tests that put racks on the twin use

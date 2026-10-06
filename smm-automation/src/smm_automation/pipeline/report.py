@@ -17,7 +17,15 @@ import json
 from pathlib import Path
 from typing import Any
 
-from smm_automation.pipeline.drift import HASH_TAG, KNOWN_ISSUE_TAG, PENDING_TAG, SDS_TAG, TestRef, check
+from smm_automation.pipeline.drift import (
+    KNOWN_ISSUE_TAG,
+    PENDING_TAG,
+    SDS_TAG,
+    TestRef,
+    check,
+    hash_for,
+    parse_hash_tags,
+)
 
 ORDER = ["FAIL", "NOT RUN", "UNCOVERED", "SKIP", "PARTIAL", "DEFERRED", "PASS", "NOT TESTABLE"]
 COLORS = {
@@ -62,6 +70,7 @@ def read_results(output_xml: Path) -> tuple[list[dict], dict]:
     def walk(suite):
         for t in suite.tests:
             tags = [str(x) for x in t.tags]
+            plain, per_spec = parse_hash_tags(tags)
             tests.append({
                 "name": t.name,
                 "suite": suite.longname,
@@ -70,7 +79,8 @@ def read_results(output_xml: Path) -> tuple[list[dict], dict]:
                 "elapsed": round(t.elapsedtime / 1000, 2) if hasattr(t, "elapsedtime") else round(t.elapsed_time.total_seconds(), 2),
                 "tags": tags,
                 "specs": [int(m[1]) for x in tags if (m := SDS_TAG.match(x))],
-                "hash": next((m[1].lower() for x in tags if (m := HASH_TAG.match(x))), None),
+                "hash": plain,
+                "hashes": per_spec,
                 "pending": any(x.lower() == PENDING_TAG for x in tags),
                 "knownIssues": [m[1] for x in tags if (m := KNOWN_ISSUE_TAG.match(x))],
             })
@@ -118,7 +128,7 @@ def build_report(catalog: dict, tests: list[dict], meta: dict, known: list[TestR
         run = [t for t in tests if sid in t["specs"]]
         defined = [k for k in known if sid in k.specs]
         verdict = _spec_verdict(spec, run, defined)
-        stale = [t["name"] for t in run if t["hash"] and not spec["hash"].startswith(t["hash"])]
+        stale = [t["name"] for t in run if (h := hash_for(sid, t["specs"], t["hash"], t.get("hashes") or {})) and not spec["hash"].startswith(h)]
         unreviewed = sorted({t["name"] for t in run if t.get("pending")} | {k.name for k in defined if k.pending})
         outcomes = [outcome(t, product) for t in run]
         specs_out.append({
@@ -256,7 +266,7 @@ def render_html(report: dict) -> str:
 
     drift = report.get("drift") or {}
     drift_html = ""
-    for key in ("stale", "orphan", "untagged", "nohash", "unrecorded", "uncovered", "suspect", "pending"):
+    for key in ("stale", "orphan", "untagged", "nohash", "unrecorded", "uncovered", "stateChanged", "linksChanged", "retired", "suspect", "pending"):
         if drift.get(key):
             drift_html += f"<h3>{e(key)} ({len(drift[key])})</h3><ul>" + "".join(f"<li><code>{e(json.dumps(i, ensure_ascii=False))}</code></li>" for i in drift[key]) + "</ul>"
     scope = report.get("scope") or {}

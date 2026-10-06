@@ -4,20 +4,27 @@
 name = "pilot"
 title = "Pilot: Initialization, Recover, Shutdown and System Status (7251 SDS Workflow / SDS Event Handling)"
 
-# /SMM/Specifications items (explicit list keeps the pilot stable; add `[[searches]]` to grow it).
-specifications = [
-  2955303, 2854281, 2752658, 2653094, 2653086, 2551270, 2535547, 2532492, 2532404, 2528710, 2528708,
-  2528706, 2528703, 2528698, 2525423, 2525392, 2525390, 2525388, 2428419, 2427781, 2327588,
-  # Recover / Shutdown / Bridge connection handling
-  2532504, 2532508, 2532510, 2854109, 2428417,
-]
+# RV&S states in which a specification no longer counts: not UNCOVERED, and RETIRED in `drift` while tests cover it.
+retired_states = ["Rejected", "To Be Deleted", "Deleted"]
 
-# Example of a query-based selection (arguments of the rvs_search_items MCP tool):
+# Example of a query-based selection (arguments of the rvs_search_items MCP tool, plus an optional `area`):
 # [[searches]]
+# area = "recover"
 # projects = ["/SMM/Specifications"]
 # types = ["Specification"]
 # text = "RecoverRequest"
 # textFields = ["Text"]
+
+# /SMM/Specifications items, grouped by area (= suite; the brief's target file is robot/suites/<scope>/<area>.robot).
+# Listing a specification under its area is preferred; a plain list `specifications = [ids]` (before any table)
+# also works, as does `[[searches]]`; then the area is guessed from the [areas] keywords and `ingest`/`drift` warn.
+[specifications]
+initialization = [2955303, 2532404, 2528710, 2528703, 2528698, 2525423]
+system_status = [2752658, 2653086, 2551270, 2535547, 2528708, 2528706, 2525392, 2525390, 2525388, 2427781]
+recover = [2653094, 2532492, 2532504, 2532508, 2532510]
+shutdown = [2428419, 2428417]
+bridge_connection = [2854281, 2854109]
+other = [2327588]
 
 # Specifications this framework cannot verify at the ICD/hardware boundary (kept in the report as "not testable").
 [not_testable]

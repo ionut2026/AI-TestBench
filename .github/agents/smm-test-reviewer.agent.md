@@ -50,7 +50,8 @@ For each specification get the facts **independently of the test**:
    the ICD schema, wrong topic, timeout constant too short for the real system (initialization needs `${INIT_TIMEOUT}`),
    a precondition that depends on another unverified behaviour without a "Precondition not met" message, asserting
    absence of messages appSMM legitimately sends (Verbose `EventNotification`s), racks left behind by a previous test.
-5. **Rules and hygiene.** Tags (`SDS-<id>`, `spechash:` equal to the brief, `review:pending`, `needs:twin` when the twin
+5. **Rules and hygiene.** Tags (`SDS-<id>`, `spechash:` equal to the brief — `spechash:<id>:<hash>` per specification
+   on a test with several `SDS-<id>` tags — `review:pending`, `needs:twin` when the twin
    is required, `requires:restart` when appSMM/broker is restarted), name convention, verbatim documentation with
    interpretations, Given/When/Then structure, no `Sleep`, variables for timeouts, clean-up of racks
    (`Finish SMM Test And Empty The Instrument`), schema validity and pair-issue checks, only allowed keywords, suite

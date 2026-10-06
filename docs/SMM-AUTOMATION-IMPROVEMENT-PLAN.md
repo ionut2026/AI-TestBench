@@ -79,6 +79,16 @@ asserted with `Wait For Message Sequence`. 2.4: the state is read passively from
 SystemStatusNotification); only one hidden confirming poll per step. 2.6: caps `SMM_TIMELINE_CAP` (20000) and
 `SMM_TRACE_CAP` (10000); `Finish SMM Test` fails a test whose evidence was dropped.
 
+*2.7–2.10 status:* done (catalog schema 2, hash version 2). 2.7: `spechash:<spec>:<hash>` per specification; a plain
+`spechash:` is only valid on a single-spec test (NO HASH otherwise). 2.8: the catalog keeps an accepted per-spec
+**baseline** (state, Satisfies, Described In) across ingestions; drift reports SPEC-STATE-CHANGED / LINKS-CHANGED
+until `smm-auto accept`, and RETIRED for covered specs in `retired_states` (retired specs are not UNCOVERED). 2.9:
+specs are fetched as rich text and converted by `html_to_text`, then NFKC + typographic punctuation + whitespace
+normalised. **Migration note:** re-ingested 2026-10-06 and ran `smm-auto migrate-hashes --from <old catalog>`: every
+pilot spec kept its hash except the not-testable overview 2327588 (no test), so no tag or ledger entry changed.
+2.10: `[specifications]` is a table area → IDs (`[[searches]]` may carry `area`); keyword areas are a fallback with an
+ingest warning and an informational "area guessed" drift list.
+
 ## Phase 3 — Prove the tests can fail (mutation) — 3 days
 
 | # | Work |

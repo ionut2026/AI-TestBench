@@ -68,7 +68,9 @@ override with `WINDCHILL_MCP_SERVER`) with the `RVS_*` settings from the environ
 
 ```powershell
 .\.venv\Scripts\smm-auto ingest                 # RV&S -> catalog/pilot.json (prints what changed since the last run)
-.\.venv\Scripts\smm-auto drift --strict         # stale hashes, orphans, uncovered specs, lint (exit 1 on problems)
+.\.venv\Scripts\smm-auto drift --strict         # stale hashes, orphans, uncovered specs, RV&S state/link changes, retired specs, lint (exit 1 on problems)
+.\.venv\Scripts\smm-auto accept 2428419         # after checking the tests: accept a spec's new RV&S state/links as baseline
+.\.venv\Scripts\smm-auto migrate-hashes --from results\pilot-old.json   # after a hashing change: re-tag unchanged specs
 .\.venv\Scripts\smm-auto lint                   # test rules SMM01-05 (no Sleep, doc quotes spec, variable timeouts, tier tags)
 .\.venv\Scripts\smm-auto briefs --spec 2528698  # generated/briefs/SDS-2528698.md for the authoring agent
 .\.venv\Scripts\smm-auto run --tier mock        # results/mock-<ts>/: log.html, report.html, traceability.html/json
@@ -89,6 +91,10 @@ override with `WINDCHILL_MCP_SERVER`) with the `RVS_*` settings from the environ
    `catalog/reviews.toml` (test, spechash, reviewer, date, PR) and removes `review:pending` in the same change.
    `drift --strict` fails on a test without `review:pending` and without a matching human review entry.
 5. When RV&S changes the specification text, `drift` reports the test as **stale**: re-review, then update `spechash:`.
+   When only its state or its requirement/user story links change, `drift` reports **SPEC-STATE-CHANGED** /
+   **LINKS-CHANGED** until the change is checked and accepted with `smm-auto accept <id>`; a covered spec that is
+   rejected or deleted in RV&S is **RETIRED**. A test covering several specifications carries one
+   `spechash:<id>:<hash>` per specification. Handbook sections 12.4–12.5.1.
 
 Rules: one behaviour per test, assert what the specification states (message, fields, order, topic, timing), wait for
 events (never `Sleep`), only use keywords from the library/resource, add `needs:twin` if hardware-twin state is

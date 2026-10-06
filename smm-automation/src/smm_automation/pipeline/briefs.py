@@ -18,7 +18,9 @@ RULES = """\
    and explain any interpretation you made on extra `...` lines.
 3. Tags: exactly the tags under "Tags" below, plus `review:pending`, plus capability tags:
    `needs:twin` when the test drives the simulated hardware (Trigger Hardware Action, Wait For Hardware
-   Command as a *required* step), `requires:restart` when it restarts appSMM or the broker.
+   Command as a *required* step), `requires:restart` when it restarts appSMM or the broker. A test that
+   covers several specifications carries `SDS-<id>` and `spechash:<id>:<hash>` for each of them
+   (a plain `spechash:<hash>` only works on a single-specification test).
 4. Only use keywords from the list below and Robot BuiltIn/Collections. No `Sleep` (`smm-auto lint` rejects it):
    wait for messages (`Wait For Message`, `Wait For Message Sequence`, `Wait For System State`), prove absence
    with `Message Should Not Arrive`, simulate a lost Bridge with `Interrupt Bridge Connection`. Each wait consumes
@@ -61,8 +63,11 @@ def schema_dir() -> Path:
     return Path(os.environ.get("SMM_TESTBENCH_DIR") or lock["defaultDir"]) / "simulator" / "resources" / "schemas"
 
 
-def tags_for(spec: dict) -> list[str]:
-    return [f"SDS-{spec['id']}", f"spechash:{spec['hash'][:8]}"]
+def tags_for(spec: dict, multi: bool = False) -> list[str]:
+    """Traceability tags of a specification; ``multi`` gives the per-specification hash form for tests that
+    cover several specifications."""
+    h = spec["hash"][:8]
+    return [f"SDS-{spec['id']}", f"spechash:{spec['id']}:{h}" if multi else f"spechash:{h}"]
 
 
 def render_brief(catalog: dict, spec: dict, keywords: str, existing: list[TestRef], target: str) -> str:
@@ -74,7 +79,8 @@ def render_brief(catalog: dict, spec: dict, keywords: str, existing: list[TestRe
         "",
         f"- Document: {spec.get('document')} | State: {spec.get('state')} | Modified: {spec.get('modified')}",
         f"- Area: {spec['area']} | Target: `{target}`",
-        f"- Tags: `{'`    `'.join(tags_for(spec))}`    `review:pending`",
+        f"- Tags: `{'`    `'.join(tags_for(spec))}`    `review:pending`"
+        f" (in a test that also covers other specifications: `{tags_for(spec, multi=True)[1]}`)",
         f"- Messages mentioned: {', '.join(spec['messages']) or '(none)'}",
         "",
         "## Specification",

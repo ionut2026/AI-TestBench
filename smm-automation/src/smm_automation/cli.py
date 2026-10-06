@@ -3,6 +3,8 @@
   smm-auto ingest   [--scope catalog/pilot.scope.toml]          RV&S -> catalog/<scope>.json
   smm-auto briefs   [--spec 2528698 ...]                         catalog -> generated/briefs/SDS-<id>.md
   smm-auto drift    [--strict]                                   suites vs catalog and review ledger (stale/orphan/uncovered/unrecorded) + lint
+  smm-auto accept   (<spec id> ... | --all)                       accept RV&S state/link changes of specifications as the new baseline
+  smm-auto migrate-hashes --from <old catalog.json>               re-tag tests whose spec text is unchanged but whose hash changed
   smm-auto lint                                                  test rules (no Sleep, documentation, timing variables, tier tags)
   smm-auto run      [--tier mock|offline|rig] [--fail-on new|any|none] [robot args...]
                                                                  run suites, then the traceability report
@@ -47,8 +49,43 @@ def cmd_ingest(args) -> int:
     catalog = ingest(Path(args.scope), out)
     print(f"Catalog written to {out}: {json.dumps(catalog['counts'])}")
     changes = catalog.get("changes")
-    if changes and any(changes[k] for k in ("added", "removed", "textChanged", "stateChanged")):
+    if changes and any(changes.get(k) for k in ("added", "removed", "textChanged", "stateChanged", "linksChanged")):
         print(f"Changes since {changes['since']}: {json.dumps({k: v for k, v in changes.items() if k != 'since'})}")
+    return 0
+
+
+def cmd_accept(args) -> int:
+    from smm_automation.pipeline.ingest import accept_changes, load_catalog, write_catalog
+
+    if not args.all and not args.ids:
+        print("give specification IDs or --all", file=sys.stderr)
+        return 2
+    path = _catalog_path(args)
+    catalog = load_catalog(path)
+    unknown = [i for i in args.ids if str(i) not in catalog["specifications"]]
+    if unknown:
+        print(f"not in the catalog: {', '.join(map(str, unknown))}", file=sys.stderr)
+        return 2
+    accepted = accept_changes(catalog, None if args.all else args.ids)
+    write_catalog(path, catalog)
+    print(f"Accepted the current RV&S state and links as baseline for {len(accepted)} specification(s): "
+          f"{', '.join(map(str, accepted)) or '(nothing changed)'}")
+    return 0
+
+
+def cmd_migrate_hashes(args) -> int:
+    from smm_automation.pipeline.drift import hash_migrations, migrate_hash_tags
+    from smm_automation.pipeline.ingest import load_catalog, normalize_text
+
+    moves, changed = hash_migrations(load_catalog(Path(args.old)), load_catalog(_catalog_path(args)), normalize_text)
+    files = sorted({f for s in _suites(args) for f in ([s] if s.is_file() else s.rglob("*.robot"))})
+    done = migrate_hash_tags(moves, files, Path(args.reviews))
+    print(f"{len(moves)} specification(s) with the same text and a new hash; "
+          f"{sum(done.values())} spechash value(s) replaced in {len(done)} file(s)")
+    for f, n in done.items():
+        print(f"  {f}: {n}")
+    if changed:
+        print(f"Text really changed (tests stay STALE until a human re-checks them): {', '.join(map(str, changed))}")
     return 0
 
 
@@ -182,6 +219,11 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("drift", allow_abbrev=False, help="compare suites with the catalog")
     p.add_argument("--strict", action="store_true", help="exit code 1 on stale/orphan/untagged/uncovered/unrecorded review or a lint violation")
     p.add_argument("--json", help="also write the result as JSON")
+    p = sub.add_parser("accept", allow_abbrev=False, help="accept RV&S state/link changes of specifications as the new baseline")
+    p.add_argument("ids", nargs="*", type=int, help="specification IDs")
+    p.add_argument("--all", action="store_true", help="every specification")
+    p = sub.add_parser("migrate-hashes", allow_abbrev=False, help="update spechash tags after a hashing change (same text, new hash)")
+    p.add_argument("--from", dest="old", required=True, help="the catalog JSON before the re-ingestion")
     sub.add_parser("lint", allow_abbrev=False, help="check the test rules (exit code 1 on violations)")
     p = sub.add_parser("run", allow_abbrev=False, help="run suites against a tier and write the traceability report (extra args go to robot)")
     p.add_argument("--tier", choices=sorted(TIER_EXCLUDES), default="mock")
@@ -202,7 +244,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"unrecognized arguments: {' '.join(extra)}")
     if args.command == "run":
         return cmd_run(args, extra)
-    return {"ingest": cmd_ingest, "briefs": cmd_briefs, "drift": cmd_drift, "lint": cmd_lint, "report": cmd_report, "service": cmd_service}[args.command](args)
+    return {"ingest": cmd_ingest, "briefs": cmd_briefs, "drift": cmd_drift, "accept": cmd_accept, "migrate-hashes": cmd_migrate_hashes,
+            "lint": cmd_lint, "report": cmd_report, "service": cmd_service}[args.command](args)
 
 
 if __name__ == "__main__":

@@ -135,6 +135,7 @@ troubleshooting) is [`docs/SMM-AUTOMATION-HANDBOOK.md`](SMM-AUTOMATION-HANDBOOK.
     twin, or the instrument.
   - It exposes HTTP API v1, which the Robot library `SMMTestbench.py` drives.
 - **Traceability.** Tests only carry `SDS-<id>` and `spechash:`; all other links come from RV&S at report time.
-  - `smm-auto drift` flags stale, orphan and uncovered tests.
+  - `smm-auto drift` flags stale, orphan and uncovered tests, RV&S state/link changes of covered specifications
+    (against a baseline accepted with `smm-auto accept`) and retired specifications.
   - `smm-auto run` writes `traceability.html/json` next to Robot's log, with specification verdicts rolled up to
     requirements and user stories.

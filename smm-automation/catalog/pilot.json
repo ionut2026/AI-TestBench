@@ -1,10 +1,16 @@
 {
- "schema": 1,
+ "schema": 2,
+ "hashVersion": 2,
  "scope": {
   "name": "pilot",
   "title": "Pilot: Initialization, Recover, Shutdown and System Status (7251 SDS Workflow / SDS Event Handling)"
  },
- "generatedAt": "2026-10-05T11:58:34+00:00",
+ "retiredStates": [
+  "Rejected",
+  "To Be Deleted",
+  "Deleted"
+ ],
+ "generatedAt": "2026-10-06T13:31:05+00:00",
  "source": "Windchill RV&S (windchill MCP server, read-only)",
  "counts": {
   "specifications": 26,
@@ -39,226 +45,19 @@
     "SystemStatusResponse"
    ],
    "area": "initialization",
+   "areaSource": "scope",
    "testable": true,
    "notTestableReason": null,
-   "deferredReason": null
-  },
-  "2854281": {
-   "id": 2854281,
-   "state": "Open",
-   "project": "/SMM/Specifications",
-   "document": "7251 SDS Event Handling",
-   "documentId": 2384280,
-   "text": "If the connection to SMMBridge is re-established and appSMM software restarts following the RecoverRequest message (see 2653094), appSMM software publishes an event over the is/iw/tx topic, with the following details:\n- \"Category\": \"Operator\"\n- \"EventId\": ??\n- \"Severity\": \"Warning\"\n- \"TimeStamp\": time when the event was detected\n- \"Message\": \"The SMM system went to E-Stop because the connection to SMMBridge was lost. Connection is re-established now.\"\n- \"EventArgs\": none",
-   "hash": "ae9110fff9b7a4d96a94a3152e9f8c69abbca2aae42bb714fc15cf78392765ff",
-   "modified": "2025-05-08T16:09:35+03:00",
-   "traceStatus": "none",
-   "suspectCount": 0,
-   "verificationMethod": "None",
-   "satisfies": [],
-   "userStories": [
-    2837620
-   ],
-   "explorativeTests": [
-    2855849,
-    2855850
-   ],
-   "messages": [
-    "RecoverRequest"
-   ],
-   "area": "bridge_connection",
-   "testable": true,
-   "notTestableReason": null,
-   "deferredReason": null
-  },
-  "2752658": {
-   "id": 2752658,
-   "state": "Open",
-   "project": "/SMM/Specifications",
-   "document": "7251 SDS Event Handling",
-   "documentId": 2384280,
-   "text": "After restart appSMM software publishes the SystemStatusNotification message over the is/iw/tx topic, to notify the Bridge that the current system state is \"NotInitialized\".",
-   "hash": "e492fe7ead52b043d56c8d9792fd42e95cf93dc3442d1c63375ac693563a6818",
-   "modified": "2025-05-08T16:09:35+03:00",
-   "traceStatus": "none",
-   "suspectCount": 0,
-   "verificationMethod": "None",
-   "satisfies": [
-    1939068
-   ],
-   "userStories": [
-    2741405
-   ],
-   "explorativeTests": [
-    2806610
-   ],
-   "messages": [
-    "SystemStatusNotification"
-   ],
-   "area": "system_status",
-   "testable": true,
-   "notTestableReason": null,
-   "deferredReason": null
-  },
-  "2653094": {
-   "id": 2653094,
-   "state": "Open",
-   "project": "/SMM/Specifications",
-   "document": "7251 SDS Event Handling",
-   "documentId": 2384280,
-   "text": "If the system is shut down following a fatal error event, the SMM system can be re-started if the RecoverRequest message is received over the is/iw/rx topic.\nAfter the RecoverRequest message is received over the is/iw/rx topic, the SMM system follows the recovery procedure, as described in 2532492, 2532504, 2532508, 2532510.",
-   "hash": "590de9f9a1438b38c4263299b6ff6671ed5325d02f22a36887fd210252dc7541",
-   "modified": "2025-05-08T15:01:35+03:00",
-   "traceStatus": "upstream suspect",
-   "suspectCount": 1,
-   "verificationMethod": "None",
-   "satisfies": [
-    1932310,
-    1853226,
-    1932312
-   ],
-   "userStories": [
-    1783271
-   ],
-   "explorativeTests": [],
-   "messages": [
-    "RecoverRequest"
-   ],
-   "area": "recover",
-   "testable": true,
-   "notTestableReason": null,
-   "deferredReason": null
-  },
-  "2653086": {
-   "id": 2653086,
-   "state": "Open",
-   "project": "/SMM/Specifications",
-   "document": "7251 SDS Event Handling",
-   "documentId": 2384280,
-   "text": "If the SMM system goes to E-Stop following a fatal error, appSMM software publishes a SystemStatusNotification message which notifies that system status changed from \"Idle\" (PreviousState) to \"E-Stop\" (CurrentState).",
-   "hash": "068ff31d5bc0600bd3f0c358d5f55fd6dad2566895051a50949a5a71df61f919",
-   "modified": "2025-05-08T15:01:35+03:00",
-   "traceStatus": "upstream suspect",
-   "suspectCount": 0,
-   "verificationMethod": "None",
-   "satisfies": [
-    1932308,
-    1853225,
-    1853224,
-    1932314,
-    1932397
-   ],
-   "userStories": [
-    1783271
-   ],
-   "explorativeTests": [],
-   "messages": [
-    "SystemStatusNotification"
-   ],
-   "area": "system_status",
-   "testable": true,
-   "notTestableReason": null,
-   "deferredReason": null
-  },
-  "2551270": {
-   "id": 2551270,
-   "state": "Open",
-   "project": "/SMM/Specifications",
-   "document": "7251 SDS Workflow",
-   "documentId": 2384217,
-   "text": "If the SetConfigurationResponse message was published over the is/iw/tx topic, appSMM software automatically publishes the SystemStatusNotification message over the is/iw/tx topic, which notifies that system state changed from \"Configuring\" to \"NotInitialized\".",
-   "hash": "9f824f08c458353cc46387766d9c07811df20e5791ff9aa124b43202dcbf5deb",
-   "modified": "2026-07-23T15:46:05+03:00",
-   "traceStatus": "upstream suspect",
-   "suspectCount": 1,
-   "verificationMethod": "None",
-   "satisfies": [
-    2384071,
-    2384148,
-    1853225,
-    1853224
-   ],
-   "userStories": [
-    2492146
-   ],
-   "explorativeTests": [
-    2534066,
-    2534601,
-    2534758,
-    2568719
-   ],
-   "messages": [
-    "SetConfigurationResponse",
-    "SystemStatusNotification"
-   ],
-   "area": "system_status",
-   "testable": true,
-   "notTestableReason": null,
-   "deferredReason": null
-  },
-  "2535547": {
-   "id": 2535547,
-   "state": "Open",
-   "project": "/SMM/Specifications",
-   "document": "7251 SDS Workflow",
-   "documentId": 2384217,
-   "text": "If a loaded rack was picked up by the Distributor either from Input lane or from FrontIn while the system status is \"Idle\", appSMM software publishes a SystemStatusNotification message over the is/iw/tx topic with the following details:\n- \"PreviousState\":\"Idle\"\n- \"CurrentState\":\"NormalOperation\"",
-   "hash": "1ccfe824b647889e7cf907cc32271e2a20f5a7d8eb80699c909e2220bc8963ab",
-   "modified": "2025-05-08T15:01:35+03:00",
-   "traceStatus": "upstream suspect",
-   "suspectCount": 2,
-   "verificationMethod": "None",
-   "satisfies": [
-    2384148,
-    2384071,
-    1853225,
-    1853224,
-    1853226
-   ],
-   "userStories": [
-    2488626
-   ],
-   "explorativeTests": [
-    2510136
-   ],
-   "messages": [
-    "SystemStatusNotification"
-   ],
-   "area": "system_status",
-   "testable": true,
-   "notTestableReason": null,
-   "deferredReason": null
-  },
-  "2532492": {
-   "id": 2532492,
-   "state": "Open",
-   "project": "/SMM/Specifications",
-   "document": "7251 SDS Workflow",
-   "documentId": 2384217,
-   "text": "If the RecoverRequest message is received over the is/iw/rx topic, appSMM software sends the \"DeInitializeCmd\" command to RTC, in order to initiate system de-initialization. The \"DeInitializeCmd\" command is sent only if the system status is \"E-Stop\".",
-   "hash": "69c84bb6cee4e5f4e9c8ff33cbe1cb7f941fb046f1cd2fd50f209d6fe2f6a125",
-   "modified": "2025-05-08T15:01:35+03:00",
-   "traceStatus": "none",
-   "suspectCount": 0,
-   "verificationMethod": "None",
-   "satisfies": [
-    2389460,
-    2384146
-   ],
-   "userStories": [
-    2419846
-   ],
-   "explorativeTests": [
-    2441275,
-    2442193
-   ],
-   "messages": [
-    "RecoverRequest"
-   ],
-   "area": "recover",
-   "testable": true,
-   "notTestableReason": null,
-   "deferredReason": null
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     2384148
+    ],
+    "userStories": [
+     2404069
+    ]
+   }
   },
   "2532404": {
    "id": 2532404,
@@ -287,9 +86,19 @@
     "InitializationResponse"
    ],
    "area": "initialization",
+   "areaSource": "scope",
    "testable": true,
    "notTestableReason": null,
-   "deferredReason": "Needs RTC fault injection (rtc_appl not starting initialization); the hardware twin has no such fault mode yet"
+   "deferredReason": "Needs RTC fault injection (rtc_appl not starting initialization); the hardware twin has no such fault mode yet",
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     2387196
+    ],
+    "userStories": [
+     2403408
+    ]
+   }
   },
   "2528710": {
    "id": 2528710,
@@ -316,75 +125,17 @@
     "InitializationResponse"
    ],
    "area": "initialization",
+   "areaSource": "scope",
    "testable": true,
    "notTestableReason": null,
-   "deferredReason": "Checks appSMM log files: appSMM logs to SmartInspect .sil files, a SIL reader is not available yet"
-  },
-  "2528708": {
-   "id": 2528708,
-   "state": "Open",
-   "project": "/SMM/Specifications",
-   "document": "7251 SDS Workflow",
-   "documentId": 2384217,
-   "text": "The SystemStatusRequest, SystemStatusResponse and SystemStatusNotification messages are logged in appSMM log files. The message topic and content of each exchanged message is included in the log files.",
-   "hash": "4786b9fb75c5fe2f4c5d565315ca4f266a780c829d8209eae86ecfd1c2deb43c",
-   "modified": "2026-07-23T15:34:53+03:00",
-   "traceStatus": "none",
-   "suspectCount": 0,
-   "verificationMethod": "None",
-   "satisfies": [],
-   "userStories": [
-    2404051,
-    2404069
-   ],
-   "explorativeTests": [
-    2430842,
-    2431923
-   ],
-   "messages": [
-    "SystemStatusRequest",
-    "SystemStatusResponse",
-    "SystemStatusNotification"
-   ],
-   "area": "system_status",
-   "testable": true,
-   "notTestableReason": null,
-   "deferredReason": "Checks appSMM log files: appSMM logs to SmartInspect .sil files, a SIL reader is not available yet"
-  },
-  "2528706": {
-   "id": 2528706,
-   "state": "Open",
-   "project": "/SMM/Specifications",
-   "document": "7251 SDS Workflow",
-   "documentId": 2384217,
-   "text": "If all SMM lanes are successfully initialized, appSMM software publishes two SystemStatusNotification messages, which notifiy that the CurrentState of the system changed firstly to \"Idle\" and then to \"Clearing\".",
-   "hash": "fd1f48cdd0554b0fd1e47710a3ec69357986f9f2587c2452581eb246c6c25d51",
-   "modified": "2025-05-08T15:01:35+03:00",
-   "traceStatus": "upstream suspect",
-   "suspectCount": 3,
-   "verificationMethod": "None",
-   "satisfies": [
-    2384148,
-    1853226,
-    2384136,
-    1853241,
-    2384071,
-    1853225,
-    1853224
-   ],
-   "userStories": [
-    2404069
-   ],
-   "explorativeTests": [
-    2431923
-   ],
-   "messages": [
-    "SystemStatusNotification"
-   ],
-   "area": "system_status",
-   "testable": true,
-   "notTestableReason": null,
-   "deferredReason": null
+   "deferredReason": "Checks appSMM log files: appSMM logs to SmartInspect .sil files, a SIL reader is not available yet",
+   "baseline": {
+    "state": "Open",
+    "satisfies": [],
+    "userStories": [
+     2403408
+    ]
+   }
   },
   "2528703": {
    "id": 2528703,
@@ -419,9 +170,26 @@
     "SystemStatusNotification"
    ],
    "area": "initialization",
+   "areaSource": "scope",
    "testable": true,
    "notTestableReason": null,
-   "deferredReason": null
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     1853224,
+     1853225,
+     1853226,
+     1853241,
+     1853245,
+     2384071,
+     2384136,
+     2384148
+    ],
+    "userStories": [
+     2403408
+    ]
+   }
   },
   "2528698": {
    "id": 2528698,
@@ -454,9 +222,24 @@
     "SystemStatusNotification"
    ],
    "area": "initialization",
+   "areaSource": "scope",
    "testable": true,
    "notTestableReason": null,
-   "deferredReason": null
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     1853224,
+     1853225,
+     1853226,
+     1853241,
+     2384071,
+     2384148
+    ],
+    "userStories": [
+     2404069
+    ]
+   }
   },
   "2525423": {
    "id": 2525423,
@@ -464,7 +247,7 @@
    "project": "/SMM/Specifications",
    "document": "7251 SDS Workflow",
    "documentId": 2384217,
-   "text": "SMM begins the initialization process only after the InitializationRequest message is received over the is/iw/rx topic and the system state is \"NotInitialized\".\nNote:\nWhen the InitializationRequest message is received over the is/iw/rx topic, appSMM transmits the 'InitializeCmd' command to rtc_appl, only when the system state is 'NotInitialized'.",
+   "text": "SMM begins the initialization process only after the InitializationRequest message is received over the is/iw/rx topic and the system state is \"NotInitialized\".\n\nNote:\n\nWhen the InitializationRequest message is received over the is/iw/rx topic, appSMM transmits the 'InitializeCmd' command to rtc_appl, only when the system state is 'NotInitialized'.",
    "hash": "9bb164c67ec5b71884288c7a1aef3298e60a551abdfc842a0f1dd81f130e2f5d",
    "modified": "2026-09-24T15:42:54+03:00",
    "traceStatus": "upstream related",
@@ -485,9 +268,291 @@
     "InitializationRequest"
    ],
    "area": "initialization",
+   "areaSource": "scope",
    "testable": true,
    "notTestableReason": null,
-   "deferredReason": null
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     1853239,
+     2387196
+    ],
+    "userStories": [
+     2403408
+    ]
+   }
+  },
+  "2752658": {
+   "id": 2752658,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Event Handling",
+   "documentId": 2384280,
+   "text": "After restart appSMM software publishes the SystemStatusNotification message over the is/iw/tx topic, to notify the Bridge that the current system state is \"NotInitialized\".",
+   "hash": "e492fe7ead52b043d56c8d9792fd42e95cf93dc3442d1c63375ac693563a6818",
+   "modified": "2025-05-08T16:09:35+03:00",
+   "traceStatus": "none",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [
+    1939068
+   ],
+   "userStories": [
+    2741405
+   ],
+   "explorativeTests": [
+    2806610
+   ],
+   "messages": [
+    "SystemStatusNotification"
+   ],
+   "area": "system_status",
+   "areaSource": "scope",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     1939068
+    ],
+    "userStories": [
+     2741405
+    ]
+   }
+  },
+  "2653086": {
+   "id": 2653086,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Event Handling",
+   "documentId": 2384280,
+   "text": "If the SMM system goes to E-Stop following a fatal error, appSMM software publishes a SystemStatusNotification message which notifies that system status changed from \"Idle\" (PreviousState) to \"E-Stop\" (CurrentState).",
+   "hash": "068ff31d5bc0600bd3f0c358d5f55fd6dad2566895051a50949a5a71df61f919",
+   "modified": "2025-05-08T15:01:35+03:00",
+   "traceStatus": "upstream suspect",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [
+    1932308,
+    1853225,
+    1853224,
+    1932314,
+    1932397
+   ],
+   "userStories": [
+    1783271
+   ],
+   "explorativeTests": [],
+   "messages": [
+    "SystemStatusNotification"
+   ],
+   "area": "system_status",
+   "areaSource": "scope",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     1853224,
+     1853225,
+     1932308,
+     1932314,
+     1932397
+    ],
+    "userStories": [
+     1783271
+    ]
+   }
+  },
+  "2551270": {
+   "id": 2551270,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "If the SetConfigurationResponse message was published over the is/iw/tx topic, appSMM software automatically publishes the SystemStatusNotification message over the is/iw/tx topic, which notifies that system state changed from \"Configuring\" to \"NotInitialized\".",
+   "hash": "9f824f08c458353cc46387766d9c07811df20e5791ff9aa124b43202dcbf5deb",
+   "modified": "2026-07-23T15:46:05+03:00",
+   "traceStatus": "upstream suspect",
+   "suspectCount": 1,
+   "verificationMethod": "None",
+   "satisfies": [
+    2384071,
+    2384148,
+    1853225,
+    1853224
+   ],
+   "userStories": [
+    2492146
+   ],
+   "explorativeTests": [
+    2534066,
+    2534601,
+    2534758,
+    2568719
+   ],
+   "messages": [
+    "SetConfigurationResponse",
+    "SystemStatusNotification"
+   ],
+   "area": "system_status",
+   "areaSource": "scope",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     1853224,
+     1853225,
+     2384071,
+     2384148
+    ],
+    "userStories": [
+     2492146
+    ]
+   }
+  },
+  "2535547": {
+   "id": 2535547,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "If a loaded rack was picked up by the Distributor either from Input lane or from FrontIn while the system status is \"Idle\", appSMM software publishes a SystemStatusNotification message over the is/iw/tx topic with the following details:\n- \"PreviousState\":\"Idle\"\n- \"CurrentState\":\"NormalOperation\"",
+   "hash": "1ccfe824b647889e7cf907cc32271e2a20f5a7d8eb80699c909e2220bc8963ab",
+   "modified": "2025-05-08T15:01:35+03:00",
+   "traceStatus": "upstream suspect",
+   "suspectCount": 2,
+   "verificationMethod": "None",
+   "satisfies": [
+    2384148,
+    2384071,
+    1853225,
+    1853224,
+    1853226
+   ],
+   "userStories": [
+    2488626
+   ],
+   "explorativeTests": [
+    2510136
+   ],
+   "messages": [
+    "SystemStatusNotification"
+   ],
+   "area": "system_status",
+   "areaSource": "scope",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     1853224,
+     1853225,
+     1853226,
+     2384071,
+     2384148
+    ],
+    "userStories": [
+     2488626
+    ]
+   }
+  },
+  "2528708": {
+   "id": 2528708,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "The SystemStatusRequest, SystemStatusResponse and SystemStatusNotification messages are logged in appSMM log files. The message topic and content of each exchanged message is included in the log files.",
+   "hash": "4786b9fb75c5fe2f4c5d565315ca4f266a780c829d8209eae86ecfd1c2deb43c",
+   "modified": "2026-07-23T15:34:53+03:00",
+   "traceStatus": "none",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [],
+   "userStories": [
+    2404051,
+    2404069
+   ],
+   "explorativeTests": [
+    2430842,
+    2431923
+   ],
+   "messages": [
+    "SystemStatusRequest",
+    "SystemStatusResponse",
+    "SystemStatusNotification"
+   ],
+   "area": "system_status",
+   "areaSource": "scope",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": "Checks appSMM log files: appSMM logs to SmartInspect .sil files, a SIL reader is not available yet",
+   "baseline": {
+    "state": "Open",
+    "satisfies": [],
+    "userStories": [
+     2404051,
+     2404069
+    ]
+   }
+  },
+  "2528706": {
+   "id": 2528706,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "If all SMM lanes are successfully initialized, appSMM software publishes two SystemStatusNotification messages, which notifiy that the CurrentState of the system changed firstly to \"Idle\" and then to \"Clearing\".",
+   "hash": "fd1f48cdd0554b0fd1e47710a3ec69357986f9f2587c2452581eb246c6c25d51",
+   "modified": "2025-05-08T15:01:35+03:00",
+   "traceStatus": "upstream suspect",
+   "suspectCount": 3,
+   "verificationMethod": "None",
+   "satisfies": [
+    2384148,
+    1853226,
+    2384136,
+    1853241,
+    2384071,
+    1853225,
+    1853224
+   ],
+   "userStories": [
+    2404069
+   ],
+   "explorativeTests": [
+    2431923
+   ],
+   "messages": [
+    "SystemStatusNotification"
+   ],
+   "area": "system_status",
+   "areaSource": "scope",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     1853224,
+     1853225,
+     1853226,
+     1853241,
+     2384071,
+     2384136,
+     2384148
+    ],
+    "userStories": [
+     2404069
+    ]
+   }
   },
   "2525392": {
    "id": 2525392,
@@ -515,9 +580,19 @@
     "SystemStatusRequest"
    ],
    "area": "system_status",
+   "areaSource": "scope",
    "testable": true,
    "notTestableReason": null,
-   "deferredReason": null
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     2386628
+    ],
+    "userStories": [
+     2404051
+    ]
+   }
   },
   "2525390": {
    "id": 2525390,
@@ -544,9 +619,19 @@
     "SystemStatusNotification"
    ],
    "area": "system_status",
+   "areaSource": "scope",
    "testable": true,
    "notTestableReason": null,
-   "deferredReason": null
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     2384148
+    ],
+    "userStories": [
+     2404069
+    ]
+   }
   },
   "2525388": {
    "id": 2525388,
@@ -577,41 +662,23 @@
     "SystemStatusNotification"
    ],
    "area": "system_status",
+   "areaSource": "scope",
    "testable": true,
    "notTestableReason": null,
-   "deferredReason": null
-  },
-  "2428419": {
-   "id": 2428419,
-   "state": "Open",
-   "project": "/SMM/Specifications",
-   "document": "7251 SDS Workflow",
-   "documentId": 2384217,
-   "text": "After sending the ShutdownResponse, appSMM software publishes a SystemStatusNotification message which notifies that system status changed from \"Idle\" (PreviousState) to \"E-Stop\" (CurrentState)",
-   "hash": "3fab7cb6cf5d6e27b646ff999430081fc640bb1a9c6579e1a09dcfc2f4990944",
-   "modified": "2025-05-08T15:01:35+03:00",
-   "traceStatus": "none",
-   "suspectCount": 0,
-   "verificationMethod": "None",
-   "satisfies": [
-    2384154,
-    1939072
-   ],
-   "userStories": [
-    2404361
-   ],
-   "explorativeTests": [
-    2441248,
-    2469925
-   ],
-   "messages": [
-    "ShutdownResponse",
-    "SystemStatusNotification"
-   ],
-   "area": "shutdown",
-   "testable": true,
-   "notTestableReason": null,
-   "deferredReason": null
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     1853224,
+     1853225,
+     1853226,
+     2384071,
+     2384148
+    ],
+    "userStories": [
+     2404069
+    ]
+   }
   },
   "2427781": {
    "id": 2427781,
@@ -646,30 +713,106 @@
     "SystemStatusNotification"
    ],
    "area": "system_status",
+   "areaSource": "scope",
    "testable": true,
    "notTestableReason": null,
-   "deferredReason": null
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     1853224,
+     1853225,
+     1853226,
+     2384071,
+     2384148
+    ],
+    "userStories": [
+     2492146
+    ]
+   }
   },
-  "2327588": {
-   "id": 2327588,
+  "2653094": {
+   "id": 2653094,
    "state": "Open",
    "project": "/SMM/Specifications",
-   "document": "7251-PDS SMM",
-   "documentId": 2101142,
-   "text": "The SMM: \n- Responsible for association of sample ID to tube position and rack.\n- Moves racks efficiently through the system.\n- Dynamically routes racks through the system as FIFO, while respecting constraints provided per rack via the Bridge for priorities and destinations.\n- Actively requests the route for each rack in the system, at each destination decision checkpoint and state change (based on the current SMM and track state, rack location and/or bridge's reroute notification).\nThe Bridge: \n- The single point of interface for all SMM to analyzer and IW communications.\n- Upon request from the SMM, calculates the next destination analyzer for the rack. The algorithm to determine the route is Werfen’s responsibility and is independent of the track logic. The route (next analyzer) is calculated based on the analyzers' capabilities, analyzer's current schedule, analyzer's material expiration, configuration options on the IW and test orders coming from the IW.\n- Upon request from the SMM, calculates the next analyzer for the rack. The algorithm to determine the route is Werfen’s responsibility and is independent of the track logic. Currently the route (next analyzer) is calculated based on a multitude of considerations e.g. analyzers' capabilities, analyzers' current schedule, analyzers' material expiration, configuration options, resource utilization and sample test orders.\n- Assigns the priority and destination analyzer specific for each requested rack.\nThe IW: \n- Assigns test orders to the samples (via LIS or manual entry).\n- Cancels test orders.\n- Recalls a sample.\n- Manages jobs for each test order.\n- Creates Rerun/Reflex jobs when necessary.\n- Handles the completion and release for each sample.\n- Initiates system operating commands and settings, e.g. change of states, configuration, shutdown, etc.\n- Collects and responds to system monitoring and error management information.\n- Is a system module external to the SMM, and therefore not in the scope of this requirement document.",
-   "hash": "1d72095ac8a6ea0ae1f7f8e90c0b8ebcae1b99444382d44edfe779124abfcccb",
-   "modified": "2026-08-31T17:00:15+03:00",
+   "document": "7251 SDS Event Handling",
+   "documentId": 2384280,
+   "text": "If the system is shut down following a fatal error event, the SMM system can be re-started if the RecoverRequest message is received over the is/iw/rx topic.\n\nAfter the RecoverRequest message is received over the is/iw/rx topic, the SMM system follows the recovery procedure, as described in 2532492, 2532504, 2532508, 2532510.",
+   "hash": "590de9f9a1438b38c4263299b6ff6671ed5325d02f22a36887fd210252dc7541",
+   "modified": "2025-05-08T15:01:35+03:00",
+   "traceStatus": "upstream suspect",
+   "suspectCount": 1,
+   "verificationMethod": "None",
+   "satisfies": [
+    1932310,
+    1853226,
+    1932312
+   ],
+   "userStories": [
+    1783271
+   ],
+   "explorativeTests": [],
+   "messages": [
+    "RecoverRequest"
+   ],
+   "area": "recover",
+   "areaSource": "scope",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     1853226,
+     1932310,
+     1932312
+    ],
+    "userStories": [
+     1783271
+    ]
+   }
+  },
+  "2532492": {
+   "id": 2532492,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "If the RecoverRequest message is received over the is/iw/rx topic, appSMM software sends the \"DeInitializeCmd\" command to RTC, in order to initiate system de-initialization. The \"DeInitializeCmd\" command is sent only if the system status is \"E-Stop\".",
+   "hash": "69c84bb6cee4e5f4e9c8ff33cbe1cb7f941fb046f1cd2fd50f209d6fe2f6a125",
+   "modified": "2025-05-08T15:01:35+03:00",
    "traceStatus": "none",
    "suspectCount": 0,
-   "verificationMethod": null,
-   "satisfies": [],
-   "userStories": [],
-   "explorativeTests": [],
-   "messages": [],
-   "area": "other",
-   "testable": false,
-   "notTestableReason": "PDS overview statement: no observable behaviour at the ICD",
-   "deferredReason": null
+   "verificationMethod": "None",
+   "satisfies": [
+    2389460,
+    2384146
+   ],
+   "userStories": [
+    2419846
+   ],
+   "explorativeTests": [
+    2441275,
+    2442193
+   ],
+   "messages": [
+    "RecoverRequest"
+   ],
+   "area": "recover",
+   "areaSource": "scope",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     2384146,
+     2389460
+    ],
+    "userStories": [
+     2419846
+    ]
+   }
   },
   "2532504": {
    "id": 2532504,
@@ -697,9 +840,19 @@
     "RecoverResponse"
    ],
    "area": "recover",
+   "areaSource": "scope",
    "testable": true,
    "notTestableReason": null,
-   "deferredReason": null
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     2384146
+    ],
+    "userStories": [
+     2419846
+    ]
+   }
   },
   "2532508": {
    "id": 2532508,
@@ -707,7 +860,7 @@
    "project": "/SMM/Specifications",
    "document": "7251 SDS Workflow",
    "documentId": 2384217,
-   "text": "If rtc_appl does not reply with \"DeInitializeRsp\" during 20 seconds (see 2532504), appSMM software publishes the RecoverResponse message with Status \"Error\" over the is/iw/tx topic.\nNote:\nThe timeout for receiving the rtc_appl reply for any command (\"CommandResponseTimeoutMilliseconds\") is configured in the appSMM.yaml file, which can be viewed/updated in appSMM folder.",
+   "text": "If rtc_appl does not reply with \"DeInitializeRsp\" during 20 seconds (see 2532504), appSMM software publishes the RecoverResponse message with Status \"Error\" over the is/iw/tx topic.\n\nNote:\n\nThe timeout for receiving the rtc_appl reply for any command (\"CommandResponseTimeoutMilliseconds\") is configured in the appSMM.yaml file, which can be viewed/updated in appSMM folder.",
    "hash": "54f35f789e60598055dc3e29b19c0c2b328756fd4dd3dc25d473e46928c923ff",
    "modified": "2025-05-08T15:01:35+03:00",
    "traceStatus": "none",
@@ -727,9 +880,19 @@
     "RecoverResponse"
    ],
    "area": "recover",
+   "areaSource": "scope",
    "testable": true,
    "notTestableReason": null,
-   "deferredReason": "Needs RTC fault injection (no DeInitializeRsp within 20 s); the hardware twin has no such fault mode yet"
+   "deferredReason": "Needs RTC fault injection (no DeInitializeRsp within 20 s); the hardware twin has no such fault mode yet",
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     2384146
+    ],
+    "userStories": [
+     2419846
+    ]
+   }
   },
   "2532510": {
    "id": 2532510,
@@ -757,35 +920,62 @@
     "RecoverResponse"
    ],
    "area": "recover",
+   "areaSource": "scope",
    "testable": true,
    "notTestableReason": null,
-   "deferredReason": null
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     1932312
+    ],
+    "userStories": [
+     2419846
+    ]
+   }
   },
-  "2854109": {
-   "id": 2854109,
+  "2428419": {
+   "id": 2428419,
    "state": "Open",
    "project": "/SMM/Specifications",
-   "document": "7251 SDS Event Handling",
-   "documentId": 2384280,
-   "text": "If the SMMBridge gets disconnected, the SMM system goes to default E-Stop state (i.e. system follows the behaviour described under Default E-Stop chapter).",
-   "hash": "293117f8547a4663daebeb1a3d4aa5df7a03906e43ed4037eccf3e9f7776c146",
-   "modified": "2025-05-08T16:09:35+03:00",
+   "document": "7251 SDS Workflow",
+   "documentId": 2384217,
+   "text": "After sending the ShutdownResponse, appSMM software publishes a SystemStatusNotification message which notifies that system status changed from \"Idle\" (PreviousState) to \"E-Stop\" (CurrentState)",
+   "hash": "3fab7cb6cf5d6e27b646ff999430081fc640bb1a9c6579e1a09dcfc2f4990944",
+   "modified": "2025-05-08T15:01:35+03:00",
    "traceStatus": "none",
    "suspectCount": 0,
    "verificationMethod": "None",
-   "satisfies": [],
+   "satisfies": [
+    2384154,
+    1939072
+   ],
    "userStories": [
-    2837620
+    2404361
    ],
    "explorativeTests": [
-    2855849,
-    2855850
+    2441248,
+    2469925
    ],
-   "messages": [],
-   "area": "bridge_connection",
+   "messages": [
+    "ShutdownResponse",
+    "SystemStatusNotification"
+   ],
+   "area": "shutdown",
+   "areaSource": "scope",
    "testable": true,
    "notTestableReason": null,
-   "deferredReason": null
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     1939072,
+     2384154
+    ],
+    "userStories": [
+     2404361
+    ]
+   }
   },
   "2428417": {
    "id": 2428417,
@@ -813,9 +1003,118 @@
    ],
    "messages": [],
    "area": "shutdown",
+   "areaSource": "scope",
    "testable": true,
    "notTestableReason": null,
-   "deferredReason": null
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [
+     1640380,
+     1853226,
+     2384154
+    ],
+    "userStories": [
+     2404361
+    ]
+   }
+  },
+  "2854281": {
+   "id": 2854281,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Event Handling",
+   "documentId": 2384280,
+   "text": "If the connection to SMMBridge is re-established and appSMM software restarts following the RecoverRequest message (see 2653094), appSMM software publishes an event over the is/iw/tx topic, with the following details:\n\n- \"Category\": \"Operator\"\n- \"EventId\": ??\n- \"Severity\": \"Warning\"\n- \"TimeStamp\": time when the event was detected\n- \"Message\": \"The SMM system went to E-Stop because the connection to SMMBridge was lost. Connection is re-established now.\"\n- \"EventArgs\": none",
+   "hash": "ae9110fff9b7a4d96a94a3152e9f8c69abbca2aae42bb714fc15cf78392765ff",
+   "modified": "2025-05-08T16:09:35+03:00",
+   "traceStatus": "none",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [],
+   "userStories": [
+    2837620
+   ],
+   "explorativeTests": [
+    2855849,
+    2855850
+   ],
+   "messages": [
+    "RecoverRequest"
+   ],
+   "area": "bridge_connection",
+   "areaSource": "scope",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [],
+    "userStories": [
+     2837620
+    ]
+   }
+  },
+  "2854109": {
+   "id": 2854109,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251 SDS Event Handling",
+   "documentId": 2384280,
+   "text": "If the SMMBridge gets disconnected, the SMM system goes to default E-Stop state (i.e. system follows the behaviour described under Default E-Stop chapter).",
+   "hash": "293117f8547a4663daebeb1a3d4aa5df7a03906e43ed4037eccf3e9f7776c146",
+   "modified": "2025-05-08T16:09:35+03:00",
+   "traceStatus": "none",
+   "suspectCount": 0,
+   "verificationMethod": "None",
+   "satisfies": [],
+   "userStories": [
+    2837620
+   ],
+   "explorativeTests": [
+    2855849,
+    2855850
+   ],
+   "messages": [],
+   "area": "bridge_connection",
+   "areaSource": "scope",
+   "testable": true,
+   "notTestableReason": null,
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [],
+    "userStories": [
+     2837620
+    ]
+   }
+  },
+  "2327588": {
+   "id": 2327588,
+   "state": "Open",
+   "project": "/SMM/Specifications",
+   "document": "7251-PDS SMM",
+   "documentId": 2101142,
+   "text": "The SMM:\n- Responsible for association of sample ID to tube position and rack.\n- Moves racks efficiently through the system.\n- Dynamically routes racks through the system as FIFO, while respecting constraints provided per rack via the Bridge for priorities and destinations.\n- Actively requests the route for each rack in the system, at each destination decision checkpoint and state change (based on the current SMM and track state, rack location and/or bridge's reroute notification).\nThe Bridge:\n- The single point of interface for all SMM to analyzer and IW communications.\n- Upon request from the SMM, calculates the next destination analyzer for the rack. The algorithm to determine the route is Werfen’s responsibility and is independent of the track logic. The route (next analyzer) is calculated based on the analyzers' capabilities, analyzer's current schedule, analyzer's material expiration, configuration options on the IW and test orders coming from the IW.\n- Upon request from the SMM, calculates the next analyzer for the rack. The algorithm to determine the route is Werfen’s responsibility and is independent of the track logic. Currently the route (next analyzer) is calculated based on a multitude of considerations e.g. analyzers' capabilities, analyzers' current schedule, analyzers' material expiration, configuration options, resource utilization and sample test orders.\n- Assigns the priority and destination analyzer specific for each requested rack.\nThe IW:\n- Assigns test orders to the samples (via LIS or manual entry).\n- Cancels test orders.\n- Recalls a sample.\n- Manages jobs for each test order.\n- Creates Rerun/Reflex jobs when necessary.\n- Handles the completion and release for each sample.\n- Initiates system operating commands and settings, e.g. change of states, configuration, shutdown, etc.\n- Collects and responds to system monitoring and error management information.\n- Is a system module external to the SMM, and therefore not in the scope of this requirement document.",
+   "hash": "26ce476697645de4dc3ae4d3bb1307862e9a669716e9d907445e802ab6d19870",
+   "modified": "2026-08-31T17:00:15+03:00",
+   "traceStatus": "none",
+   "suspectCount": 0,
+   "verificationMethod": null,
+   "satisfies": [],
+   "userStories": [],
+   "explorativeTests": [],
+   "messages": [],
+   "area": "other",
+   "areaSource": "scope",
+   "testable": false,
+   "notTestableReason": "PDS overview statement: no observable behaviour at the ICD",
+   "deferredReason": null,
+   "baseline": {
+    "state": "Open",
+    "satisfies": [],
+    "userStories": []
+   }
   }
  },
  "requirements": {
@@ -1681,10 +1980,11 @@
   }
  },
  "changes": {
-  "since": "2026-10-05T11:48:43+00:00",
+  "since": "2026-10-05T11:58:34+00:00",
   "added": [],
   "removed": [],
   "textChanged": [],
-  "stateChanged": []
+  "stateChanged": [],
+  "linksChanged": []
  }
 }
