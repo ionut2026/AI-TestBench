@@ -6,8 +6,13 @@ Documentation       Shared setup for all SMM suites: one test environment per su
 ...                 - ``SDS-<id>``: the RV&S specification the test verifies (REQ/US/ET links come from the catalog)
 ...                 - ``spechash:<8 hex>``: hash of the specification text the test was written against (drift check)
 ...                 - ``needs:twin``: drives the simulated hardware (offline tier only)
-...                 - ``needs:applog``: reads appSMM's SmartInspect log files (offline tier only, until the rig's logs can be fetched)
-...                 - ``requires:restart``: restarts appSMM or the broker (not on the shared rig)
+...                 - ``needs:hardware-action``: an E-Stop (``Trigger Emergency Stop``): the twin in the offline tier,
+...                 the operator on the rig (``smm-auto run --operator console|dialog``)
+...                 - ``needs:operator``: an ``Operator Action`` at the instrument (only with ``--operator``)
+...                 - ``needs:applog``: reads appSMM's SmartInspect log files (offline tier; rig with a rig control
+...                 that can ``fetch-log``)
+...                 - ``requires:restart``: restarts appSMM (offline/mock; rig with ``restart-appsmm``)
+...                 - ``requires:broker-restart``: restarts the MQTT broker (offline/mock; rig with ``restart-broker``)
 ...                 - ``review:pending``: generated, not yet reviewed by a human. Runs on every tier; the report
 ...                 labels it UNREVIEWED and its specification is never VERIFIED. Remove it only together with an
 ...                 entry in ``catalog/reviews.toml`` (``smm-auto drift --strict`` checks this).
@@ -30,6 +35,9 @@ ${QUIET_PERIOD}         3s
 ${SHORT_QUIET_PERIOD}   1s
 # How long the Bridge stays away in a simulated Bridge crash (a stimulus, not a timeout).
 ${BRIDGE_OUTAGE}        ${QUIET_PERIOD}
+# How the 'Operator Action' steps reach the operator: console, dialog or none (empty: SMM_OPERATOR, else none).
+${OPERATOR}             ${EMPTY}
+${OPERATOR_TIMEOUT}     300s
 
 
 *** Keywords ***
@@ -53,6 +61,13 @@ Require Hardware Twin
     [Documentation]    Skips the test when the tier cannot drive the hardware (only offline has the twin).
     ${status}=    Get Environment Status
     Skip If    '${status}[hardware][kind]' != 'twin'    Needs the hardware twin (offline tier); tier is ${TIER}
+
+Require Hardware Action
+    [Documentation]    Skips the test when no one can do the hardware ``action`` in this tier: the twin (offline)
+    ...    or the operator at the instrument (rig, run with ``--operator``).
+    [Arguments]    ${action}=emergencyStop
+    ${possible}=    Hardware Action Is Possible    ${action}
+    Skip If    not ${possible}    Needs the hardware twin or an operator for ${action}; tier is ${TIER}
 
 Bring SMM To E-Stop With Shutdown
     [Documentation]    Precondition: Idle, then ShutdownRequest -> E-Stop.

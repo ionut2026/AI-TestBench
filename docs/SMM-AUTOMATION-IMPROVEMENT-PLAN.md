@@ -153,6 +153,18 @@ E-Stop → per-key `Error`, state unchanged. The mock appSMM crashed on a `null`
 | 6.3 | 4 `needs:twin` tests never run on rig | `Operator Action` keyword (prompt + confirm, tag `needs:operator`) for rack pick-up/fatal error, or real actuation where a safe command exists |
 | 6.4 | CI hardware job assumes runner setup | Job checks out / verifies the TestBench pin and runs `doctor --tier rig` first |
 
+*6.1–6.4 and 0.1 (the command) status:* done in the repo; nothing has run against the real instrument yet (Phase 0
+and the site's rig control script are still open). Deviation in 6.1: the rig control lives on the Python side
+(`smm_automation\rigcontrol.py`, a site program named by `SMM_RIG_CONTROL` with the subcommands `capabilities`,
+`restart-appsmm`, `restart-broker`, `fetch-log`) instead of behind the service's restart endpoints, so the service
+and its API (1.3.0) are unchanged and a long-running service does not need the variable; the library picks the rig
+control whenever the part's kind is `external`. 6.2: `smm_automation\capabilities.py` maps tags to capabilities
+(`restart`, `broker-restart`, `twin`, `hardware-action`, `operator`, `applog`); `smm-auto run` prints what it
+excludes and why. 6.3: `Operator Action` (tag `needs:operator`) and an operator E-Stop (`needs:hardware-action`,
+`--operator console|dialog`); the rack tests stay `needs:twin` until a safe clean-up procedure exists; lint SMM07
+checks the new tags. 0.1/6.4: `smm-auto doctor [--tier] [--operator] [--deep]`; the CI hardware job runs it before
+the tests.
+
 ## Phase 8 — Process and scale — 3–4 days
 
 | # | Work |
@@ -162,6 +174,13 @@ E-Stop → per-key `Error`, state unchanged. The mock appSMM crashed on a `null`
 | 8.3 | API token for the service (even on localhost) |
 | 8.4 | Move `known_icd_messages` / schema lookup behind the service API (Python no longer reads the TestBench path) |
 | 8.5 | Handbook + README updated for every phase (tags, verdicts, commands, checklists) |
+
+*8.1 status:* done. `smm-auto review <test | SDS-id> --reviewer <name | agent:<model>> --verdict …` appends to
+`catalog\reviews.toml` at the test's current spechash; verdicts are `approved`, `approved-with-notes`,
+`changes-requested`, `rejected` (a missing verdict reads as `approved`). Only a person's approving entry clears
+UNRECORDED; agent entries appear in drift ("Agent reviews") and next to UNREVIEWED in the report. The model cannot be
+pinned in the agent file, so "a different model than the author" is a documented instruction (`/model`), and the
+reviewer agent states it when it runs on the same model.
 
 ## Order and dependencies
 

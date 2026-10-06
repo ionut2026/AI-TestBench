@@ -5,10 +5,15 @@
   smm-auto drift    [--strict]                                   suites vs catalog and review ledger (stale/orphan/uncovered/unrecorded) + lint
   smm-auto accept   (<spec id> ... | --all)                       accept RV&S state/link changes of specifications as the new baseline
   smm-auto migrate-hashes --from <old catalog.json>               re-tag tests whose spec text is unchanged but whose hash changed
+  smm-auto review   <test name | SDS-id> ... --reviewer <name | agent:<model>> --verdict <verdict> [--ref PR]
+                                                                 record a review in catalog/reviews.toml (at the test's spechash)
   smm-auto lint                                                  test rules (no Sleep, documentation, timing variables, tier tags)
   smm-auto matrix   [--check]                                     state x request matrix suite + open questions from catalog/state-matrix.toml
-  smm-auto run      [--tier mock|offline|rig] [--fail-on new|any|none] [robot args...]
-                                                                 run suites, then the traceability report
+  smm-auto run      [--tier mock|offline|rig] [--operator none|console|dialog] [--fail-on new|any|none] [robot args...]
+                                                                 run suites (tests needing a missing capability are excluded),
+                                                                 then the traceability report
+  smm-auto doctor   [--tier mock|offline|rig] [--operator ...] [--deep]
+                                                                 check that a tier can run (service, pin, appSMM, broker, rig control)
   smm-auto report   --output results/.../output.xml              traceability report for an existing run
   smm-auto mutate   [--mutant <id> ...] [--min-score 0.9]          mutation testing of the suites on the mock appSMM
   smm-auto service                                               run the automation service in the foreground
@@ -19,15 +24,26 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 from smm_automation import FRAMEWORK_ROOT
+from smm_automation.capabilities import TIERS, excluded_tags, tier_capabilities
+from smm_automation.operator_prompt import MODES as OPERATOR_MODES
 
 DEFAULT_SCOPE = FRAMEWORK_ROOT / "catalog" / "pilot.scope.toml"
 REVIEWS = FRAMEWORK_ROOT / "catalog" / "reviews.toml"
-TIER_EXCLUDES = {"mock": ["needs:twin", "needs:applog"], "offline": [], "rig": ["needs:twin", "requires:restart", "needs:applog"]}
+
+
+def _default_operator() -> str:
+    from smm_automation.operator_prompt import operator_mode
+
+    try:
+        return operator_mode()
+    except ValueError:
+        return "none"
 
 
 def _catalog_path(args) -> Path:
@@ -118,6 +134,34 @@ def cmd_drift(args) -> int:
     return 1 if args.strict and problems(result) else 0
 
 
+def cmd_review(args) -> int:
+    from smm_automation.pipeline.drift import collect_tests, is_human, record_review
+
+    tests = collect_tests(_suites(args))
+    chosen = []
+    for selector in args.tests:
+        sid = selector.upper().removeprefix("SDS-")
+        found = [t for t in tests if t.name == selector] or ([t for t in tests if int(sid) in t.specs] if sid.isdigit() else [])
+        if not found:
+            print(f"No test named or tagged '{selector}'", file=sys.stderr)
+            return 2
+        chosen += [t for t in found if t not in chosen]
+    date = args.date or dt.date.today().isoformat()
+    human = is_human({"reviewer": args.reviewer})
+    for t in chosen:
+        try:
+            entry = record_review(Path(args.reviews), t, args.reviewer, args.verdict, date, args.ref or "", args.notes or "")
+        except ValueError as err:
+            print(f"{t.name}: {err}", file=sys.stderr)
+            return 2
+        print(f"Recorded: {entry['test']} [{entry['spechash']}] {entry['verdict']} by {entry['reviewer']}")
+        if human and t.pending and entry["verdict"] in ("approved", "approved-with-notes"):
+            print("  now remove its review:pending tag in the same change")
+    if not human:
+        print("Agent review: information for the human reviewer; it does not replace the human review.")
+    return 0
+
+
 def cmd_lint(args) -> int:
     from smm_automation.pipeline.ingest import load_catalog
     from smm_automation.pipeline.lint import format_text, lint
@@ -201,7 +245,18 @@ def cmd_run(args, robot_args: list[str]) -> int:
 
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     out_dir = Path(args.outdir) if args.outdir else FRAMEWORK_ROOT / "results" / f"{args.tier}-{stamp}"
-    excludes = list(TIER_EXCLUDES[args.tier])
+    from smm_automation.operator_prompt import ENV as OPERATOR_ENV
+    from smm_automation.rigcontrol import RigControlError
+
+    try:
+        caps, notes = tier_capabilities(args.tier, args.operator)
+    except RigControlError as err:
+        print(f"Rig control: {err}", file=sys.stderr)
+        return 2
+    excludes = excluded_tags(caps)
+    print("Capabilities: " + "; ".join(notes))
+    print(f"Excluded (capability missing): {', '.join(excludes) or 'nothing'}")
+    os.environ[OPERATOR_ENV] = args.operator
     if args.exclude_pending:
         excludes.append("review:pending")
     options = {
@@ -250,7 +305,7 @@ def cmd_mutate(args) -> int:
     out_dir = Path(args.outdir) if args.outdir else FRAMEWORK_ROOT / "results" / f"mutation-{stamp}"
     suites = _suites(args)
     tests = collect_tests(suites)
-    excludes = list(TIER_EXCLUDES[args.tier])
+    excludes = excluded_tags(tier_capabilities(args.tier)[0])
     print(f"{len(mutants)} mutant(s) on the {args.tier} tier -> {out_dir}")
     result = mutate(mutants, tests, out_dir, tier=args.tier, variablefile=FRAMEWORK_ROOT / "robot" / "environments" / f"{args.tier}.py",
                     excludes=excludes, suites=suites, baseline=not args.no_baseline)
@@ -274,6 +329,16 @@ def cmd_mutate(args) -> int:
     if sc["errors"]:
         return 2
     return 1 if sc["score"] is not None and sc["score"] < args.min_score else 0
+
+
+def cmd_doctor(args) -> int:
+    from smm_automation.doctor import format_checks, run_doctor
+
+    checks = run_doctor(args.tier, args.operator, args.deep)
+    print(format_checks(checks))
+    failed = [c.name for c in checks if c.status == "FAIL"]
+    print(f"{args.tier} tier: " + (f"NOT READY ({', '.join(failed)})" if failed else "ready"))
+    return 1 if failed else 0
 
 
 def cmd_service(args) -> int:
@@ -304,6 +369,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--all", action="store_true", help="every specification")
     p = sub.add_parser("migrate-hashes", allow_abbrev=False, help="update spechash tags after a hashing change (same text, new hash)")
     p.add_argument("--from", dest="old", required=True, help="the catalog JSON before the re-ingestion")
+    p = sub.add_parser("review", allow_abbrev=False, help="record a review of tests in the review ledger")
+    p.add_argument("tests", nargs="+", help="exact test name(s) or SDS-<id> (every test tagged with it)")
+    p.add_argument("--reviewer", required=True, help="the person's name, or agent:<model> for an agent review")
+    p.add_argument("--verdict", required=True, choices=["approved", "approved-with-notes", "changes-requested", "rejected"])
+    p.add_argument("--ref", help="PR / commit")
+    p.add_argument("--notes")
+    p.add_argument("--date", help="YYYY-MM-DD (default: today)")
     sub.add_parser("lint", allow_abbrev=False, help="check the test rules (exit code 1 on violations)")
     p = sub.add_parser("matrix", allow_abbrev=False, help="generate the state x request matrix suite and its open questions")
     p.add_argument("--model", default=str(FRAMEWORK_ROOT / "catalog" / "state-matrix.toml"))
@@ -311,7 +383,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--questions", default=str(FRAMEWORK_ROOT / "catalog" / "state-matrix.questions.md"))
     p.add_argument("--check", action="store_true", help="only check that the generated files are up to date (exit code 1 if not)")
     p = sub.add_parser("run", allow_abbrev=False, help="run suites against a tier and write the traceability report (extra args go to robot)")
-    p.add_argument("--tier", choices=sorted(TIER_EXCLUDES), default="mock")
+    p.add_argument("--tier", choices=TIERS, default="mock")
+    p.add_argument("--operator", choices=OPERATOR_MODES, default=_default_operator(),
+                   help="who does manual steps at the instrument (default: $SMM_OPERATOR or none); console/dialog also run "
+                        "needs:operator and needs:hardware-action tests")
     p.add_argument("--outdir")
     p.add_argument("--fail-on", choices=["new", "any", "none"], default="new",
                    help="exit code: number of NEW failures (default; known-issue failures do not count), of ANY failures, or 0")
@@ -328,6 +403,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--outdir")
     p.add_argument("--min-score", type=float, default=0.9, help="exit code 1 when the share of killed mutants is lower (default 0.9)")
     p.add_argument("--no-baseline", action="store_true", help="skip the run without faults (the selected tests must pass without faults)")
+    p = sub.add_parser("doctor", allow_abbrev=False, help="check that a tier can run before a long run (exit code 1 on FAIL)")
+    p.add_argument("--tier", choices=TIERS, default="mock")
+    p.add_argument("--operator", choices=OPERATOR_MODES, default=_default_operator())
+    p.add_argument("--deep", action="store_true", help="also start the environment and ask appSMM for its state and version "
+                                                     "(on the rig this connects a Bridge to the instrument)")
     p = sub.add_parser("service", allow_abbrev=False, help="run the automation service in the foreground")
     p.add_argument("--port", type=int, default=8765)
 
@@ -337,7 +417,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run":
         return cmd_run(args, extra)
     return {"ingest": cmd_ingest, "briefs": cmd_briefs, "drift": cmd_drift, "accept": cmd_accept, "migrate-hashes": cmd_migrate_hashes,
-            "lint": cmd_lint, "matrix": cmd_matrix, "report": cmd_report, "mutate": cmd_mutate, "service": cmd_service}[args.command](args)
+            "review": cmd_review, "lint": cmd_lint, "matrix": cmd_matrix, "report": cmd_report, "mutate": cmd_mutate, "doctor": cmd_doctor,
+            "service": cmd_service}[args.command](args)
 
 
 if __name__ == "__main__":

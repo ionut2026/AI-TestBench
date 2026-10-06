@@ -38,9 +38,9 @@ SDS-2653094 System Restarts With RecoverRequest After Shutdown
 
 SDS-2653094 System Restarts With RecoverRequest After A Hardware Fatal Error
     [Documentation]    Variant of 2653094 (see the previous test): the E-Stop is caused by a fatal hardware error
-    ...    (twin emergency stop).
-    [Tags]    SDS-2653094    spechash:590de9f9    needs:twin    review:pending    known-issue:FINDING-2
-    Require Hardware Twin
+    ...    (the twin's emergency stop offline; on the rig the operator presses the E-Stop button).
+    [Tags]    SDS-2653094    spechash:590de9f9    needs:hardware-action    review:pending    known-issue:FINDING-2
+    Require Hardware Action
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
     Trigger Emergency Stop
     Wait For System State    E-Stop    timeout=${RESPONSE_TIMEOUT}

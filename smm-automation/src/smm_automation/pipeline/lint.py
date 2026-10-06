@@ -8,8 +8,11 @@
   variables (tier timeouts from ``robot/environments``, spec limits as ``${SDS_<id>_LIMIT}``), not literals
 * SMM04 twin-tag        - a test that drives the hardware twin unconditionally (not inside ``IF``) is tagged
   ``needs:twin``; a ``needs:twin`` test uses at least one hardware keyword
-* SMM05 restart-tag     - same for restarting appSMM or the broker and `requires:restart`
+* SMM05 restart-tag     - same for restarting appSMM and `requires:restart`, and for restarting the MQTT broker
+  and `requires:broker-restart` (the rig may be able to do one and not the other)
 * SMM06 applog-tag      - same for reading appSMM's log files and `needs:applog` (only where the log is reachable)
+* SMM07 action-tag      - an E-Stop (`Trigger Emergency Stop`, which the operator can do on the rig) is tagged
+  ``needs:hardware-action`` (or ``needs:twin``); an `Operator Action` is tagged ``needs:operator``
 
 Keyword use is followed through user keywords (resource files and the suite's own keywords), so
 ``Restart appSMM And Wait Until NotInitialized`` counts as a restart. A templated test (``Test Template`` /
@@ -23,13 +26,29 @@ from dataclasses import dataclass
 from pathlib import Path
 
 QUOTE_WORDS = 5
-HARDWARE_KEYWORDS = {
-    "triggerhardwareaction", "triggeremergencystop", "gethardwaresnapshot", "hardwarestateshouldbe",
+# Keywords only the hardware twin can do (offline tier).
+TWIN_KEYWORDS = {
+    "triggerhardwareaction", "gethardwaresnapshot", "hardwarestateshouldbe",
     "clearhardwaretwinracks", "waitforhardwarecommand", "hardwarecommandshouldnotbesent",
     "sethardwarefaults", "clearhardwarefaults", "gethardwarefaultstatus", "hardwarefaultshouldhavebeenapplied",
 }
-RESTART_KEYWORDS = {"restartappsmm", "restartmqttbroker"}
+# Hardware actions the operator can also do on the real instrument.
+ACTION_KEYWORDS = {"triggeremergencystop"}
+HARDWARE_KEYWORDS = TWIN_KEYWORDS | ACTION_KEYWORDS
+RESTART_KEYWORDS = {"restartappsmm"}
+BROKER_RESTART_KEYWORDS = {"restartmqttbroker"}
+OPERATOR_KEYWORDS = {"operatoraction"}
 APPLOG_KEYWORDS = {"getappsmmlogmessages", "icdmessagesshouldbeloggedbyappsmm"}
+# (rule, tag, other tags that also allow the use, keywords that need the tag, keywords that justify the tag, what)
+TAG_RULES: tuple[tuple[str, str, set[str], set[str], set[str], str], ...] = (
+    ("SMM04", "needs:twin", set(), TWIN_KEYWORDS, HARDWARE_KEYWORDS, "drives the hardware twin"),
+    ("SMM05", "requires:restart", set(), RESTART_KEYWORDS, RESTART_KEYWORDS, "restarts appSMM"),
+    ("SMM05", "requires:broker-restart", set(), BROKER_RESTART_KEYWORDS, BROKER_RESTART_KEYWORDS, "restarts the MQTT broker"),
+    ("SMM06", "needs:applog", set(), APPLOG_KEYWORDS, APPLOG_KEYWORDS, "reads the appSMM log files"),
+    ("SMM07", "needs:hardware-action", {"needs:twin"}, ACTION_KEYWORDS, ACTION_KEYWORDS, "triggers an E-Stop"),
+    ("SMM07", "needs:operator", set(), OPERATOR_KEYWORDS, OPERATOR_KEYWORDS, "asks the operator for an action"),
+)
+TAGGED_KEYWORDS = set().union(*(r[4] for r in TAG_RULES))
 TIMING_ARGS = ("timeout=", "duration=")
 NOSPEC_PREFIX = "nospec:"
 RUN_KEYWORD_CONDITIONAL = {"runkeywordif", "runkeywordunless"}
@@ -131,7 +150,7 @@ class KeywordIndex:
         n = norm(call.name)
         if n.startswith("runkeyword") or n in ("waituntilkeywordsucceeds", "repeatkeyword"):
             cond = call.conditional or n in RUN_KEYWORD_CONDITIONAL
-            return [Call(a, (), call.line, cond) for a in call.args if norm(a) in self.keywords or norm(a) in HARDWARE_KEYWORDS | RESTART_KEYWORDS | APPLOG_KEYWORDS]
+            return [Call(a, (), call.line, cond) for a in call.args if norm(a) in self.keywords or norm(a) in TAGGED_KEYWORDS]
         return []
 
     def uses(self, calls: list[Call], targets: set[str]) -> tuple[bool, bool]:
@@ -251,13 +270,10 @@ def lint(paths: list[Path], catalog: dict | None = None) -> list[Violation]:
                 calls.append(Call(suite_setup.name, tuple(suite_setup.args), suite_setup.lineno, False))
             if "Teardown" not in nodes and suite_teardown is not None and suite_teardown.name:
                 calls.append(Call(suite_teardown.name, tuple(suite_teardown.args), suite_teardown.lineno, False))
-            for rule, tag, targets, what in (
-                ("SMM04", "needs:twin", HARDWARE_KEYWORDS, "drives the hardware twin"),
-                ("SMM05", "requires:restart", RESTART_KEYWORDS, "restarts appSMM or the broker"),
-                ("SMM06", "needs:applog", APPLOG_KEYWORDS, "reads the appSMM log files"),
-            ):
-                used, uncond = index.uses(calls, targets)
-                if uncond and tag not in tags:
+            for rule, tag, also, targets, satisfies, what in TAG_RULES:
+                _, uncond = index.uses(calls, targets)
+                used, _ = index.uses(calls, satisfies)
+                if uncond and tag not in tags and not also & set(tags):
                     out.append(Violation(rule, src, test.lineno, test.name, f"Test {what} but is not tagged {tag}"))
                 elif tag in tags and not used:
                     out.append(Violation(rule, src, test.lineno, test.name, f"Tagged {tag} but never {what}"))

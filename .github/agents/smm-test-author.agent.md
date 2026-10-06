@@ -88,8 +88,12 @@ SDS-2528698 Initializing Is Notified After InitializationResponse OK
   attached message file"), which trigger realises an abstract event ("the fatal error is the hardware emergency stop of
   the twin"), which ET the variant comes from, and which open values are only logged.
 - **Tags:** exactly the brief's `SDS-<id>` and `spechash:<8 hex>` (never invent or recompute a hash), `review:pending`,
-  plus capability tags: `needs:twin` when the test *requires* the hardware twin, `requires:restart` when it restarts
-  appSMM or the broker (including via `Restart appSMM And Wait Until NotInitialized`). Do not repeat the suite's
+  plus capability tags (a tier runs the test only if it has the capability; `smm-auto lint` checks them):
+  `needs:twin` when the test *requires* the hardware twin (racks, COP faults, COP trace); `needs:hardware-action`
+  when its only hardware step is `Trigger Emergency Stop` (twin offline, operator on the rig; precondition
+  `Require Hardware Action`); `needs:operator` when it uses `Operator Action`; `requires:restart` when it restarts
+  appSMM (including via `Restart appSMM And Wait Until NotInitialized`); `requires:broker-restart` when it restarts
+  the MQTT broker; `needs:applog` when it reads appSMM's log files. Do not repeat the suite's
   `Test Tags` (`area:…`, `pilot`). In the rare test that truly proves several specifications, tag each one with
   `SDS-<id>` and the per-specification form `spechash:<id>:<8 hex>` from its brief (a plain `spechash:` is then NO HASH).
 - **Body:** Given (precondition) → When (one trigger) → Then (assertions). Short `#` comments on the Given/When/Then
@@ -108,12 +112,12 @@ Preconditions are *not* verification: use the keywords below and let them fail l
 | Fresh appSMM in **NotInitialized** (just started) | `Restart appSMM And Wait Until NotInitialized` | Only way back to NotInitialized after initialization. Adds `requires:restart`. |
 | **Idle** | `Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}` | Drives from any state (Recover/Init as needed). |
 | **E-Stop** via Bridge request | `Bring SMM To E-Stop With Shutdown` | Idle → ShutdownRequest → E-Stop. |
-| **E-Stop** via a fatal hardware error | `Require Hardware Twin`, `Bring SMM To State    Idle …`, `Trigger Emergency Stop` | `needs:twin`. |
+| **E-Stop** via a fatal hardware error | `Require Hardware Action`, `Bring SMM To State    Idle …`, `Trigger Emergency Stop` | `needs:hardware-action` (twin offline, operator on the rig). |
 | **NormalOperation** | `Require Hardware Twin`, Idle, `Trigger Hardware Action    insertFrontIn    rackId=A001    firstSample=1` | `needs:twin` + `[Teardown]    Finish SMM Test And Empty The Instrument`. |
 | **Configuring** | NotInitialized, then `Send ICD Message    SetConfigurationRequest    body={"STI.Barcode.Code128": "Enabled"}` | Returns to NotInitialized after SetConfigurationResponse. |
 | appSMM just (re)connected to the broker | `Restart appSMM    down=1s`, then wait for `ConnectionNotification | Source=SMM | Status=Connected` | `requires:restart`. |
 | Bridge connection lost | `Interrupt Bridge Connection    outage=${BRIDGE_OUTAGE}    timeout=${STARTUP_TIMEOUT}` (abrupt disconnect = last will, outage, reconnect without clearing the timeline) | |
-| Broker outage | `Restart MQTT Broker    down=3s`, `Wait Until Keyword Succeeds    ${STARTUP_TIMEOUT}    2s    Bridge Should Be Connected` | `requires:restart`. |
+| Broker outage | `Restart MQTT Broker    down=3s`, `Wait Until Keyword Succeeds    ${STARTUP_TIMEOUT}    2s    Bridge Should Be Connected` | `requires:broker-restart`. |
 
 If a precondition depends on behaviour that is itself under test elsewhere (e.g. "E-Stop after Bridge loss" for the
 reconnection warning), check it explicitly and fail with a clear message so the report separates "precondition not met"
@@ -272,7 +276,7 @@ For each test written:
   - `Wait For Message Sequence … InitializationResponse Status=OK, SystemStatusNotification …` → "After publishing the InitializationResponse message with Status "OK", … sends a SystemStatusNotification …"
 - Interpretations: …
 - Deliberately not asserted: … (and why)
-- Capability tags: needs:twin / requires:restart (why)
+- Capability tags: needs:twin / needs:hardware-action / needs:operator / requires:restart / requires:broker-restart / needs:applog (why)
 - Runs: mock = PASS/FAIL (reason) · offline = PASS/FAIL/not run (reason, candidate finding if any)
 ```
 

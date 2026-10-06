@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import html
 import json
+import os
 import time
 from datetime import datetime
 from pathlib import Path
@@ -37,8 +38,9 @@ from robot.api.deco import keyword, library
 from robot.libraries.BuiltIn import BuiltIn
 from robot.utils import timestr_to_secs
 
-from smm_automation import sil
+from smm_automation import operator_prompt, sil
 from smm_automation.client import DEFAULT_URL, ServiceClient, ServiceError, ensure_service
+from smm_automation.rigcontrol import RigControl, RigControlError
 
 STATES = ("PowerOn", "NotInitialized", "Initializing", "Idle", "NormalOperation", "E-Stop", "Configuring", "Clearing")
 TRANSIENT_STATES = ("PowerOn", "Initializing", "Clearing", "Configuring")
@@ -47,6 +49,13 @@ FILTER_FIELDS = {"way", "topic", "analyzer", "valid", "since"}
 CLEARING_GRACE_S = 15.0
 # appSMM's log lines may be stamped slightly before the service saw the message (same PC, different clocks).
 LOG_CLOCK_SLACK_MS = 2000
+# How often a log check re-fetches the appSMM log from the rig while it waits.
+LOG_FETCH_INTERVAL_S = 2.0
+# What the operator does at the instrument for a hardware action when there is no hardware twin (rig tier).
+OPERATOR_INSTRUCTIONS = {
+    "emergencyStop": "Press the EMERGENCY STOP button of the SMM, then release (unlock) it again so the system can be "
+                     "recovered later.",
+}
 
 
 @library(scope="GLOBAL", auto_keywords=False)
@@ -68,6 +77,12 @@ class SMMTestbench:
         # (mark, label) of reconnections and restarts inside the test, shown in the test's timeline.
         self._segments: list[tuple[int, str]] = []
         self._hardware_faults_set = False
+        # Kinds of the running environment (from Start Test Environment): broker, appSmm, hardware.
+        self._kinds: dict[str, str] = {}
+        self._rig_control: RigControl | None = None
+        self._rig_control_loaded = False
+        self._log_fetches = 0
+        self._log_fetched = False
 
     # ================================================================== service and environment
 
@@ -98,12 +113,18 @@ class SMMTestbench:
         self.ensure_automation_service_is_running()
         status = self.client.start_environment(tier, _as_obj(overrides) or {})
         self._tier = tier
+        self._kinds = {part: str((status.get(part) or {}).get("kind")) for part in ("broker", "appSmm", "hardware")}
         _metadata("Tier", tier + (" (framework self-test: NOT product evidence)" if tier == "mock" else ""))
         logger.info(f"Environment: {json.dumps(status, indent=1)}")
+        if tier == "rig":
+            control = self._control()
+            _metadata("Rig control", f"{control} ({' '.join(sorted(control.capabilities())) or 'no capabilities'})" if control else "none")
+            _metadata("Operator", self._operator_mode())
         return status
 
     @keyword
     def stop_test_environment(self) -> None:
+        self._kinds = {}
         try:
             self.client.stop_environment()
         except ServiceError as err:
@@ -121,17 +142,50 @@ class SMMTestbench:
 
     @keyword
     def restart_appsmm(self, down: str = "1s") -> None:
-        """Kills appSMM (no goodbye message) and starts it again after ``down``."""
+        """Kills appSMM (no goodbye message) and starts it again after ``down``. On the rig this needs the site's
+        rig control with ``restart-appsmm`` (``SMM_RIG_CONTROL``)."""
         self._set_marks()
         self._segment(f"appSMM restarted (down {down})")
-        self.client.restart_appsmm(int(timestr_to_secs(down) * 1000))
+        down_ms = int(timestr_to_secs(down) * 1000)
+        if self._kind("appSmm") == "external":
+            self._require_control("restart-appsmm", "restart appSMM").restart_appsmm(down_ms)
+        else:
+            self.client.restart_appsmm(down_ms)
 
     @keyword
     def restart_mqtt_broker(self, down: str = "2s") -> None:
-        """Takes the MQTT broker down for ``down``: appSMM and the Bridge both lose the connection."""
+        """Takes the MQTT broker down for ``down``: appSMM and the Bridge both lose the connection. On the rig this
+        needs the site's rig control with ``restart-broker`` (``SMM_RIG_CONTROL``)."""
         self._set_marks()
         self._segment(f"MQTT broker restarted (down {down})")
-        self.client.restart_broker(int(timestr_to_secs(down) * 1000))
+        down_ms = int(timestr_to_secs(down) * 1000)
+        if self._kind("broker") == "external":
+            self._require_control("restart-broker", "restart the MQTT broker").restart_broker(down_ms)
+        else:
+            self.client.restart_broker(down_ms)
+
+    def _kind(self, part: str) -> str:
+        if part not in self._kinds:
+            status = self.client.environment()
+            self._kinds = {p: str((status.get(p) or {}).get("kind")) for p in ("broker", "appSmm", "hardware")}
+        return self._kinds[part]
+
+    def _control(self) -> RigControl | None:
+        if not self._rig_control_loaded:
+            self._rig_control = RigControl.from_env()
+            self._rig_control_loaded = True
+        return self._rig_control
+
+    def _require_control(self, subcommand: str, what: str) -> RigControl:
+        control = self._control()
+        if control is None:
+            raise AssertionError(f"Cannot {what} in tier {self._tier or '?'}: no rig control configured (SMM_RIG_CONTROL)")
+        try:
+            if not control.has(subcommand):
+                raise AssertionError(f"Cannot {what}: the rig control '{control}' has no {subcommand}")
+        except RigControlError as err:
+            raise AssertionError(f"Cannot {what}: {err}") from None
+        return control
 
     # ================================================================== Bridge session
 
@@ -474,16 +528,55 @@ class SMMTestbench:
 
     @keyword
     def trigger_hardware_action(self, action: str, **args: Any) -> dict:
-        """Operator/hardware action on the hardware twin (offline tier): emergencyStop, loadInputTray,
-        removeInputTray, insertOutputTray, removeOutputTray, insertFrontIn, removeFrontIn,
-        removeFrontOut, pauseLane, resumeLane, toggleLaneError (area=Input|Output), toggleOutputAvailable."""
+        """Operator/hardware action: emergencyStop, loadInputTray, removeInputTray, insertOutputTray,
+        removeOutputTray, insertFrontIn, removeFrontIn, removeFrontOut, pauseLane, resumeLane, toggleLaneError
+        (area=Input|Output), toggleOutputAvailable. Done by the hardware twin (offline tier); without a twin (rig)
+        the operator does it (``emergencyStop`` only, run with ``--operator``), anything else is unavailable."""
         self._set_marks()
-        return self.client.hardware_action(action, {k: _coerce(v) for k, v in args.items()})
+        if self._kind("hardware") == "twin":
+            return self.client.hardware_action(action, {k: _coerce(v) for k, v in args.items()})
+        instruction = OPERATOR_INSTRUCTIONS.get(action)
+        if instruction is None or args:
+            raise AssertionError(f"Hardware action {action}{' with arguments' if args else ''} needs the hardware twin "
+                                 f"(offline tier); the tier is {self._tier or '?'}")
+        answer = self._ask_operator(instruction, None)
+        return {"action": action, "by": "operator", "answer": answer}
 
     @keyword
     def trigger_emergency_stop(self) -> dict:
-        """Presses the E-Stop on the hardware twin (the twin goes to Halted)."""
+        """Presses the E-Stop: on the hardware twin (which goes to Halted), or by the operator on the rig."""
         return self.trigger_hardware_action("emergencyStop")
+
+    @keyword
+    def hardware_action_is_possible(self, action: str = "emergencyStop") -> bool:
+        """True when ``action`` can be done in this tier: by the hardware twin, or by an operator (``--operator``)
+        for the actions an operator can do on the real instrument (``emergencyStop``)."""
+        if self._kind("hardware") == "twin":
+            return True
+        return action in OPERATOR_INSTRUCTIONS and self._kind("hardware") == "external" and self._operator_mode() != "none"
+
+    @keyword
+    def operator_action(self, instruction: str, timeout: str | None = None) -> str:
+        """Asks the operator at the instrument to do ``instruction`` and waits for the confirmation (tag
+        ``needs:operator``). Stimulus: waits after it look at what happened from the moment of the request. Fails
+        if the operator reports a failure or does not confirm within ``timeout`` (default ``${OPERATOR_TIMEOUT}``).
+        Mode from ``${OPERATOR}`` / ``SMM_OPERATOR``: console, dialog or none."""
+        self._set_marks()
+        return self._ask_operator(instruction, timeout)
+
+    def _operator_mode(self) -> str:
+        return operator_prompt.operator_mode(_robot_var("${OPERATOR}", "") or None)
+
+    def _ask_operator(self, instruction: str, timeout: str | None) -> str:
+        timeout = timeout or _robot_var("${OPERATOR_TIMEOUT}", "300s")
+        self._segment(f"Operator: {instruction}")
+        logger.info(f"Operator action: {instruction}")
+        try:
+            answer = operator_prompt.ask_operator(instruction, self._operator_mode(), timestr_to_secs(timeout))
+        except operator_prompt.OperatorUnavailable as err:
+            raise AssertionError(str(err)) from None
+        logger.info(f"Operator confirmed: {answer}")
+        return answer
 
     @keyword
     def get_hardware_snapshot(self) -> dict:
@@ -612,17 +705,57 @@ class SMMTestbench:
     @keyword
     def get_appsmm_log_location(self) -> str | None:
         """The configured appSMM log file (``...\\appSMM.sil``): the variable ``${APPSMM_LOG}`` if set, else
-        ``trace.config`` next to the appSMM.exe the environment runs (offline tier). None if unknown (mock; rig
-        until its logs can be fetched)."""
+        ``trace.config`` next to the appSMM.exe the environment runs (offline tier), else on the rig a fresh copy
+        fetched by the rig control (``fetch-log``) into ``${OUTPUT DIR}/appsmm-log/``. None if unknown (mock; rig
+        without ``fetch-log``)."""
         configured = BuiltIn().get_variable_value("${APPSMM_LOG}")
+        self._log_fetched = False
         if configured:
             return str(configured)
+        if self._can_fetch_log():
+            self._log_fetches += 1
+            self._log_fetched = True
+            return str(self._fetch_log(self._log_fetches))
         try:
             exe = (self.client.environment().get("appSmm") or {}).get("exe")
         except ServiceError:
             return None
         target = sil.log_target(Path(exe).parent) if exe else None
         return str(target) if target else None
+
+    def _can_fetch_log(self) -> bool:
+        if self._kinds.get("appSmm") != "external":
+            return False
+        control = self._control()
+        try:
+            return bool(control and control.has("fetch-log"))
+        except RigControlError as err:
+            logger.warn(f"Rig control: {err}")
+            return False
+
+    def _fetch_log(self, n: int) -> Path:
+        """Fetches the rig's appSMM log into ``appsmm-log/<n>`` (replacing an earlier fetch of the same check)."""
+        import shutil
+
+        from smm_automation import FRAMEWORK_ROOT
+
+        dest = Path(_robot_var("${OUTPUT DIR}", str(FRAMEWORK_ROOT / "results"))) / "appsmm-log" / str(n)
+        shutil.rmtree(dest, ignore_errors=True)
+        control = self._control()
+        assert control is not None
+        try:
+            files = control.fetch_log(dest)
+        except RigControlError as err:
+            raise AssertionError(f"Fetching the appSMM log from the rig failed: {err}") from None
+        named = [f for f in files if f.stem.lower() == "appsmm" or f.stem.lower().startswith("appsmm-")]
+        # The copies carry the rig's file times (or none): restamp them with this PC's clock, keeping their order,
+        # so the log reader's file-time filter does not drop them; the entries keep appSMM's own time stamps.
+        now = time.time()
+        ordered = sorted(files, key=lambda f: f.stat().st_mtime)
+        for i, f in enumerate(ordered):
+            stamp = now - (len(ordered) - i) * 0.001
+            os.utime(f, (stamp, stamp))
+        return dest / "appSMM.sil" if named else files[0]
 
     @keyword
     def get_appsmm_log_messages(self, name: str | None = None, since: Any = "test") -> list:
@@ -642,6 +775,7 @@ class SMMTestbench:
         if not names:
             raise ValueError("Name at least one ICD message")
         target = self._log_target()
+        fetching = self._log_fetched
         since_ms = self._log_since_ms(since)
         start = int(since["id"]) - 1 if isinstance(since, dict) else (0 if str(since).lower() in ("all", "none") else self._test_mark)
         exchanged = [e for e in self.client.query({"since": start}, 2000) if e.get("name") in names]
@@ -654,7 +788,11 @@ class SMMTestbench:
             matched, missing = _match_logged(exchanged, logged)
             if not missing or time.monotonic() >= deadline:
                 break
-            time.sleep(0.5)
+            if fetching:
+                time.sleep(LOG_FETCH_INTERVAL_S)
+                target = self._fetch_log(self._log_fetches)
+            else:
+                time.sleep(0.5)
         if missing:
             lines = "\n".join(f"  #{e['id']} {'RX' if e['way'] == 'tx' else 'TX'}({e['topic']}) {e['name']} {json.dumps(e['body'])}" for e in missing)
             raise AssertionError(f"{len(missing)} of {len(exchanged)} message(s) not in the appSMM log {target}:\n{lines}")
@@ -664,7 +802,8 @@ class SMMTestbench:
     def _log_target(self) -> Path:
         location = self.get_appsmm_log_location()
         if not location:
-            raise AssertionError("The appSMM log location is unknown in this tier (set ${APPSMM_LOG})")
+            raise AssertionError("The appSMM log location is unknown in this tier (set ${APPSMM_LOG}, or on the rig a rig control "
+                                 "with fetch-log in SMM_RIG_CONTROL)")
         return Path(location)
 
     def _log_since_ms(self, since: Any) -> float:

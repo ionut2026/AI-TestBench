@@ -6,6 +6,8 @@ name: smm-automation
 # at the pinned commit with `npm ci` done in simulator/ and hwsim/ (SMM_TESTBENCH_DIR set on the runner).
 #
 # Secrets (optional): SMM_TESTBENCH_TOKEN, only needed if ionut2026/SMM-TestBench becomes private (read access).
+# On the rig runner, SMM_RIG_CONTROL (site script, see smm-automation/src/smm_automation/rigcontrol.py) enables the
+# appSMM/broker restart and appSMM log tests; without it they are excluded.
 # Variables: SMM_RIG_RUNNER = true once a self-hosted runner labelled `smm-rig` is registered; without it the
 # nightly/manual hardware job is skipped instead of waiting for a runner that does not exist.
 
@@ -183,9 +185,14 @@ jobs:
           python -m venv .venv
           .venv/Scripts/pip install -r smm-automation/requirements-dev.lock
           .venv/Scripts/pip install --no-deps -e smm-automation
-      - name: Run ${{ inputs.tier || 'offline' }} tier
+      - name: Doctor (service, pinned TestBench, appSMM/broker, rig control)
+        # Fails the job early when the bundled TestBench is not the pinned commit or the tier cannot run.
         working-directory: smm-automation
-        run: ../.venv/Scripts/smm-auto run --tier ${{ inputs.tier || 'offline' }} --outdir results/hardware
+        run: ../.venv/Scripts/smm-auto doctor --tier ${{ inputs.tier || 'offline' }}
+      - name: Run ${{ inputs.tier || 'offline' }} tier
+        # No operator in CI: needs:operator / needs:hardware-action tests are excluded on the rig.
+        working-directory: smm-automation
+        run: ../.venv/Scripts/smm-auto run --tier ${{ inputs.tier || 'offline' }} --operator none --outdir results/hardware
       - uses: actions/upload-artifact@v4
         if: always()
         with:

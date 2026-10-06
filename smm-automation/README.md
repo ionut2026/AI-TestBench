@@ -33,9 +33,17 @@ flowchart LR
 
 | Tier | appSMM | Hardware | Use | Excluded tags |
 |---|---|---|---|---|
-| `mock` | scripted mock in the service | none | framework self-test, CI on every push. **Verdicts are not product evidence.** | `needs:twin`, `needs:applog` |
-| `offline` | real `appSMM.exe` on this PC | SMM TestBench hardware twin | developer PC, nightly | — |
-| `rig` | real appSMM on the instrument | real | dedicated automation instrument (`SMM_RIG_BROKER=host:port`) | `needs:twin`, `requires:restart`, `needs:applog` |
+| `mock` | scripted mock in the service | none | framework self-test, CI on every push. **Verdicts are not product evidence.** | `needs:twin`, `needs:hardware-action`, `needs:operator`, `needs:applog` |
+| `offline` | real `appSMM.exe` on this PC | SMM TestBench hardware twin | developer PC, nightly | `needs:operator` |
+| `rig` | real appSMM on the instrument | real | dedicated automation instrument (`SMM_RIG_BROKER=host:port`) | `needs:twin`; without `--operator`: `needs:hardware-action`, `needs:operator`; without a rig control script: `requires:restart`, `requires:broker-restart`, `needs:applog` |
+
+A tag excludes a test when the tier lacks the capability (`smm-auto run` prints what it excludes and why). On the rig,
+`SMM_RIG_CONTROL` names a site script that restarts appSMM/the broker and copies appSMM's log files
+(`src/smm_automation/rigcontrol.py` describes its subcommands), and `--operator console|dialog` lets an operator do
+the emergency stop and other `Operator Action` steps. `smm-auto doctor --tier <tier>` checks a tier before a long run
+(service, pinned TestBench, appSMM.exe/broker port, rig broker, rig control, operator; `--deep` also asks appSMM its
+state; on the rig only with the instrument's owner's agreement, it connects a Bridge). The rig's log check compares
+appSMM's timestamps with this PC's clock: keep both NTP-synchronised.
 
 `review:pending` tests run on every tier and are labelled UNREVIEWED in the report (`--exclude-pending` leaves them out).
 `smm-auto run` exits with the number of **new** failures: failures of tests tagged `known-issue:FINDING-<n>` (see
@@ -71,11 +79,13 @@ override with `WINDCHILL_MCP_SERVER`) with the `RVS_*` settings from the environ
 .\.venv\Scripts\smm-auto drift --strict         # stale hashes, orphans, uncovered specs, RV&S state/link changes, retired specs, lint (exit 1 on problems)
 .\.venv\Scripts\smm-auto accept 2428419         # after checking the tests: accept a spec's new RV&S state/links as baseline
 .\.venv\Scripts\smm-auto migrate-hashes --from results\pilot-old.json   # after a hashing change: re-tag unchanged specs
-.\.venv\Scripts\smm-auto lint                   # test rules SMM01-06 (no Sleep, doc quotes spec, variable timeouts, capability tags)
+.\.venv\Scripts\smm-auto lint                   # test rules SMM01-07 (no Sleep, doc quotes spec, variable timeouts, capability tags)
 .\.venv\Scripts\smm-auto briefs --spec 2528698  # generated/briefs/SDS-2528698.md for the authoring agent
+.\.venv\Scripts\smm-auto doctor --tier offline   # can the tier run? (exit 1 on FAIL)
 .\.venv\Scripts\smm-auto run --tier mock        # results/mock-<ts>/: log.html, report.html, traceability.html/json
 .\.venv\Scripts\smm-auto run --tier offline --include initialization   # extra args go to robot
 .\.venv\Scripts\smm-auto --suites robot\suites\pilot\recover.robot run --tier offline
+.\.venv\Scripts\smm-auto run --tier rig --operator console   # operator at the instrument does the E-Stop steps
 .\.venv\Scripts\smm-auto report --output results\rig-20261005-101500\output.xml
 .\.venv\Scripts\smm-auto mutate                 # mutation testing: do the tests notice defects injected into the mock appSMM? (catalog/mutants.toml)
 .\.venv\Scripts\smm-auto matrix                 # regenerate the state x request matrix suite from catalog/state-matrix.toml
@@ -88,10 +98,12 @@ override with `WINDCHILL_MCP_SERVER`) with the `RVS_*` settings from the environ
    schemas of the messages it mentions, the keyword documentation, the tags to use and the target suite.
 3. The `smm-test-author` agent (`.github/agents/smm-test-author.agent.md`) writes the test from the brief, tagged
    `review:pending`. Optionally the `smm-test-reviewer` agent (`.github/agents/smm-test-reviewer.agent.md`)
-   gives an independent, read-only review (APPROVE / CHANGES REQUESTED / REJECT).
-4. A test engineer reviews it against the specification (and runs it on `offline`/`rig`), records the review in
-   `catalog/reviews.toml` (test, spechash, reviewer, date, PR) and removes `review:pending` in the same change.
-   `drift --strict` fails on a test without `review:pending` and without a matching human review entry.
+   gives an independent review (APPROVE / CHANGES REQUESTED / REJECT), best on a different model than the author,
+   and records it in the ledger as `agent:<model>` (information only, never the review).
+4. A test engineer reviews it against the specification (and runs it on `offline`/`rig`), records the review with
+   `smm-auto review <test | SDS-id> --reviewer "<name>" --verdict approved --ref "PR #n"` (it appends to
+   `catalog/reviews.toml` at the test's current spechash) and removes `review:pending` in the same change.
+   `drift --strict` fails on a test without `review:pending` and without an approving human review entry.
 5. When RV&S changes the specification text, `drift` reports the test as **stale**: re-review, then update `spechash:`.
    When only its state or its requirement/user story links change, `drift` reports **SPEC-STATE-CHANGED** /
    **LINKS-CHANGED** until the change is checked and accepted with `smm-auto accept <id>`; a covered spec that is
@@ -99,9 +111,10 @@ override with `WINDCHILL_MCP_SERVER`) with the `RVS_*` settings from the environ
    `spechash:<id>:<hash>` per specification. Handbook sections 12.4–12.5.1.
 
 Rules: one behaviour per test, assert what the specification states (message, fields, order, topic, timing), wait for
-events (never `Sleep`), only use keywords from the library/resource, add `needs:twin` if hardware-twin state (or a COP
-fault) is required, `requires:restart` if appSMM or the broker must be restarted and `needs:applog` if appSMM's log
-files are read. Timeouts are variables (time limits stated
+events (never `Sleep`), only use keywords from the library/resource, add `needs:twin` if hardware-twin state (racks, a COP
+fault) is required, `needs:hardware-action` if the only hardware step is the emergency stop, `needs:operator` for
+`Operator Action`, `requires:restart` / `requires:broker-restart` if appSMM / the broker must be restarted and
+`needs:applog` if appSMM's log files are read. Timeouts are variables (time limits stated
 by a specification as `${SDS_<id>_LIMIT}` in the suite). `smm-auto lint` and `robocop check robot` enforce these rules
 in CI (handbook Section 11.3). Each wait consumes the message it matched; order is asserted with
 `Wait For Message Sequence` (or `since=last`), not by consecutive waits (handbook Section 10.2).

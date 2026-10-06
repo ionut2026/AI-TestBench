@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import re
 import tomllib
@@ -90,9 +91,23 @@ def load_reviews(path: Path) -> list[dict]:
         return list(tomllib.load(f).get("review", []))
 
 
+VERDICTS = ("approved", "approved-with-notes", "changes-requested", "rejected")
+APPROVING = ("approved", "approved-with-notes")
+
+
 def is_human(entry: dict) -> bool:
     reviewer = str(entry.get("reviewer", "")).strip()
     return bool(reviewer) and not reviewer.lower().startswith("agent:")
+
+
+def verdict_of(entry: dict) -> str:
+    """The entry's verdict; an entry without one is an approval (the ledger's original format)."""
+    return str(entry.get("verdict") or "approved").strip().lower()
+
+
+def counts_as_review(entry: dict, key: str) -> bool:
+    """A human approval of the test for its current ``spechash`` value(s) ``key``; agent reviews never count."""
+    return is_human(entry) and verdict_of(entry) in APPROVING and str(entry.get("spechash", "")).lower() == key
 
 
 def check_reviews(tests: list[TestRef], reviews: list[dict]) -> list[dict]:
@@ -101,11 +116,60 @@ def check_reviews(tests: list[TestRef], reviews: list[dict]) -> list[dict]:
         if t.pending:
             continue
         mine = [r for r in reviews if r.get("test") == t.name and is_human(r)]
-        if any(str(r.get("spechash", "")).lower() == t.review_key for r in mine):
+        if any(counts_as_review(r, t.review_key) for r in mine):
             continue
-        reason = "no human review recorded" if not mine else f"recorded review is for spechash {mine[-1].get('spechash')}, test has {t.review_key}"
+        if not mine:
+            agents = [r for r in reviews if r.get("test") == t.name]
+            reason = "only agent review(s) recorded, no human review" if agents else "no human review recorded"
+        elif any(str(r.get("spechash", "")).lower() == t.review_key for r in mine):
+            reason = f"the human review is {verdict_of(mine[-1])}, not approved"
+        else:
+            reason = f"recorded review is for spechash {mine[-1].get('spechash')}, test has {t.review_key}"
         out.append({"test": t.name, "suite": t.suite, "reason": reason})
     return out
+
+
+def agent_reviews(tests: list[TestRef], reviews: list[dict]) -> list[dict]:
+    """The latest agent review of each test for its current ``spechash`` value(s): information for the human
+    reviewer, never a review."""
+    out = []
+    for t in tests:
+        mine = [r for r in reviews if r.get("test") == t.name and not is_human(r)
+                and str(r.get("spechash", "")).lower() == t.review_key]
+        if mine:
+            r = mine[-1]
+            out.append({"test": t.name, "reviewer": str(r.get("reviewer")), "verdict": verdict_of(r),
+                        "date": str(r.get("date", "")), "pending": t.pending})
+    return out
+
+
+def _toml_str(value: str) -> str:
+    return json.dumps(value, ensure_ascii=False)
+
+
+def record_review(path: Path, test: TestRef, reviewer: str, verdict: str, date: str, ref: str = "", notes: str = "") -> dict:
+    """Appends a ``[[review]]`` entry for ``test`` at its current ``spechash`` value(s) to the ledger."""
+    reviewer, verdict = reviewer.strip(), verdict.strip().lower()
+    if not reviewer:
+        raise ValueError("reviewer is empty")
+    if verdict not in VERDICTS:
+        raise ValueError(f"verdict '{verdict}' is not one of {', '.join(VERDICTS)}")
+    if not test.review_key:
+        raise ValueError(f"test '{test.name}' has no spechash: tag; nothing to review it against")
+    dt.date.fromisoformat(date)
+    entry = {"test": test.name, "spechash": test.review_key, "reviewer": reviewer, "date": date, "ref": ref,
+             "verdict": verdict, "notes": notes}
+    lines = ["", "[[review]]"]
+    for key, value in entry.items():
+        if key == "date":
+            lines.append(f"date = {value}")
+        elif value or key in ("test", "spechash", "reviewer", "verdict"):
+            lines.append(f"{key} = {_toml_str(value)}")
+    text = path.read_bytes().decode("utf-8") if path.exists() else ""
+    if text and not text.endswith("\n"):
+        text += "\n"
+    path.write_bytes((text + "\n".join(lines) + "\n").encode("utf-8"))
+    return entry
 
 
 def collect_tests(paths: list[Path]) -> list[TestRef]:
@@ -200,6 +264,7 @@ def check(catalog: dict, tests: list[TestRef], reviews: list[dict] | None = None
         "suspect": suspect,
         "pending": [{"test": t.name, "suite": t.suite} for t in tests if t.pending],
         "unrecorded": check_reviews(tests, reviews) if reviews is not None else [],
+        "agentReviewed": agent_reviews(tests, reviews) if reviews is not None else [],
         "deferred": [{"spec": int(k), "reason": s["deferredReason"]} for k, s in specs.items() if s.get("deferredReason")],
         "notTestable": [{"spec": int(k), "reason": s.get("notTestableReason")} for k, s in specs.items() if not s["testable"]],
         "areaGuessed": [{"spec": int(k), "area": s["area"]} for k, s in specs.items() if s.get("areaSource") not in (None, "scope")],
@@ -226,6 +291,7 @@ def format_text(result: dict) -> str:
         "retired": "RETIRED (covered specification is rejected/deleted in RV&S: remove or re-target the tests)",
         "suspect": "SUSPECT in RV&S (re-review the covering tests)",
         "pending": "PENDING human review",
+        "agentReviewed": "Agent reviews (information for the human reviewer, never a review)",
         "unrecorded": "UNRECORDED REVIEW (review:pending removed without a matching entry in catalog/reviews.toml)",
         "lint": "LINT (test rule violations, see smm-auto lint)",
         "nospec": "Tests of behaviour no specification states (nospec:<kind>)",

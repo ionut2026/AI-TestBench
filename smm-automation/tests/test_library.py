@@ -185,6 +185,16 @@ class FakeClient:
     def hardware_faults(self):
         return {"faults": getattr(self, "faults", []), "stats": getattr(self, "fault_stats", [])}
 
+    def restart_appsmm(self, down_ms):
+        self.calls.append(("restart_appsmm", down_ms))
+
+    def restart_broker(self, down_ms):
+        self.calls.append(("restart_broker", down_ms))
+
+    def hardware_action(self, action, args):
+        self.calls.append(("hardware_action", action, args))
+        return {"action": action}
+
 
 @pytest.fixture
 def smm(monkeypatch):
@@ -364,3 +374,72 @@ def test_time_between_entries_iso_and_epoch(smm):
     assert smm.get_time_between({"time": 0}, "1970-01-01T00:00:01+00:00") == 1.0
     with pytest.raises(ValueError, match="no time"):
         smm.get_time_between({"id": 1}, 0)
+
+
+class FakeControl:
+    def __init__(self, subcommands):
+        self.subcommands = subcommands
+        self.calls = []
+
+    def has(self, subcommand):
+        return subcommand in self.subcommands
+
+    def restart_appsmm(self, down_ms):
+        self.calls.append(("restart-appsmm", down_ms))
+
+    def restart_broker(self, down_ms):
+        self.calls.append(("restart-broker", down_ms))
+
+
+def _on_the_rig(smm, monkeypatch, control=None, operator="none"):
+    smm._kinds = {"broker": "external", "appSmm": "external", "hardware": "external"}
+    smm._rig_control, smm._rig_control_loaded = control, True
+    monkeypatch.setattr("smm_automation.SMMTestbench._robot_var", lambda name, default: default)
+    monkeypatch.setenv("SMM_OPERATOR", operator)
+
+
+def test_restarts_use_the_service_unless_the_part_is_external(smm):
+    smm._kinds = {"broker": "process", "appSmm": "process", "hardware": "twin"}
+    smm.restart_appsmm("1.5s")
+    smm.restart_mqtt_broker()
+    assert ("restart_appsmm", 1500) in smm.client.calls and ("restart_broker", 2000) in smm.client.calls
+
+
+def test_restarts_on_the_rig_use_the_rig_control(smm, monkeypatch):
+    control = FakeControl({"restart-appsmm", "restart-broker"})
+    _on_the_rig(smm, monkeypatch, control)
+    smm.restart_appsmm("3s")
+    smm.restart_mqtt_broker("1s")
+    assert control.calls == [("restart-appsmm", 3000), ("restart-broker", 1000)]
+    assert not [c for c in smm.client.calls if c[0].startswith("restart")]
+
+
+@pytest.mark.parametrize("control, message", [
+    (None, "no rig control configured"),
+    (FakeControl({"restart-broker"}), "has no restart-appsmm"),
+])
+def test_restart_on_the_rig_without_control_fails_clearly(smm, monkeypatch, control, message):
+    _on_the_rig(smm, monkeypatch, control)
+    with pytest.raises(AssertionError, match=message):
+        smm.restart_appsmm()
+
+
+def test_emergency_stop_goes_to_the_twin_or_the_operator(smm, monkeypatch):
+    smm._kinds = {"broker": "process", "appSmm": "process", "hardware": "twin"}
+    assert smm.hardware_action_is_possible()
+    smm.trigger_emergency_stop()
+    assert _last(smm.client, "hardware_action")[1] == "emergencyStop"
+
+    _on_the_rig(smm, monkeypatch, operator="none")
+    assert not smm.hardware_action_is_possible()
+    with pytest.raises(AssertionError, match="needs an operator"):
+        smm.trigger_emergency_stop()
+    asked = []
+    monkeypatch.setattr("smm_automation.operator_prompt.ask_operator",
+                        lambda instruction, mode, timeout_s: asked.append((mode, timeout_s)) or "done")
+    _on_the_rig(smm, monkeypatch, operator="console")
+    assert smm.hardware_action_is_possible() and not smm.hardware_action_is_possible("insertFrontIn")
+    assert smm.trigger_emergency_stop()["by"] == "operator"
+    assert asked == [("console", 300.0)]
+    with pytest.raises(AssertionError, match="needs the hardware twin"):
+        smm.trigger_hardware_action("insertFrontIn")

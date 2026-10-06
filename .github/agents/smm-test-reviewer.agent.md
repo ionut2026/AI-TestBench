@@ -52,10 +52,11 @@ For each specification get the facts **independently of the test**:
    absence of messages appSMM legitimately sends (Verbose `EventNotification`s), racks left behind by a previous test.
 5. **Rules and hygiene.** Tags (`SDS-<id>`, `spechash:` equal to the brief — `spechash:<id>:<hash>` per specification
    on a test with several `SDS-<id>` tags — `review:pending`, `needs:twin` when the twin
-   is required, `requires:restart` when appSMM/broker is restarted), name convention, verbatim documentation with
+   is required, `needs:hardware-action` for an emergency stop only, `needs:operator` for `Operator Action`,
+   `requires:restart` / `requires:broker-restart` when appSMM / the broker is restarted, `needs:applog` for log checks), name convention, verbatim documentation with
    interpretations, Given/When/Then structure, no `Sleep`, variables for timeouts, clean-up of racks
    (`Finish SMM Test And Empty The Instrument`), schema validity and pair-issue checks, only allowed keywords, suite
-   Settings unchanged. `smm-auto lint` checks the mechanical part of these rules (SMM01-05); you still judge the rest.
+   Settings unchanged. `smm-auto lint` checks the mechanical part of these rules (SMM01-07); you still judge the rest.
 6. **Evidence (when possible).** Run, from `smm-automation`:
    ```powershell
    .\.venv\Scripts\smm-auto lint
@@ -91,9 +92,25 @@ Per test, under its name:
 - Candidate findings about appSMM (with message ids/timestamps), if any
 - Questions for the specification owner, if the specification itself is ambiguous
 
+## Recording your verdicts
+
+After the output, record each verdict in the review ledger as an agent review, from `smm-automation`, with your own
+model ID (e.g. `agent:claude-opus-5.5`, `agent:gpt-6-sol`) and APPROVE → `approved`, CHANGES REQUESTED →
+`changes-requested`, REJECT → `rejected`:
+
+```powershell
+.\.venv\Scripts\smm-auto review "<exact test name>" --reviewer agent:<model> --verdict changes-requested --notes "<main reason>"
+```
+
+These entries never count as the human review; drift and the traceability report show them to the human reviewer.
+If you are running on the same model as the author of the tests (see the commit/PR or ask), say so at the top of your
+output: a review by the same model is much weaker.
+
 ## Boundaries
 
 - **Read-only on the tests:** do not edit `.robot` files (propose concrete changes instead), never remove
-  `review:pending`, never touch `spechash:` values, the scope file, the catalog, the library or the service.
+  `review:pending`, never touch `spechash:` values, the scope file, the catalog, the library or the service. The only
+  file you change is `catalog/reviews.toml`, and only through `smm-auto review --reviewer agent:<model>`; never record
+  a review under a person's name.
 - Be specific and brief; no praise padding. If a test is good, one line saying why is enough.
 - When you are unsure whether something is a defect, say so and explain what would settle it.

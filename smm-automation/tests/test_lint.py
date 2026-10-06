@@ -74,7 +74,7 @@ def test_tier_tags_follow_keyword_use(tmp_path):
 SDS-1 Twin Without Tag
     [Documentation]    Variant of 1.
     [Tags]    SDS-1
-    Trigger Emergency Stop
+    Trigger Hardware Action    insertFrontIn
 
 SDS-1 Tagged Without Use
     [Documentation]    Variant of 1.
@@ -92,7 +92,7 @@ SDS-1 Conditional Use Needs No Tag
 SDS-1 Tagged And Used
     [Documentation]    Variant of 1.
     [Tags]    SDS-1    needs:twin    requires:restart
-    Run Keyword And Ignore Error    Restart MQTT Broker
+    Run Keyword And Ignore Error    Restart appSMM
     Trigger Hardware Action    insertFrontIn
 
 SDS-1 Reads The Log Without Tag
@@ -115,6 +115,54 @@ SDS-1 Fault Rule Is A Twin Use
         ("SDS-1 Fault Rule Is A Twin Use", "SMM06"),
     }
 
+
+
+def test_action_operator_and_broker_tags(tmp_path):
+    tests = """SDS-1 E-Stop With Action Tag
+    [Documentation]    Variant of 1.
+    [Tags]    SDS-1    needs:hardware-action
+    Trigger Emergency Stop
+
+SDS-1 E-Stop With Twin Tag
+    [Documentation]    Variant of 1.
+    [Tags]    SDS-1    needs:twin
+    Trigger Emergency Stop
+    Trigger Hardware Action    insertFrontIn
+
+SDS-1 E-Stop Without Tag
+    [Documentation]    Variant of 1.
+    [Tags]    SDS-1
+    Trigger Emergency Stop
+
+SDS-1 Action Tag Without Use
+    [Documentation]    Variant of 1.
+    [Tags]    SDS-1    needs:hardware-action    needs:operator
+    Log    x
+
+SDS-1 Operator Without Tag
+    [Documentation]    Variant of 1.
+    [Tags]    SDS-1
+    Operator Action    Open the cover
+
+SDS-1 Broker Restart Needs Its Own Tag
+    [Documentation]    Variant of 1.
+    [Tags]    SDS-1    requires:restart
+    Restart MQTT Broker    down=${BROKER_OUTAGE}
+
+SDS-1 Broker Restart Tagged
+    [Documentation]    Variant of 1.
+    [Tags]    SDS-1    requires:broker-restart
+    Run Keyword And Ignore Error    Restart MQTT Broker
+"""
+    found = {(v.item, v.rule) for v in _lint(tmp_path, tests)}
+    assert found == {
+        ("SDS-1 E-Stop Without Tag", "SMM07"),
+        ("SDS-1 Action Tag Without Use", "SMM07"),
+        ("SDS-1 Operator Without Tag", "SMM07"),
+        ("SDS-1 Broker Restart Needs Its Own Tag", "SMM05"),
+    }
+    by_item = {v.item: v for v in _lint(tmp_path, tests) if v.item == "SDS-1 Broker Restart Needs Its Own Tag"}
+    assert "requires:broker-restart" in by_item["SDS-1 Broker Restart Needs Its Own Tag"].message
 
 def test_pilot_suites_are_clean():
     from smm_automation import FRAMEWORK_ROOT

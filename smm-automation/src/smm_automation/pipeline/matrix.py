@@ -19,7 +19,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from smm_automation.pipeline.drift import PENDING_TAG, TestRef, is_human
+from smm_automation.pipeline.drift import PENDING_TAG, TestRef, counts_as_review
 
 NOSPEC_TAG = "nospec:state-matrix"
 EMPTY = "${EMPTY}"
@@ -118,7 +118,7 @@ def _hash_tags(cell: Cell, catalog: dict) -> list[str]:
 
 def _reviewed(name: str, hash_tags: list[str], reviews: list[dict]) -> bool:
     key = ",".join(sorted(t.split(":", 1)[1].lower() for t in hash_tags))
-    return any(r.get("test") == name and is_human(r) and str(r.get("spechash", "")).lower() == key for r in reviews)
+    return any(r.get("test") == name and counts_as_review(r, key) for r in reviews)
 
 
 def _wrap(text: str, first: str, indent: str = SEP, width: int = LINE) -> list[str]:

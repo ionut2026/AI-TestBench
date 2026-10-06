@@ -149,3 +149,8 @@ troubleshooting) is [`docs/SMM-AUTOMATION-HANDBOOK.md`](SMM-AUTOMATION-HANDBOOK.
   hardware twin (`service/src/copFaults.ts`, `/hardware/faults`) to drop, delay or answer with an error, so
   "no reply within N s" specifications are testable; `smm_automation/sil.py` reads appSMM's SmartInspect `.sil`
   logs for specifications about what appSMM logs.
+- **Capabilities and the rig.** Tests declare what they need with tags (`needs:twin`, `needs:hardware-action`,
+  `needs:operator`, `needs:applog`, `requires:restart`, `requires:broker-restart`); `smm-auto run` excludes the tags
+  whose capability the tier lacks (`smm_automation/capabilities.py`). On the rig, restarts and log fetching go through
+  a site program named by `SMM_RIG_CONTROL` (`smm_automation/rigcontrol.py`) and E-Stop/other manual steps through an
+  operator (`--operator console|dialog`). `smm-auto doctor --tier <tier> [--deep]` checks an environment before a run.

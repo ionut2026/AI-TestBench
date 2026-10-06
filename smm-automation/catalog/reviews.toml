@@ -4,8 +4,9 @@
 # test's current `spechash:` value(s); `smm-auto drift --strict` (CI) fails otherwise ("unrecorded").
 # When the specification changes, drift reports the test as stale: re-review, update `spechash:` and add a new entry.
 #
-# Agent reviews (smm-test-reviewer) may be recorded with reviewer = "agent:<model>"; they are kept as
-# information and never count as the human review.
+# Agent reviews (smm-test-reviewer) are recorded with reviewer = "agent:<model>"; they are kept as information
+# (drift and the report show them) and never count as the human review. Only a person's approved /
+# approved-with-notes counts. Add entries with: smm-auto review <test name | SDS-id> --reviewer ... --verdict ...
 #
 # Fields:
 #   test      exact Robot test name
@@ -13,7 +14,7 @@
 #   reviewer  name of the reviewer (or agent:<model>)
 #   date      YYYY-MM-DD
 #   ref       PR / commit that removed review:pending
-#   verdict   approved | approved-with-notes
+#   verdict   approved | approved-with-notes | changes-requested | rejected (missing = approved)
 #   notes     optional
 #
 # Example:

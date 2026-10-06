@@ -1,8 +1,10 @@
 from smm_automation.pipeline.drift import (
     TestRef,
+    agent_reviews,
     check,
     check_reviews,
     hash_migrations,
+    load_reviews,
     migrate_hash_tags,
     parse_hash_tags,
     problems,
@@ -228,6 +230,67 @@ def test_review_ledger():
     r = check(cat, tests, ledger)
     assert len(r["unrecorded"]) == 3
     assert check(cat, tests)["unrecorded"] == []  # no ledger given: not checked
+
+
+def test_review_verdicts_and_agent_reviews():
+    tests = [
+        _ref("changes", [1], "aaaa1111", ["spechash:aaaa1111"]),
+        _ref("approved later", [1], "bbbb2222", ["spechash:bbbb2222"]),
+        _ref("agent only", [1], "cccc3333", ["spechash:cccc3333"]),
+        _ref("pending", [1], "dddd4444", ["review:pending", "spechash:dddd4444"]),
+    ]
+    ledger = [
+        {"test": "changes", "spechash": "aaaa1111", "reviewer": "Jane Doe", "verdict": "changes-requested"},
+        {"test": "approved later", "spechash": "bbbb2222", "reviewer": "Jane Doe", "verdict": "rejected"},
+        {"test": "approved later", "spechash": "bbbb2222", "reviewer": "Jane Doe", "verdict": "approved-with-notes"},
+        {"test": "agent only", "spechash": "cccc3333", "reviewer": "agent:claude-opus-5.5", "verdict": "approved"},
+        {"test": "pending", "spechash": "00000000", "reviewer": "agent:gpt-6-sol", "verdict": "approved"},
+        {"test": "pending", "spechash": "dddd4444", "reviewer": "agent:gpt-6-sol", "verdict": "changes-requested"},
+    ]
+    out = {o["test"]: o["reason"] for o in check_reviews(tests, ledger)}
+    assert out == {"changes": "the human review is changes-requested, not approved",
+                   "agent only": "only agent review(s) recorded, no human review"}
+    agents = {a["test"]: a for a in agent_reviews(tests, ledger)}
+    assert set(agents) == {"agent only", "pending"}
+    assert agents["pending"]["verdict"] == "changes-requested" and agents["pending"]["pending"]
+    assert check(_catalog(), tests, ledger)["agentReviewed"] == agent_reviews(tests, ledger)
+
+
+def test_review_command_appends_to_the_ledger(tmp_path, capsys):
+    from smm_automation import cli
+
+    suite = tmp_path / "s.robot"
+    suite.write_text("""*** Test Cases ***
+SDS-1 First
+    [Tags]    SDS-1    spechash:aaaa1111    review:pending
+    Log    x
+
+SDS-1 Second
+    [Tags]    SDS-1    SDS-2    spechash:1:bbbb2222    spechash:2:cccc3333
+    Log    x
+
+No Hash
+    [Tags]    SDS-3
+    Log    x
+""", encoding="utf-8")
+    ledger = tmp_path / "reviews.toml"
+    ledger.write_text("# header\n", encoding="utf-8")
+    base = ["--suites", str(suite), "--reviews", str(ledger), "review"]
+    assert cli.main([*base, "SDS-1", "--reviewer", "agent:gpt-6-sol", "--verdict", "approved", "--date", "2026-10-06"]) == 0
+    assert cli.main([*base, "SDS-1 First", "--reviewer", "Jane \"JD\" Doe", "--verdict", "approved", "--ref", "PR #7",
+                     "--notes", "line1\nline2", "--date", "2026-10-07"]) == 0
+    assert "remove its review:pending tag" in capsys.readouterr().out
+    entries = load_reviews(ledger)
+    assert [(e["test"], e["spechash"], e["reviewer"]) for e in entries] == [
+        ("SDS-1 First", "aaaa1111", "agent:gpt-6-sol"),
+        ("SDS-1 Second", "1:bbbb2222,2:cccc3333", "agent:gpt-6-sol"),
+        ("SDS-1 First", "aaaa1111", 'Jane "JD" Doe'),
+    ]
+    assert entries[2]["notes"] == "line1\nline2" and entries[2]["ref"] == "PR #7" and str(entries[2]["date"]) == "2026-10-07"
+    assert ledger.read_text(encoding="utf-8").startswith("# header\n")
+    assert cli.main([*base, "SDS-9", "--reviewer", "x", "--verdict", "approved"]) == 2
+    assert cli.main([*base, "No Hash", "--reviewer", "x", "--verdict", "approved"]) == 2
+    assert len(load_reviews(ledger)) == 3
 
 
 def test_html_to_text_and_normalisation():

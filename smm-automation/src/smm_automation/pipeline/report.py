@@ -26,6 +26,7 @@ from smm_automation.pipeline.drift import (
     PENDING_TAG,
     SDS_TAG,
     TestRef,
+    agent_reviews,
     check,
     hash_for,
     parse_hash_tags,
@@ -127,6 +128,7 @@ def _worst(verdicts: list[str]) -> str:
 def build_report(catalog: dict, tests: list[dict], meta: dict, known: list[TestRef], reviews: list[dict] | None = None) -> dict:
     tier = meta.get("Tier", "?")
     product = is_product_tier(tier)
+    agent = {a["test"]: a for a in agent_reviews(known, reviews or [])}
     specs_out = []
     for key, spec in catalog["specifications"].items():
         sid = int(key)
@@ -154,7 +156,8 @@ def build_report(catalog: dict, tests: list[dict], meta: dict, known: list[TestR
             "suspect": (spec.get("suspectCount") or 0) > 0,
             "tests": [
                 {**{k: t[k] for k in ("name", "suite", "status", "message", "elapsed")},
-                 "outcome": outcome(t, product), "pending": bool(t.get("pending")), "knownIssues": t.get("knownIssues", [])}
+                 "outcome": outcome(t, product), "pending": bool(t.get("pending")), "knownIssues": t.get("knownIssues", []),
+                 "agentReview": agent.get(t["name"])}
                 for t in run
             ],
             "notRun": [k.name for k in defined if k.name not in {t["name"] for t in run}],
@@ -225,6 +228,7 @@ def render_html(report: dict) -> str:
         tests = "<br>".join(
             f"{_badge(t.get('outcome', t['status']))} {e(t['name'])} <small>({t['elapsed']} s)</small>"
             + (f" {_badge('UNREVIEWED')}" if t.get("pending") else "")
+            + (f" <small>agent review: {e(t['agentReview']['verdict'])}</small>" if t.get("pending") and t.get("agentReview") else "")
             + (f" <small>known issue {e(', '.join(t['knownIssues']))}</small>" if t.get("knownIssues") else "")
             + (f"<br><small class='msg'>{e(t['message'][:400])}</small>" if t["message"] else "")
             for t in s["tests"]

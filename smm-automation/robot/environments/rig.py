@@ -1,6 +1,9 @@
 """Tier `rig`: the dedicated automation instrument (real appSMM on the RTC board, real hardware).
 
 The broker address is site specific: set SMM_RIG_BROKER (host or host:port).
+SMM_RIG_CONTROL (a site script, see smm_automation/rigcontrol.py) enables the appSMM/broker restart and log file
+tests; ``smm-auto run --operator console|dialog`` (or SMM_OPERATOR) the emergency stop and other operator steps.
+Check the set-up first with ``smm-auto doctor --tier rig``.
 """
 
 import os

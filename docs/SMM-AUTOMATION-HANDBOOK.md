@@ -228,9 +228,9 @@ sequenceDiagram
 
 | Tier | appSMM | Hardware | Broker | Use it for | Tests left out automatically |
 |---|---|---|---|---|---|
-| **mock** | A scripted fake appSMM inside the service | none | Embedded (127.0.0.1:1884) | Checking that the **framework** and the tests work. Fast (≈1–2 min). **Not evidence about appSMM.** | `needs:twin`, `needs:applog` |
-| **offline** | The **real** `appSMM.exe` on this PC | The **hardware twin** (simulated) | Mosquitto (127.0.0.1:1883) started by the TestBench runner | Real verdicts about appSMM, without an instrument. ≈17 min for the pilot. | none |
-| **rig** | The real appSMM on the instrument | Real hardware | The instrument's broker (`SMM_RIG_BROKER`) | Final verification on the dedicated automation instrument. | `needs:twin`, `requires:restart`, `needs:applog` |
+| **mock** | A scripted fake appSMM inside the service | none | Embedded (127.0.0.1:1884) | Checking that the **framework** and the tests work. Fast (≈1–2 min). **Not evidence about appSMM.** | `needs:twin`, `needs:hardware-action`, `needs:operator`, `needs:applog` |
+| **offline** | The **real** `appSMM.exe` on this PC | The **hardware twin** (simulated) | Mosquitto (127.0.0.1:1883) started by the TestBench runner | Real verdicts about appSMM, without an instrument. ≈17 min for the pilot. | `needs:operator` |
+| **rig** | The real appSMM on the instrument | Real hardware | The instrument's broker (`SMM_RIG_BROKER`) | Final verification on the dedicated automation instrument. | `needs:twin`; without `--operator`: `needs:hardware-action`, `needs:operator`; without a rig control script (`SMM_RIG_CONTROL`): `requires:restart`, `requires:broker-restart`, `needs:applog` |
 
 Tests tagged `review:pending` (no human review yet) **run on every tier**, but the report labels them **UNREVIEWED**
 and their specification can never be **VERIFIED** (Section 8.3). Use `--exclude-pending` to leave them out.
@@ -475,7 +475,8 @@ a self-review checklist and the verification steps. Also the best checklist for 
 
 **`.github\agents\smm-test-reviewer.agent.md`** — Instructions for the AI test reviewer: an independent, read-only
 second opinion that maps every spec outcome to an assertion, looks for false passes/false fails, runs the mock tier and
-returns APPROVE / CHANGES REQUESTED / REJECT per test. The human still decides and removes `review:pending`.
+returns APPROVE / CHANGES REQUESTED / REJECT per test, recorded in the ledger as `agent:<model>` (information only).
+The human still decides and removes `review:pending`.
 
 **`.github\workflows\smm-automation.yml`** — CI definition (Section 15).
 
@@ -631,8 +632,15 @@ cd D:\projects\AI-TestBench\smm-automation
 - **mock** — after changing the framework or writing a new test, to check it runs. Fast. Verdicts say nothing
   about appSMM.
 - **offline** — to get real verdicts about appSMM on your PC. Needs appSMM and Mosquitto. Pilot ≈17 minutes.
-- **rig** — on the automation instrument. Never restarts appSMM (tests tagged `requires:restart` are excluded) and
-  never uses the twin (tests tagged `needs:twin` are excluded); it cannot read appSMM's log files yet (`needs:applog`\n  excluded). mock excludes `needs:twin` and `needs:applog`.
+- **rig** — on the automation instrument. Never uses the twin (`needs:twin` excluded). What else runs depends on
+  what the site provides (Section 7.7): a rig control script (`SMM_RIG_CONTROL`) for `requires:restart`,
+  `requires:broker-restart` and `needs:applog`, an operator (`--operator console|dialog`) for `needs:hardware-action`
+  and `needs:operator`. mock excludes `needs:twin`, `needs:hardware-action`, `needs:operator` and `needs:applog`.
+
+Before a long run, `smm-auto doctor --tier <tier>` checks that the tier can run: service and API version, the pinned
+TestBench, `appSMM.exe` and port 1883 (offline), the broker, rig control and operator (rig), and lists the tags the run
+would exclude. `--deep` also starts the environment and asks appSMM for its state and version; on the rig this
+connects a Bridge to the instrument, so use it only when the instrument's owner agrees.
 
 ### 7.2 Most common commands
 
@@ -649,12 +657,14 @@ cd D:\projects\AI-TestBench\smm-automation
 | Fail the run on every failure, also known issues | add `--fail-on any` (default `new`: only failures without `known-issue:` count) |
 | Choose the output folder | add `--outdir results\my-run` |
 | Skip the traceability report | add `--no-report` |
+| Check the environment before a long run | `.\.venv\Scripts\smm-auto doctor --tier offline` (add `--deep` to ask appSMM) |
+| Run the operator tests on the rig | add `--operator console` (or `dialog`) after `run` |
 | Re-run only failed tests of a run | `.\.venv\Scripts\smm-auto run --tier offline --rerunfailed results\offline-…\output.xml` |
 
 Rules for the command line:
 
 - **Options for `smm-auto` itself** (`--scope`, `--catalog`, `--suites`, `--reviews`) go **before** the word `run`.
-- **Options for `run`** (`--tier`, `--outdir`, `--fail-on`, `--exclude-pending`, `--no-report`) go after `run`.
+- **Options for `run`** (`--tier`, `--operator`, `--outdir`, `--fail-on`, `--exclude-pending`, `--no-report`) go after `run`.
 - **Anything else after `run`** is passed straight to Robot Framework (`--include`, `--exclude`, `--test`,
   `--loglevel DEBUG`, `--rerunfailed`, …). See `.\.venv\Scripts\robot --help`.
 - `--include` can be repeated (tests matching any of them run). Tag patterns accept `*`, e.g. `--include SDS-2525*`.
@@ -662,7 +672,8 @@ Rules for the command line:
 ### 7.3 What `smm-auto run` does for you
 
 1. Picks the variable file `robot\environments\<tier>.py`.
-2. Excludes the tier's tags (`needs:twin`, `needs:applog` and/or `requires:restart`); `review:pending` only with `--exclude-pending`.
+2. Excludes the tests whose capability tag the tier lacks (it prints them and why: Sections 7.1 and 7.7);
+   `review:pending` only with `--exclude-pending`.
 3. Runs Robot on `robot\suites` (or the `--suites` you gave) into `results\<tier>-<date>-<time>\`.
 4. Builds the traceability report from `output.xml`, the catalog and the review ledger.
 5. Prints the failures by class (NEW FAIL, KNOWN FAIL, FIXED?) and exits with the number of **new** failures
@@ -677,7 +688,7 @@ It prints the exact `robot …` command it runs, so you can copy and adapt it.
 Useful when you want full control:
 
 ```powershell
-.\.venv\Scripts\robot --variablefile robot\environments\mock.py --exclude needs:twin --exclude needs:applog --outputdir results\manual robot\suites\pilot\shutdown.robot
+.\.venv\Scripts\robot --variablefile robot\environments\mock.py --exclude needs:twin --exclude needs:hardware-action --exclude needs:operator --exclude needs:applog --outputdir results\manual robot\suites\pilot\shutdown.robot
 .\.venv\Scripts\smm-auto report --output results\manual\output.xml
 ```
 
@@ -701,6 +712,35 @@ cd D:\projects\AI-TestBench\smm-automation
 ```
 
 Check it in a browser: http://127.0.0.1:8765/api/v1/health. Stop it with `Ctrl+C`.
+
+### 7.7 The rig: rig control script and operator
+
+The rig tier runs the real appSMM on the instrument, so the framework cannot restart appSMM, restart the broker or
+read the log files itself, and nobody presses the emergency stop unless an operator is there. Two optional
+site settings switch those tests on:
+
+- **Rig control script** — `SMM_RIG_CONTROL` holds a command (e.g. `python D:\rig\rig_control.py`, or a JSON list of
+  arguments; run without a shell) that implements `capabilities`, `restart-appsmm --down-ms <ms>`,
+  `restart-broker --down-ms <ms>` and `fetch-log <dir>` (the contract is in `src\smm_automation\rigcontrol.py`).
+  How it reaches the RTC board (ssh, a service on the board, a power switch…) is up to the site. Only the
+  subcommands it lists under `capabilities` are used: `restart-appsmm` enables `requires:restart`,
+  `restart-broker` enables `requires:broker-restart`, `fetch-log` enables `needs:applog`. `SMM_RIG_CONTROL_TIMEOUT`
+  (seconds, default 300) bounds each call. The log check compares appSMM's timestamps (rig clock) with this PC's
+  clock (2 s slack), so keep both NTP-synchronised.
+- **Operator** — `smm-auto run --tier rig --operator console` prints each manual step (e.g. "Press the EMERGENCY STOP
+  button… then release it") and waits until the operator types `done` (or `fail <reason>`); `--operator dialog`
+  shows a PASS/FAIL dialog instead. Each step waits `${OPERATOR_TIMEOUT}` (300 s). This enables
+  `needs:hardware-action` (the E-Stop tests) and `needs:operator`. CI never has an operator.
+
+Racks are still `needs:twin` on the rig (e.g. SDS-2535547): putting racks on the real instrument needs an agreed
+clean-up procedure first.
+
+```powershell
+$env:SMM_RIG_BROKER = "10.0.1.111:1883"
+$env:SMM_RIG_CONTROL = "python D:\rig\rig_control.py"
+.\.venv\Scripts\smm-auto doctor --tier rig --operator console     # no appSMM traffic without --deep
+.\.venv\Scripts\smm-auto run --tier rig --operator console
+```
 
 ---
 
@@ -967,7 +1007,14 @@ A **second person** checks, against the specification:
 - [ ] The test passed (or failed for a documented reason) on offline/rig.
 
 Then the reviewer records the review in `smm-automation\catalog\reviews.toml` and removes `review:pending` in the
-same commit (Section 9.10):
+same commit (Section 9.10). `smm-auto review` writes the entry with the test's current `spechash:` value(s):
+
+```powershell
+.\.venv\Scripts\smm-auto review "SDS-2428419 E-Stop Is Notified After ShutdownResponse" --reviewer "Jane Doe" --verdict approved --ref "PR #12"
+.\.venv\Scripts\smm-auto review SDS-2428419 --reviewer "Jane Doe" --verdict approved   # every test tagged SDS-2428419
+```
+
+The entry it appends:
 
 ```toml
 [[review]]
@@ -976,11 +1023,16 @@ spechash = "3fab7cb6"          # the test's spechash tag value
 reviewer = "Jane Doe"          # a person; agent reviews are recorded as "agent:<model>" and do not count
 date = 2026-10-07
 ref = "PR #12"
-verdict = "approved"
+verdict = "approved"             # approved | approved-with-notes | changes-requested | rejected
 ```
 
+Only a person's `approved` / `approved-with-notes` counts (an entry without a verdict is read as `approved`).
+`changes-requested` and `rejected` are kept as history. The smm-test-reviewer agent records its verdicts with
+`--reviewer agent:<model>`; drift and the report show them ("Agent reviews", "agent review: …" next to UNREVIEWED)
+as input for you, never as the review.
+
 `smm-auto drift --strict` (and CI) fails with **UNRECORDED REVIEW** when a test has no `review:pending` tag but no
-human ledger entry for its current `spechash:`; so a removed tag without a recorded review, and a spec change after a
+approving human ledger entry for its current `spechash:`; so a removed tag without a recorded review, and a spec change after a
 review, are both caught. The `.github\CODEOWNERS` file makes the test owners required reviewers of suites and ledger.
 
 ### 9.9 Useful patterns (copy-paste)
@@ -1091,7 +1143,7 @@ specialist. You do not install them: anyone who opens this repository with GitHu
 | Agent | What it does | Changes files? |
 |---|---|---|
 | **smm-test-author** | Writes a new Robot test for one specification, checks it itself and runs it on the mock tier | Yes: adds the test to a suite |
-| **smm-test-reviewer** | Checks existing tests against their specification and gives a verdict per test | No: it only reports |
+| **smm-test-reviewer** | Checks existing tests against their specification and gives a verdict per test | No: it only reports and records its verdict as `agent:<model>` in `catalog\reviews.toml` |
 
 **What you need once**
 
@@ -1133,12 +1185,15 @@ open questions, and any suspected appSMM deviation ("candidate finding"). Read t
 review.
 
 **Step 4: independent review (recommended).** Start a **new** chat (so the reviewer does not share the author's
-reasoning), choose **smm-test-reviewer** in the same way, and ask:
+reasoning) **on a different model than the author's** (pick it with `/model`; a second model does not share the first
+one's blind spots), choose **smm-test-reviewer** in the same way, and ask:
 
 - *"Review the review:pending tests for SDS-2428419."*
 - *"Review all review:pending tests in shutdown.robot."*
 
-It returns a table with **APPROVE**, **CHANGES REQUESTED** or **REJECT** per test, and the exact changes it proposes.
+It returns a table with **APPROVE**, **CHANGES REQUESTED** or **REJECT** per test, and the exact changes it proposes,
+and records each verdict in the ledger as `agent:<model>` (`smm-auto review … --reviewer agent:<model>`), so drift
+and the report show it until you review.
 If changes are requested, paste them into the author chat (*"Apply these review comments: ..."*) or edit the test
 yourself, then review again.
 
@@ -1307,8 +1362,8 @@ wait by accident. If a message might arrive **before** your send (e.g. a notific
 | `Stop Test Environment` | — | Stops everything the service started. |
 | `Get Environment Status` | — | Returns a dictionary: `tier`, `broker`, `appsmm`, `hardware` (with `kind`: `none`/`twin`/`external`). |
 | `Current Tier Should Be` | `*tiers` | Fails unless the tier is one of those given. |
-| `Restart appSMM` | `down=1s` | Kills appSMM (no goodbye) and starts it again after `down`. Offline/mock only → tag `requires:restart`. |
-| `Restart MQTT Broker` | `down=2s` | Takes the broker down; appSMM and Bridge lose the connection. Tag `requires:restart`. |
+| `Restart appSMM` | `down=1s` | Kills appSMM (no goodbye) and starts it again after `down`. On the rig through the rig control script (`restart-appsmm`) → tag `requires:restart`. |
+| `Restart MQTT Broker` | `down=2s` | Takes the broker down; appSMM and Bridge lose the connection. On the rig through `restart-broker` → tag `requires:broker-restart`. |
 
 ### 10.4 Bridge session
 
@@ -1356,7 +1411,9 @@ Valid state names: `PowerOn`, `NotInitialized`, `Initializing`, `Idle`, `Clearin
 | Keyword | Arguments | What it does |
 |---|---|---|
 | `Trigger Hardware Action` | `action`, `arg=value…` | Operates the twin. Actions: `emergencyStop`; `loadInputTray` (`tray=` or `trayIndex=`); `removeInputTray`; `insertOutputTray`; `removeOutputTray`; `insertFrontIn` (`rack=` or `rackId=`, `firstSample=`); `removeFrontIn`; `removeFrontOut`; `removeRack` (`key=`); `pauseLane` / `resumeLane` / `toggleLaneError` (`area=Input` or `Output`); `toggleOutputAvailable`. |
-| `Trigger Emergency Stop` | — | Presses the twin's E-Stop. |
+| `Trigger Emergency Stop` | — | Presses the twin's E-Stop; on the rig the operator presses (and releases) the real one (`--operator`). Tag `needs:hardware-action` and start with `Require Hardware Action` when it is the test's only hardware step. |
+| `Hardware Action Is Possible` / `Require Hardware Action` | `action=emergencyStop` | True / skips unless the twin or an operator can do the action. |
+| `Operator Action` | `instruction`, `timeout=` | Shows the instruction to the operator (console: type `done` or `fail <reason>`; dialog: PASS/FAIL) and waits (`${OPERATOR_TIMEOUT}`, 300 s). Tag `needs:operator`. |
 | `Get Hardware Snapshot` | — | Returns the twin's state (state, trays, racks, lanes…). |
 | `Hardware State Should Be` | `expected` | Compares the twin's state (e.g. `Halted`). |
 | `Clear Hardware Twin Racks` | — | Removes every rack from the twin; returns their ids (empty list on tiers without twin). |
@@ -1395,9 +1452,11 @@ Time Between Should Be At Least    ${request}    ${entry}    ${SDS_2532404_LIMIT
 Hardware Fault Should Have Been Applied    InitializeCmd
 ```
 
-#### 10.8.3 appSMM log files (offline; tag `needs:applog`)
+#### 10.8.3 appSMM log files (offline; rig with `fetch-log`; tag `needs:applog`)
 
-appSMM logs to SmartInspect `.sil` files configured in `trace.config` next to `appSMM.exe`
+On the rig the library first copies the
+log files to the PC with the rig control's `fetch-log` (section 7.7); the rig clock must be NTP-synchronised with the
+PC, since the window is computed from the PC clock. appSMM logs to SmartInspect `.sil` files configured in `trace.config` next to `appSMM.exe`
 (`file(filename=D:\smm\logs\appSMM.sil, rotate=daily, …)`, files `appSMM-<UTC time>.sil`). The library reads them
 directly (`smm_automation\sil.py`); ICD traffic appears in the `BridgeInterface` session as
 `RX(/is/iw/rx): {…}` (received by appSMM) and `TX(/is/iw/tx): {…}` (published).
@@ -1452,9 +1511,12 @@ for NotInitialized, Idle → E-Stop for E-Stop).
 | `spechash:<8 hex>` | every test | Fingerprint of the spec text the test was written/reviewed against. **Copy from the brief.** A test with several `SDS-<id>` tags carries one `spechash:<id>:<8 hex>` per specification instead (a plain `spechash:` only counts on a single-spec test). | Author / reviewer |
 | `review:pending` | new tests | Not reviewed by a human yet. Runs everywhere, shown as UNREVIEWED; the spec is never VERIFIED. Remove only with a ledger entry in `catalog\reviews.toml`. | Author adds, reviewer removes |
 | `known-issue:FINDING-<n>` | tests failing because of a documented candidate finding | Failure counts as KNOWN FAIL (run stays green); passing shows FIXED?. Ignored on mock. | Triage (Section 8.4) |
-| `needs:twin` | tests that drive the hardware twin (including COP faults) | Excluded on mock and rig. | Author |
-| `needs:applog` | tests that read appSMM's log files | Excluded on mock and rig (until the rig's logs can be fetched). | Author |
-| `requires:restart` | tests that restart appSMM or the broker | Excluded on rig. | Author |
+| `needs:twin` | tests that drive the hardware twin (racks, COP faults, COP trace) | Excluded on mock and rig. | Author |
+| `needs:hardware-action` | tests whose only hardware step is the emergency stop | Runs offline (twin) and on the rig with `--operator`. | Author |
+| `needs:operator` | tests with an `Operator Action` step | Runs only with `--operator console|dialog`. | Author |
+| `needs:applog` | tests that read appSMM's log files | Excluded on mock; on the rig only with a rig control that has `fetch-log`. | Author |
+| `requires:restart` | tests that restart appSMM | On the rig only with a rig control that has `restart-appsmm`. | Author |
+| `requires:broker-restart` | tests that restart the MQTT broker | On the rig only with a rig control that has `restart-broker`. | Author |
 | `area:<name>` | suite (`Test Tags`) | Area/suite name, for selection and statistics. | Suite |
 | `pilot` | suite (`Test Tags`) | Belongs to the pilot scope. | Suite |
 | `nospec:<kind>` | tests of behaviour no specification states (`nospec:robustness`, `nospec:state-matrix`) | Instead of `SDS-<id>`/`spechash:`; counts for no specification, listed apart in drift and the report (Section 9.13). | Author / generator |
@@ -1484,8 +1546,9 @@ for NotInitialized, Idle → E-Stop for E-Stop).
 | **SMM02** documentation | Every test has `[Documentation]` that quotes its specification (at least 5 consecutive words of the spec text) or, for a variant, names the spec id. A `nospec:` test only needs a documentation. | Copy the spec text from the brief. |
 | **SMM03** literal-timeout | `timeout=` / `duration=` and the `Wait Until Keyword Succeeds` timeout are variables. | Tier variable (Section 10.1) or `${SDS_<id>_LIMIT}`. |
 | **SMM04** twin-tag | A test that uses a hardware keyword outside `IF` is tagged `needs:twin`; a `needs:twin` test uses at least one. | Add/remove the tag, or put the hardware step inside `IF    '${TIER}' == 'offline'` to keep it tier-adaptive. |
-| **SMM05** restart-tag | Same for `Restart appSMM` / `Restart MQTT Broker` and `requires:restart`. | Add/remove the tag. |
+| **SMM05** restart-tag | Same for `Restart appSMM` and `requires:restart`, and for `Restart MQTT Broker` and `requires:broker-restart`. | Add/remove the tag. |
 | **SMM06** applog-tag | Same for the appSMM log keywords (Section 10.8.3) and `needs:applog`. | Add/remove the tag. |
+| **SMM07** action-tag | Same for `Trigger Emergency Stop` and `needs:hardware-action` (`needs:twin` also satisfies it), and for `Operator Action` and `needs:operator`. | Add/remove the tag. |
 
 Keyword use is followed through user keywords (`smm.resource`, the suite's own keywords, `Run Keyword…`), so
 `Restart appSMM And Wait Until NotInitialized` counts as a restart. `Run Keyword If/Unless` counts as conditional.
@@ -1615,7 +1678,7 @@ Use `windchill-mcp-server\docs\windchill-without-ai.md` for RV&S queries by hand
 | **RETIRED** | A covered spec is in a retired state (`retired_states`, default Rejected / To Be Deleted / Deleted) | Remove the tests or re-target them to the replacing spec. |
 | **SUSPECT** | RV&S marks the spec as suspect (an upstream item changed) | Re-review the covering tests. (Informational.) |
 | **PENDING** | Tests tagged `review:pending` | Review them. (Informational.) |
-| **UNRECORDED REVIEW** | A test without `review:pending` has no human entry in `catalog\reviews.toml` for its current `spechash:` | Record the review (Section 9.8), or put `review:pending` back. |
+| **UNRECORDED REVIEW** | A test without `review:pending` has no approving human entry in `catalog\reviews.toml` for its current `spechash:` (agent entries and `changes-requested`/`rejected` do not count) | Record the review with `smm-auto review` (Section 9.8), or put `review:pending` back. |
 | **LINT** | A suite breaks a test rule (Section 11.3) | Fix the test (`smm-auto lint` shows file and line). |
 | Without a specification | Tests tagged `nospec:<kind>` (matrix cells without a spec, robustness; Section 9.13) | Nothing; they are listed so they are not mistaken for coverage. (Informational.) |
 | Area guessed | The spec's suite came from `[areas]` keywords, not from the scope file | List it under its area in `[specifications]`. (Informational.) |
@@ -1797,7 +1860,7 @@ Guidelines:
   `smm-auto run --tier` only knows `mock`, `offline`, `rig`.
 - **A genuinely new tier** (e.g. real appSMM + real hardware on a bench PC): add it to `presetFor` in
   `service\src\environment.ts` (broker kind, appSMM kind, hardware kind), to the tier check in `server.ts`, to
-  `TIER_EXCLUDES` in `cli.py`, and create `robot\environments\<tier>.py`.
+  `TIER_CAPABILITIES` in `capabilities.py`, and create `robot\environments\<tier>.py`.
 
 ### 13.8 Updating the SMM TestBench version (the pin)
 
@@ -2124,6 +2187,7 @@ See checklist 18.3.
 | `No keyword with name 'Send ICD Message InitializationRequest'` | Only one space between keyword and argument | Use **at least 2 spaces** (or a tab) between cells |
 | `No keyword with name …` (spelled right) | Missing `Resource    ../../resources/smm.resource` in Settings | Add it |
 | Test is SKIPPED with "needs the hardware twin" | `needs:twin` tests are excluded/skipped on mock and rig | Expected — run on offline |
+| A test you expected did not run | The tier lacks its capability: `smm-auto run` prints "Excluded (capability missing)" | Run `smm-auto doctor --tier <tier>`; on the rig set `SMM_RIG_CONTROL` / `--operator` (Section 7.7) |
 | Test fails only sometimes (timing) | Timeout too short for the real system | Increase the variable in `robot\environments\<tier>.py`; **never** add `Sleep` |
 | `No … within … ms` / `Sequence step x/y not seen` | Message not sent, wrong field value, or filter too strict | Open the log: the failure shows what *was* received; check the spelling of field names (case-sensitive) |
 | Send fails with schema errors (HTTP 400) | Body doesn't match the ICD schema | Fix the body; use `strict=False` **only** in negative tests |
@@ -2157,7 +2221,7 @@ broker/appSMM/hardware output.
 **Can a test leave the system broken for the next test?** It can, which is why every test starts with a *Given* step that
 brings the SMM to a known state (`Bring SMM To State`), tests that load racks use `Finish SMM Test And Empty The
 Instrument` as teardown, and each suite stops its environment in the suite teardown. Tests that restart appSMM or the
-broker are tagged `requires:restart`.
+broker are tagged `requires:restart` / `requires:broker-restart`.
 
 **What if appSMM is right and the spec is wrong?** Not our decision: raise it with the spec owner. The test follows
 RV&S. Until it's resolved, keep the test failing (a failing test is the evidence) and record the finding in the README
@@ -2233,7 +2297,9 @@ cd D:\projects\AI-TestBench\smm-automation
 .\.venv\Scripts\smm-auto ingest                          # download specs/requirements/stories/ETs
 .\.venv\Scripts\smm-auto drift                           # tests vs RV&S (includes lint)
 .\.venv\Scripts\smm-auto accept 2428419                  # accept a checked RV&S state/link change
-.\.venv\Scripts\smm-auto lint                            # test rules SMM01-05
+.\.venv\Scripts\smm-auto lint                            # test rules SMM01-07
+.\.venv\Scripts\smm-auto review SDS-2428419 --reviewer "Jane Doe" --verdict approved --ref "PR #12"   # record a review (9.8)
+.\.venv\Scripts\smm-auto doctor --tier offline           # can this tier run? (--deep: ask appSMM)
 .\.venv\Scripts\smm-auto briefs --spec 2428419           # writing aid for one spec
 .\.venv\Scripts\smm-auto matrix                          # regenerate the state x request matrix suite (9.13)
 

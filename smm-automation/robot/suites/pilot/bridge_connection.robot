@@ -25,7 +25,7 @@ SDS-2854109 Bridge Crash Puts The System Into E-Stop
 
 SDS-2854109 Broker Outage Puts The System Into E-Stop
     [Documentation]    Variant of 2854109 from ET 2855849: the MQTT broker is killed and started again.
-    [Tags]    SDS-2854109    spechash:293117f8    requires:restart    review:pending
+    [Tags]    SDS-2854109    spechash:293117f8    requires:broker-restart    review:pending
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
     Restart MQTT Broker    down=3s
     Wait Until Keyword Succeeds    ${STARTUP_TIMEOUT}    2s    Bridge Should Be Connected

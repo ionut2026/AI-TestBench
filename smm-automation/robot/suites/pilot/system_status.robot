@@ -127,9 +127,10 @@ SDS-2653086 E-Stop After A Fatal Error Is Notified From Idle
     [Documentation]    If the SMM system goes to E-Stop following a fatal error, appSMM software publishes
     ...    a SystemStatusNotification message which notifies that system status changed from "Idle"
     ...    (PreviousState) to "E-Stop" (CurrentState).
-    ...    The fatal error is the hardware emergency stop of the twin.
-    [Tags]    SDS-2653086    spechash:068ff31d    needs:twin    review:pending
-    Require Hardware Twin
+    ...    The fatal error is the hardware emergency stop (the twin's offline; on the rig the operator presses the
+    ...    E-Stop button).
+    [Tags]    SDS-2653086    spechash:068ff31d    needs:hardware-action    review:pending
+    Require Hardware Action
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
     Trigger Emergency Stop
     Wait For Message    SystemStatusNotification    timeout=${RESPONSE_TIMEOUT}

@@ -17,9 +17,12 @@ RULES = """\
 2. Name: `SDS-<id> <behaviour in title case>`. Put the specification text verbatim into `[Documentation]`
    and explain any interpretation you made on extra `...` lines.
 3. Tags: exactly the tags under "Tags" below, plus `review:pending`, plus capability tags:
-   `needs:twin` when the test drives the simulated hardware (Trigger Hardware Action, Wait For Hardware
-   Command as a *required* step, or COP faults with `Set Hardware Faults`), `requires:restart` when it restarts
-   appSMM or the broker, `needs:applog` when it reads appSMM's log files (`ICD Messages Should Be Logged By appSMM`).
+   `needs:twin` when the test drives the simulated hardware (Trigger Hardware Action other than the emergency stop,
+   racks, Wait For Hardware Command as a *required* step, or COP faults with `Set Hardware Faults`);
+   `needs:hardware-action` (with `Require Hardware Action`) when its only hardware step is `Trigger Emergency Stop`,
+   which the twin does offline and an operator does on the rig; `needs:operator` when it uses `Operator Action`;
+   `requires:restart` when it restarts appSMM; `requires:broker-restart` when it restarts the MQTT broker;
+   `needs:applog` when it reads appSMM's log files (`ICD Messages Should Be Logged By appSMM`).
    A test that
    covers several specifications carries `SDS-<id>` and `spechash:<id>:<hash>` for each of them
    (a plain `spechash:<hash>` only works on a single-specification test).
