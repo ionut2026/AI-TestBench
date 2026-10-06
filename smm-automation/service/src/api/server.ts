@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import { timingSafeEqual } from 'node:crypto'
 import { join } from 'node:path'
 import { BridgeSession, ExpectationError, WaitTimeoutError, summarize } from '../bridgeSession'
 import { CommandSentError, CommandTimeoutError, Environment, UnavailableError, presetFor, type EnvironmentConfig, type Tier } from '../environment'
@@ -11,7 +12,7 @@ import { ICD_SCHEMA_VERSION, MESSAGES, testbenchInfo, type BeaconSettings, type 
  * Versioned HTTP/JSON API of the SMM automation service. Breaking changes need a new major
  * API_VERSION and a new /api/vN prefix; the Robot library checks the major version at start-up.
  */
-export const API_VERSION = '1.3.0'
+export const API_VERSION = '1.4.0'
 const PREFIX = '/api/v1'
 
 export class HttpError extends Error {
@@ -29,6 +30,8 @@ export interface ServiceOptions {
   timelineCap?: number
   /** COP trace entries kept (older ones are dropped and reported in /environment). */
   traceCap?: number
+  /** API token: every request except GET /health needs "Authorization: Bearer <token>". */
+  token?: string
 }
 
 /** The service state: one environment and one Bridge session at a time (one rig per service). */
@@ -36,9 +39,11 @@ export class AutomationService {
   readonly env: Environment
   readonly session: BridgeSession
   private routes: { method: string; pattern: RegExp; keys: string[]; handler: Handler }[] = []
+  private readonly token?: Buffer
 
   constructor(options: ServiceOptions = {}) {
     const dir = options.testbenchDir ?? testbenchInfo.dir
+    if (options.token) this.token = Buffer.from(`Bearer ${options.token}`)
     this.env = new Environment(join(dir, 'hwsim'), options.traceCap)
     this.session = new BridgeSession(join(dir, 'simulator', 'resources', 'schemas'), options.timelineCap)
     this.defineRoutes()
@@ -54,7 +59,7 @@ export class AutomationService {
     const { env, session } = this
 
     // ---- service
-    this.route('GET', '/health', () => ({ ok: true, apiVersion: API_VERSION, testbench: testbenchInfo, icdVersion: ICD_SCHEMA_VERSION }))
+    this.route('GET', '/health', () => ({ ok: true, apiVersion: API_VERSION, testbench: testbenchInfo, icdVersion: ICD_SCHEMA_VERSION, auth: Boolean(this.token) }))
     this.route('GET', '/icd', () => ({ version: ICD_SCHEMA_VERSION, messages: MESSAGES, schemas: session.registry.messageNames }))
     this.route('GET', '/schemas/:name', ({ params }) => {
       const schema = session.registry.schemaFor(params.name)
@@ -192,6 +197,9 @@ export class AutomationService {
   async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', 'http://localhost')
     try {
+      if (!this.authorized(req, url.pathname.replace(/\/$/, '') === `${PREFIX}/health`)) {
+        throw new HttpError(401, 'Missing or wrong API token (header "Authorization: Bearer <token>")')
+      }
       const candidates = this.routes.filter((r) => r.pattern.test(url.pathname))
       if (!candidates.length) throw new HttpError(404, `No route ${url.pathname}`)
       const route = candidates.find((r) => r.method === req.method)
@@ -201,13 +209,21 @@ export class AutomationService {
       const body = await readJson(req)
       send(res, 200, (await route.handler({ body, params, query: url.searchParams })) ?? { ok: true })
     } catch (err) {
-      if (err instanceof HttpError) send(res, err.status, { error: err.message, details: err.details })
+      if (err instanceof HttpError && err.status === 401) send(res, 401, { error: err.message, kind: 'unauthorized' })
+      else if (err instanceof HttpError) send(res, err.status, { error: err.message, details: err.details })
       else if (err instanceof FaultError || err instanceof CopFaultError) send(res, 400, { error: err.message })
       else if (err instanceof WaitTimeoutError || err instanceof CommandTimeoutError) send(res, 408, { error: err.message, kind: 'timeout', details: err.details })
       else if (err instanceof UnavailableError) send(res, 409, { error: err.message, kind: 'unavailable' })
       else if (err instanceof ExpectationError || err instanceof CommandSentError) send(res, 409, { error: err.message, kind: 'expectation', details: err.details })
       else send(res, 500, { error: (err as Error).message ?? String(err), kind: 'internal' })
     }
+  }
+
+  /** /health stays open (liveness and API version check); everything else needs the token when one is set. */
+  private authorized(req: IncomingMessage, health: boolean): boolean {
+    if (!this.token || (health && req.method === 'GET')) return true
+    const given = Buffer.from(String(req.headers.authorization ?? ''))
+    return given.length === this.token.length && timingSafeEqual(given, this.token)
   }
 
   listen(port: number, host: string): Promise<Server> {

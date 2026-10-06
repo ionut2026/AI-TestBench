@@ -133,7 +133,8 @@ troubleshooting) is [`docs/SMM-AUTOMATION-HANDBOOK.md`](SMM-AUTOMATION-HANDBOOK.
   at a pinned commit:
   - It acts as the SMM Bridge and runs the tier environment: a mock appSMM, the real appSMM.exe plus the hardware
     twin, or the instrument.
-  - It exposes HTTP API v1, which the Robot library `SMMTestbench.py` drives.
+  - It exposes HTTP API v1, which the Robot library `SMMTestbench.py` drives. Every request except `/health` needs
+    the service's API token (`SMM_AUTOMATION_TOKEN`, or the one the service generates into `.service/token-<port>`).
 - **Traceability.** Tests only carry `SDS-<id>` and `spechash:`; all other links come from RV&S at report time.
   - `smm-auto drift` flags stale, orphan and uncovered tests, RV&S state/link changes of covered specifications
     (against a baseline accepted with `smm-auto accept`) and retired specifications.

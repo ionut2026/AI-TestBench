@@ -22,7 +22,7 @@ flowchart LR
 
 | Part | Where | What |
 |---|---|---|
-| Automation service | `service/` (TypeScript) | Headless service built **from the SMM TestBench sources at the commit pinned in `testbench.lock.json`**. Acts as the SMM Bridge (MQTT, ICD v7 schemas), runs the environment of a tier (broker, appSMM, hardware twin), records a timeline of every message and offers waits/sequence matching over HTTP API v1 (`127.0.0.1:8765/api/v1`). |
+| Automation service | `service/` (TypeScript) | Headless service built **from the SMM TestBench sources at the commit pinned in `testbench.lock.json`**. Acts as the SMM Bridge (MQTT, ICD v7 schemas), runs the environment of a tier (broker, appSMM, hardware twin), records a timeline of every message and offers waits/sequence matching over HTTP API v1 (`127.0.0.1:8765/api/v1`; every request except `/health` needs the API token, see the handbook section 14.3). |
 | Robot keyword library | `src/smm_automation/SMMTestbench.py` | `Connect As Bridge`, `Send ICD Message`, `Wait For Message`, `Wait For Message Sequence`, `Message Should Not Arrive`, `Wait For Hardware Command`, schema checks, timeline HTML in the log... Starts the service automatically. |
 | Robot resources / tiers | `robot/resources/smm.resource`, `robot/environments/<tier>.py` | Shared setup/teardown and the timeouts per tier. |
 | Suites | `robot/suites/<scope>/<area>.robot` | Tests tagged `SDS-<spec id>` and `spechash:<8 hex>`. Nothing else is linked in the tests: requirements, user stories and ETs come from RV&S at report time. |

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import atexit
 import os
+import secrets
 import shutil
 import subprocess
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import requests
 
@@ -18,10 +20,27 @@ SUPPORTED_API_MAJOR = 1
 DEFAULT_URL = os.environ.get("SMM_AUTOMATION_URL", "http://127.0.0.1:8765/api/v1")
 SERVICE_DIR = FRAMEWORK_ROOT / "service"
 SERVICE_BUNDLE = SERVICE_DIR / "dist" / "smm-automation-service.mjs"
+# Where a local service writes its API token (service/src/main.ts): .service/token-<port>.
+TOKEN_DIR = FRAMEWORK_ROOT / ".service"
+TOKEN_ENV = "SMM_AUTOMATION_TOKEN"
+
+
+def token_file(url: str) -> Path:
+    return TOKEN_DIR / f"token-{urlparse(url).port or 8765}"
+
+
+def read_token(url: str) -> str | None:
+    """The API token: $SMM_AUTOMATION_TOKEN, else the token file the local service on that port wrote."""
+    if os.environ.get(TOKEN_ENV):
+        return os.environ[TOKEN_ENV]
+    try:
+        return token_file(url).read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
 
 
 class ServiceError(Exception):
-    """An error answer of the service. kind: timeout | expectation | unavailable | internal | http."""
+    """An error answer of the service. kind: timeout | expectation | unavailable | unauthorized | internal | http | unreachable."""
 
     def __init__(self, status: int, message: str, kind: str = "http", details: Any = None):
         super().__init__(message)
@@ -31,31 +50,46 @@ class ServiceError(Exception):
 
 
 class ServiceClient:
-    def __init__(self, url: str = DEFAULT_URL, request_margin_s: float = 10.0):
+    def __init__(self, url: str = DEFAULT_URL, request_margin_s: float = 10.0, token: str | None = None):
         self.url = url.rstrip("/")
         self.http = requests.Session()
         self.margin = request_margin_s
+        self.token = token
 
     # ------------------------------------------------------------------ plumbing
 
     def call(self, method: str, path: str, body: dict | None = None, wait_s: float = 0.0, **params: Any) -> Any:
-        try:
-            res = self.http.request(
-                method,
-                f"{self.url}{path}",
-                json=body if method != "GET" else None,
-                params={k: v for k, v in params.items() if v is not None} or None,
-                timeout=(5, wait_s + self.margin),
-            )
-        except requests.ConnectionError as err:
-            raise ServiceError(0, f"SMM automation service not reachable at {self.url}: {err}", "unreachable") from err
+        if self.token is None:
+            self.token = read_token(self.url)
+        res = self._request(method, path, body, wait_s, params)
+        if res.status_code == 401:
+            # The service may have been restarted with a new token since it was read: read it again once.
+            fresh = read_token(self.url)
+            if fresh and fresh != self.token:
+                self.token = fresh
+                res = self._request(method, path, body, wait_s, params)
         try:
             data = res.json()
         except ValueError:
             data = {"error": res.text}
+        if res.status_code == 401:
+            raise ServiceError(401, f"{data.get('error', res.reason)}: set ${TOKEN_ENV} or check {token_file(self.url)}", "unauthorized")
         if res.status_code >= 400:
             raise ServiceError(res.status_code, data.get("error", res.reason), data.get("kind", "http"), data.get("details"))
         return data
+
+    def _request(self, method: str, path: str, body: dict | None, wait_s: float, params: dict) -> requests.Response:
+        try:
+            return self.http.request(
+                method,
+                f"{self.url}{path}",
+                json=body if method != "GET" else None,
+                params={k: v for k, v in params.items() if v is not None} or None,
+                headers={"Authorization": f"Bearer {self.token}"} if self.token else None,
+                timeout=(5, wait_s + self.margin),
+            )
+        except requests.ConnectionError as err:
+            raise ServiceError(0, f"SMM automation service not reachable at {self.url}: {err}", "unreachable") from err
 
     def get(self, path: str, **params: Any) -> Any:
         return self.call("GET", path, **params)
@@ -178,18 +212,21 @@ class ServiceClient:
 
 _spawned: subprocess.Popen | None = None
 _spawned_url = DEFAULT_URL
+_spawned_token: str | None = None
 
 
 def ensure_service(client: ServiceClient, autostart: bool = True, log_file: Path | None = None, timeout_s: float = 30) -> dict:
     """Returns /health of a running service; starts the bundled service locally if allowed and needed."""
-    global _spawned, _spawned_url
+    global _spawned, _spawned_url, _spawned_token
     try:
         health = client.health()
     except ServiceError:
         if not autostart:
             raise
         _spawned_url = client.url
-        _spawned = _spawn_service(client.url, log_file)
+        _spawned_token = os.environ.get(TOKEN_ENV) or secrets.token_hex(24)
+        client.token = _spawned_token
+        _spawned = _spawn_service(client.url, log_file, _spawned_token)
         deadline = time.monotonic() + timeout_s
         while True:
             try:
@@ -207,9 +244,7 @@ def ensure_service(client: ServiceClient, autostart: bool = True, log_file: Path
     return health
 
 
-def _spawn_service(url: str, log_file: Path | None) -> subprocess.Popen:
-    from urllib.parse import urlparse
-
+def _spawn_service(url: str, log_file: Path | None, token: str) -> subprocess.Popen:
     if not SERVICE_BUNDLE.exists():
         raise ServiceError(0, f"{SERVICE_BUNDLE} is missing: run 'npm install' and 'npm run build' in {SERVICE_DIR}")
     node = shutil.which("node")
@@ -220,6 +255,7 @@ def _spawn_service(url: str, log_file: Path | None) -> subprocess.Popen:
     proc = subprocess.Popen(
         [node, str(SERVICE_BUNDLE), "--port", str(parsed.port or 8765), "--host", parsed.hostname or "127.0.0.1"],
         cwd=SERVICE_DIR,
+        env={**os.environ, TOKEN_ENV: token},
         stdout=out,
         stderr=subprocess.STDOUT,
         creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
@@ -235,7 +271,7 @@ def stop_spawned_service() -> None:
         return
     try:
         # Lets the service stop appSMM/Mosquitto it started before it exits.
-        ServiceClient(_spawned_url).stop_environment()
+        ServiceClient(_spawned_url, token=_spawned_token).stop_environment()
     except Exception:  # noqa: BLE001
         pass
     proc.terminate()
@@ -243,3 +279,10 @@ def stop_spawned_service() -> None:
         proc.wait(10)
     except subprocess.TimeoutExpired:
         proc.kill()
+    # terminate() gives the service no chance to remove its token file.
+    try:
+        path = token_file(_spawned_url)
+        if path.read_text(encoding="utf-8").strip() == _spawned_token:
+            path.unlink()
+    except OSError:
+        pass

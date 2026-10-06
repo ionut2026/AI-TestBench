@@ -1,3 +1,7 @@
+import { randomBytes } from 'node:crypto'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { AutomationService, API_VERSION } from './api/server'
 import { testbenchInfo } from './testbench'
 
@@ -13,14 +17,22 @@ const cap = (value: string | undefined) => (value ? Math.max(100, Number(value))
 const timelineCap = cap(arg('timeline-cap') ?? process.env.SMM_TIMELINE_CAP)
 const traceCap = cap(arg('trace-cap') ?? process.env.SMM_TRACE_CAP)
 
-const service = new AutomationService({ testbenchDir, timelineCap, traceCap })
+// API token (also on localhost): given, or generated and written to <framework>/.service/token-<port> where the
+// Python client (smm_automation.client) reads it. src/ and dist/ are both two levels below the framework root.
+const token = arg('token') ?? process.env.SMM_AUTOMATION_TOKEN ?? randomBytes(24).toString('hex')
+const tokenFile = arg('token-file') ?? process.env.SMM_AUTOMATION_TOKEN_FILE ?? join(fileURLToPath(new URL('../../.service/', import.meta.url)), `token-${port}`)
+
+const service = new AutomationService({ testbenchDir, timelineCap, traceCap, token })
 service.env.on('log', (l) => {
   if (process.env.SMM_AUTOMATION_QUIET !== '1') console.log(`[${new Date(l.time).toISOString()}] ${l.source}: ${l.line}`)
 })
 
 const server = await service.listen(port, host)
+mkdirSync(dirname(tokenFile), { recursive: true })
+writeFileSync(tokenFile, token, { encoding: 'utf8', mode: 0o600 })
 const tb = testbenchInfo
 console.log(`SMM automation service ${API_VERSION} on http://${host}:${port}/api/v1`)
+console.log(`API token in ${tokenFile} (header "Authorization: Bearer <token>")`)
 console.log(`SMM TestBench ${tb.commit?.slice(0, 12) ?? '?'}${tb.dirty ? ' (dirty)' : ''}${tb.pinned ? '' : ` (NOT the pinned ${tb.pinnedCommit.slice(0, 12)})`} from ${testbenchDir}`)
 
 let stopping = false
@@ -32,7 +44,17 @@ async function shutdown(signal: string) {
   force.unref()
   server.close()
   await service.shutdown().catch((err) => console.error(err))
+  removeTokenFile()
   process.exit(0)
 }
 process.on('SIGINT', () => void shutdown('SIGINT'))
 process.on('SIGTERM', () => void shutdown('SIGTERM'))
+
+function removeTokenFile() {
+  try {
+    if (readFileSync(tokenFile, 'utf8') === token) rmSync(tokenFile)
+  } catch {
+    // already gone or replaced by another service on the same port
+  }
+}
+process.on('exit', removeTokenFile)

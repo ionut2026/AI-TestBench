@@ -408,7 +408,8 @@ message. Section 10 lists them all.
 
 **`src\smm_automation\client.py`** — A small HTTP client for the service (`http://127.0.0.1:8765/api/v1`, or
 `SMM_AUTOMATION_URL`). If no service is running, it **starts one automatically** with Node.js, writing its output to
-`automation-service.log` in the Robot output folder. It checks the service's API version (major version must be 1).
+`automation-service.log` in the Robot output folder. It checks the service's API version (major version must be 1)
+and sends the service's API token with every request (section 14.3).
 
 **`src\smm_automation\cli.py`** — The `smm-auto` command: `ingest`, `briefs`, `drift`, `matrix`, `run`, `report`,
 `service`. Section 7.4 and 19.
@@ -595,6 +596,8 @@ with `$env:NAME = "value"`, or permanently via *Start → "Edit environment vari
 | `SMM_RIG_BROKER` | `10.0.1.111:1883` (**a placeholder — set the real one**) | Broker of the rig instrument, `host:port` |
 | `SMM_AUTOMATION_URL` | `http://127.0.0.1:8765/api/v1` | Where the Python side finds the service |
 | `SMM_AUTOMATION_PORT` / `SMM_AUTOMATION_HOST` | `8765` / `127.0.0.1` | Where the service listens (service side) |
+| `SMM_AUTOMATION_TOKEN` | not set: the service generates one | API token of the service (both sides). Without it the service writes a generated token to `.service\token-<port>` and the Python side reads it from there. |
+| `SMM_AUTOMATION_TOKEN_FILE` | `.service\token-<port>` | Where the service writes its token (service side) |
 | `SMM_AUTOMATION_QUIET` | not set | `1` = the service does not print environment logs |
 | `SMM_TIMELINE_CAP` / `SMM_TRACE_CAP` | `20000` / `10000` | How many timeline / COP trace entries the service keeps (minimum 100). A test whose evidence was dropped fails. |
 | `WINDCHILL_MCP_SERVER` | `windchill-mcp-server\src\server.js` | RV&S access program used by `ingest` |
@@ -711,7 +714,8 @@ cd D:\projects\AI-TestBench\smm-automation
 .\.venv\Scripts\smm-auto service            # or: node service\dist\smm-automation-service.mjs --port 8765
 ```
 
-Check it in a browser: http://127.0.0.1:8765/api/v1/health. Stop it with `Ctrl+C`.
+Check it in a browser: http://127.0.0.1:8765/api/v1/health. Stop it with `Ctrl+C`. Every other address needs the
+service's API token (section 14.3); the service prints where it wrote it.
 
 ### 7.7 The rig: rig control script and operator
 
@@ -1919,8 +1923,8 @@ On mock, only Robot and the service exist; the broker (aedes) and the fake appSM
    `automation-service.log` and waits up to 30 s for `/health`. It checks the API major version and records metadata
    (TestBench commit, API, ICD version) in the report. The spawned service is stopped when Python exits.
 2. **Every keyword** translates to one or a few HTTP calls (`ServiceClient` methods). Errors come back as `ServiceError`
-   with a `kind`: `timeout` (HTTP 408), `expectation` / `unavailable` (409), `http` (400/404/405), `internal` (500),
-   `unreachable` (service down). The library turns them into Robot failures with context (the relevant timeline).
+   with a `kind`: `timeout` (HTTP 408), `expectation` / `unavailable` (409), `unauthorized` (401, wrong API token),
+   `http` (400/404/405), `internal` (500), `unreachable` (service down). The library turns them into Robot failures with context (the relevant timeline).
 3. **Marks.** The library stores `_mark` (current window start), `_test_mark` (test start), `_trace_mark` and
    `_test_trace_mark` (COP trace positions, taken together with the timeline marks via one `/timeline/mark` call) and
    sends them as `since` with every query. It also keeps the ids already matched by waits (`_consumed`) and of its own
@@ -1930,7 +1934,7 @@ On mock, only Robot and the service exist; the broker (aedes) and the fake appSM
 
 | Method & path | Body / query | Purpose |
 |---|---|---|
-| GET `/health` | | `ok`, `apiVersion` (1.3.0), TestBench info, ICD version |
+| GET `/health` | | `ok`, `apiVersion` (1.4.0), TestBench info, ICD version, `auth` (token required) |
 | GET `/icd` | | ICD version, message list, schema names |
 | GET `/schemas/:name` | | JSON schema of one message |
 | GET `/environment` | | Tier, broker, appSMM (`appSmm.exe` = the appSMM.exe started on offline), hardware status; `trace` = `{size, cap, droppedThrough, lastId}` |
@@ -1967,8 +1971,19 @@ On mock, only Robot and the service exist; the broker (aedes) and the fake appSM
 | POST `/mock/faults` | `{faults}` | Replace the fault rules (400 on an invalid rule; Section 14.10) |
 | DELETE `/mock/faults` | | Remove all fault rules |
 
+**API token.** Every request except GET `/health` needs the header `Authorization: Bearer <token>`, also on
+localhost: a wrong or missing token gets HTTP 401 with `kind: unauthorized`. The token is `SMM_AUTOMATION_TOKEN` if
+set; otherwise the service generates one at start-up and writes it to `smm-automation\.service\token-<port>`
+(gitignored, removed when the service stops). The Python client takes `SMM_AUTOMATION_TOKEN`, else that file, and reads
+the file again once after a 401 (a restarted service has a new token). A service that the library starts itself gets
+a fresh token from the library.
+
 You can try the API by hand in PowerShell, e.g.
-`Invoke-RestMethod http://127.0.0.1:8765/api/v1/environment`.
+
+```powershell
+$token = Get-Content D:\projects\AI-TestBench\smm-automation\.service\token-8765
+Invoke-RestMethod http://127.0.0.1:8765/api/v1/environment -Headers @{ Authorization = "Bearer $token" }
+```
 
 ### 14.4 Environment start per tier (`environment.ts`)
 
@@ -2181,6 +2196,7 @@ See checklist 18.3.
 | Build says the TestBench commit does not match the pin | TestBench checkout is at a different commit | `git checkout <commit from testbench.lock.json>` in the TestBench, or (only for experiments) `$env:SMM_TESTBENCH_ALLOW_UNPINNED = "1"` |
 | `Run npm ci in …simulator` (or hwsim) | TestBench dependencies missing | `npm ci` in that folder |
 | `SMM automation service not reachable at …` or `The automation service exited with code …` | Service crashed, port 8765 taken, or Node missing | Read `automation-service.log` in the results folder; run `smm-auto service` in a separate window to see errors |
+| `Missing or wrong API token … set $SMM_AUTOMATION_TOKEN or check …\.service\token-<port>` | `SMM_AUTOMATION_TOKEN` differs from the token of the running service, or the token file is from another service | Unset `SMM_AUTOMATION_TOKEN` (or set the service's), or restart the service so it writes its token again (section 14.3) |
 | `Service API x is not supported` | Service and Python library from different versions | `git pull`, `npm run build`, `.\.venv\Scripts\pip install --no-deps -e .` again |
 | `appSMM did not start` | Wrong `SMM_APPSMM_EXE`, missing DLLs, appSMM already running | Check the path; stop old appSMM (17.2); start it once by hand to see the error |
 | appSMM behaves strangely outside the tests | Its config files point at the service's broker/COP | The TestBench `Runner` saved the originals as `*.orig` next to them — restore them if needed |
@@ -2195,7 +2211,7 @@ See checklist 18.3.
 | Drift: STALE | Spec text changed in RV&S | Section 12.5 |
 | Drift: ORPHAN | Typo in `SDS-` tag or spec left the scope | Fix tag / remove test |
 | Rig tier: broker not reachable | `SMM_RIG_BROKER` not set (default placeholder 10.0.1.111) | Set it to the real rig broker address |
-| Strange extra messages; `Invoke-RestMethod http://127.0.0.1:8765/api/v1/session` shows `otherBridge` | TestBench GUI or a second test run connected as Bridge | Only one Bridge at a time |
+| Strange extra messages; `Invoke-RestMethod http://127.0.0.1:8765/api/v1/session` (with the token header, section 14.3) shows `otherBridge` | TestBench GUI or a second test run connected as Bridge | Only one Bridge at a time |
 | Report says UNCOVERED for a spec with a test | Test excluded (pending/tier) or wrong tag | Check tags and the tier's excluded tags |
 
 ### 17.2 Stopping leftover processes safely

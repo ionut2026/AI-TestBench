@@ -271,6 +271,38 @@ describe('service API v1', () => {
   })
 })
 
+describe('API token', () => {
+  it('opens only /health without "Authorization: Bearer <token>"', async () => {
+    const secured = new AutomationService({ token: 's3cret' })
+    const srv = await secured.listen(0, '127.0.0.1')
+    const url = `http://127.0.0.1:${(srv.address() as AddressInfo).port}/api/v1`
+    const status = async (path: string, auth?: string, method = 'GET') =>
+      (await fetch(`${url}${path}`, { method, headers: auth ? { authorization: auth } : undefined })).status
+    try {
+      const health = await fetch(`${url}/health`)
+      expect(health.status).toBe(200)
+      expect((await health.json()).auth).toBe(true)
+      expect(await status('/environment')).toBe(401)
+      expect(await status('/environment', 'Bearer wrong')).toBe(401)
+      expect(await status('/environment', 's3cret')).toBe(401)
+      expect(await status('/no/such/route')).toBe(401)
+      expect(await status('/health', undefined, 'POST')).toBe(401)
+      const denied = await fetch(`${url}/icd`)
+      expect(await denied.json()).toMatchObject({ kind: 'unauthorized' })
+      expect(await status('/environment', 'Bearer s3cret')).toBe(200)
+      expect(await status('/icd/', 'Bearer s3cret')).toBe(200)
+    } finally {
+      await secured.shutdown()
+      await new Promise((resolve) => srv.close(resolve))
+    }
+  })
+
+  it('is off when no token is configured', async () => {
+    expect((await call('GET', '/health')).data.auth).toBe(false)
+    expect((await call('GET', '/environment')).status).toBe(200)
+  })
+})
+
 describe('timeline cap', () => {
   it('drops the oldest entries and records the highest dropped id', () => {
     const session = new BridgeSession(join(testbenchInfo.dir, 'simulator', 'resources', 'schemas'), 3)

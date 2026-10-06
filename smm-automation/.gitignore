@@ -13,3 +13,4 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 service/tsconfig.testbench.json
+.service/
