@@ -188,6 +188,12 @@ service and written to `smm-automation\.service\token-<port>` (gitignored, remov
 reads the variable or that file and re-reads the file once after a 401; a service the library starts gets a fresh
 token from it.
 
+*8.4 status:* done. `smm_automation.icd` asks the service (GET `/icd`, `/schemas/:name`, cached per process,
+service started on demand) for the ICD message names used by ingest and the schemas shown in briefs; Python no longer
+reads the TestBench path. Side effect: the names now match the TestBench SchemaRegistry exactly (`GetVersionRequest`/
+`GetVersionResponse` instead of the misspelt file-name forms), which affects only a catalog's `messages` lists at the
+next ingest, not spec hashes. Unit tests use a fake ICD (`tests\conftest.py`).
+
 ## Order and dependencies
 
 ```mermaid

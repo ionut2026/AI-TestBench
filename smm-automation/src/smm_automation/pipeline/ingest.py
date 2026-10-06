@@ -11,7 +11,6 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
-import os
 import re
 import sys
 import tomllib
@@ -20,7 +19,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
-from smm_automation import FRAMEWORK_ROOT
+from smm_automation import icd
 from smm_automation.pipeline.rvs import RvsClient, run
 
 HASH_VERSION = 2
@@ -163,13 +162,6 @@ def link_baseline(spec: dict) -> dict:
     return {"state": spec.get("state"), "satisfies": sorted(spec.get("satisfies") or []), "userStories": sorted(spec.get("userStories") or [])}
 
 
-def known_icd_messages() -> set[str]:
-    lock = json.loads((FRAMEWORK_ROOT / "testbench.lock.json").read_text(encoding="utf-8"))
-    tb = Path(os.environ.get("SMM_TESTBENCH_DIR") or lock["defaultDir"])
-    schemas = tb / "simulator" / "resources" / "schemas"
-    return {p.name[3:-12] for p in schemas.glob("Icd*_schema.json")} if schemas.exists() else set()
-
-
 # ---------------------------------------------------------------------- ingestion
 
 
@@ -203,9 +195,10 @@ async def _ingest(scope: dict, server_js: Path | None) -> dict:
 
 
 def build_catalog(scope: dict, specs: list[dict], requirements: list[dict], stories: list[dict], ets: list[dict],
-                  assigned: dict[int, str | None] | None = None) -> dict:
-    """``specs`` carry ``Text`` as RV&S rich text (or plain text); ``assigned`` maps spec id -> area from the scope."""
-    known = known_icd_messages()
+                  assigned: dict[int, str | None] | None = None, known: set[str] | None = None) -> dict:
+    """``specs`` carry ``Text`` as RV&S rich text (or plain text); ``assigned`` maps spec id -> area from the scope;
+    ``known`` are the ICD message names (default: from the automation service)."""
+    known = icd.message_names() if known is None else known
     not_testable = {int(k): v for k, v in (scope.get("not_testable") or {}).items()}
     deferred = {int(k): v for k, v in (scope.get("deferred") or {}).items()}
     areas = scope.get("areas") or {}

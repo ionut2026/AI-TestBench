@@ -6,10 +6,9 @@ test it by hand, the ICD schemas of the messages involved, the available keyword
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
-from smm_automation import FRAMEWORK_ROOT
+from smm_automation import FRAMEWORK_ROOT, icd
 from smm_automation.pipeline.drift import TestRef
 
 RULES = """\
@@ -65,11 +64,6 @@ def keyword_docs() -> str:
     return "\n".join(lines)
 
 
-def schema_dir() -> Path:
-    lock = json.loads((FRAMEWORK_ROOT / "testbench.lock.json").read_text(encoding="utf-8"))
-    return Path(os.environ.get("SMM_TESTBENCH_DIR") or lock["defaultDir"]) / "simulator" / "resources" / "schemas"
-
-
 def tags_for(spec: dict, multi: bool = False) -> list[str]:
     """Traceability tags of a specification; ``multi`` gives the per-specification hash form for tests that
     cover several specifications."""
@@ -114,9 +108,9 @@ def render_brief(catalog: dict, spec: dict, keywords: str, existing: list[TestRe
         out += ["(none linked)", ""]
     out += ["## ICD schemas", ""]
     for name in spec["messages"]:
-        path = schema_dir() / f"Icd{name}_schema.json"
-        if path.exists():
-            out += [f"### {name}", "", "```json", path.read_text(encoding="utf-8").strip(), "```", ""]
+        schema = icd.schema(name)
+        if schema is not None:
+            out += [f"### {name}", "", "```json", json.dumps(schema, indent=2), "```", ""]
     out += ["## Existing tests for this specification", ""]
     out += [f"- `{t.name}` ({t.suite}){' [review:pending]' if t.pending else ''}" for t in existing] or ["(none)"]
     out += ["", "## Keywords", "", keywords, "## Authoring rules", "", RULES]

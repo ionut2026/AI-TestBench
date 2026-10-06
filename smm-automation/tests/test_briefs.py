@@ -17,9 +17,8 @@ def _catalog():
     return build_catalog(scope, specs, reqs, stories, ets)
 
 
-def test_render_brief_holds_everything_the_author_needs(monkeypatch, tmp_path):
-    monkeypatch.setattr(briefs, "schema_dir", lambda: tmp_path)
-    (tmp_path / "IcdInitializationResponse_schema.json").write_text('{"type": "object"}', encoding="utf-8")
+def test_render_brief_holds_everything_the_author_needs(fake_icd):
+    fake_icd["InitializationResponse"] = {"type": "object"}
     cat = _catalog()
     spec = cat["specifications"]["1"]
     existing = [TestRef("SDS-1 Old", "init", "init.robot", ["SDS-1", "review:pending"], [1], spec["hash"][:8])]
@@ -29,14 +28,14 @@ def test_render_brief_holds_everything_the_author_needs(monkeypatch, tmp_path):
     assert "After InitializationRequest the SMM sends InitializationResponse." in text
     assert "**REQ-10** [Accepted]: The SMM shall initialize" in text
     assert "### US-20: Init [Tested]" in text and "### ET-30: ET" in text and "- ok" in text
-    assert '### InitializationResponse\n\n```json\n{"type": "object"}' in text
+    assert '### InitializationResponse\n\n```json\n{\n  "type": "object"\n}' in text
+    assert "### InitializationRequest" not in text  # no schema for it
     assert "`SDS-1 Old` (init) [review:pending]" in text
     assert "KEYWORDS" in text and "No `Sleep`" in text and "${SDS_<id>_LIMIT}" in text
 
 
 def test_write_briefs_skips_untestable_and_filters(monkeypatch, tmp_path):
     monkeypatch.setattr(briefs, "keyword_docs", lambda: "KEYWORDS")
-    monkeypatch.setattr(briefs, "schema_dir", lambda: tmp_path)
     written = briefs.write_briefs(_catalog(), tmp_path / "out", [], scope_name="t")
     assert [p.name for p in written] == ["SDS-1.md"]
     assert "Target: `robot/suites/t/init.robot`" in written[0].read_text(encoding="utf-8")

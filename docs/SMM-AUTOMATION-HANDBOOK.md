@@ -1639,7 +1639,8 @@ What it does:
 3. For each specification: converts the rich text to plain text itself (paragraphs and list items become lines), then
    normalizes it (Unicode NFKC, typographic quotes and dashes to ASCII, zero-width characters removed, whitespace
    unified) and computes its SHA-256 **hash** (hash version 2: independent of how the MCP server renders rich text);
-   finds ICD message names in the text; assigns the area.
+   finds ICD message names in the text (the names come from the automation service's GET `/icd`, see 14.3; the
+   service is started if needed); assigns the area.
 4. Splits ET descriptions into **preconditions / steps / expected / actual** sections.
 5. Keeps each specification's **baseline** (RV&S state and links as last accepted, see 12.5) from the previous catalog.
 6. Writes `catalog\<name>.json` and prints what changed since the previous catalog: **added**, **removed**,
@@ -1737,7 +1738,9 @@ no tag changed.)
 .\.venv\Scripts\smm-auto briefs --out D:\temp\briefs
 ```
 
-Briefs are written to `generated\briefs\` (not committed — regenerate any time).
+Briefs are written to `generated\briefs\` (not committed — regenerate any time). The ICD schemas in a brief come
+from the automation service (GET `/schemas/:name`), which is started if it is not running; Python does not read the
+TestBench folder itself.
 
 ---
 
