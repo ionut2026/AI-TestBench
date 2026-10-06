@@ -228,9 +228,9 @@ sequenceDiagram
 
 | Tier | appSMM | Hardware | Broker | Use it for | Tests left out automatically |
 |---|---|---|---|---|---|
-| **mock** | A scripted fake appSMM inside the service | none | Embedded (127.0.0.1:1884) | Checking that the **framework** and the tests work. Fast (≈1–2 min). **Not evidence about appSMM.** | `needs:twin` |
+| **mock** | A scripted fake appSMM inside the service | none | Embedded (127.0.0.1:1884) | Checking that the **framework** and the tests work. Fast (≈1–2 min). **Not evidence about appSMM.** | `needs:twin`, `needs:applog` |
 | **offline** | The **real** `appSMM.exe` on this PC | The **hardware twin** (simulated) | Mosquitto (127.0.0.1:1883) started by the TestBench runner | Real verdicts about appSMM, without an instrument. ≈17 min for the pilot. | none |
-| **rig** | The real appSMM on the instrument | Real hardware | The instrument's broker (`SMM_RIG_BROKER`) | Final verification on the dedicated automation instrument. | `needs:twin`, `requires:restart` |
+| **rig** | The real appSMM on the instrument | Real hardware | The instrument's broker (`SMM_RIG_BROKER`) | Final verification on the dedicated automation instrument. | `needs:twin`, `requires:restart`, `needs:applog` |
 
 Tests tagged `review:pending` (no human review yet) **run on every tier**, but the report labels them **UNREVIEWED**
 and their specification can never be **VERIFIED** (Section 8.3). Use `--exclude-pending` to leave them out.
@@ -319,6 +319,7 @@ D:\projects\AI-TestBench\
     ├── src\smm_automation\               Python code
     │   ├── SMMTestbench.py               The Robot keyword library
     │   ├── client.py                     Talks HTTP to the service; starts it if needed
+    │   ├── sil.py                        Reads appSMM's SmartInspect .sil log files
     │   ├── cli.py                        The smm-auto command
     │   ├── __init__.py, __main__.py      Package boilerplate (FRAMEWORK_ROOT, python -m smm_automation)
     │   └── pipeline\
@@ -336,6 +337,7 @@ D:\projects\AI-TestBench\
     │   │   ├── testbench.ts              The ONLY file that imports TestBench code
     │   │   ├── api\server.ts             The HTTP API (all routes)
     │   │   ├── environment.ts            Starts/stops broker, appSMM, hardware per tier
+    │   │   ├── copFaults.ts              COP fault injection between appSMM and the twin
     │   │   ├── bridgeSession.ts          Plays the Bridge: MQTT, timeline, waits
     │   │   ├── messageFilter.ts          Matching rules for "wait for message"
     │   │   └── mock\mockAppSmm.ts        The fake appSMM for the mock tier
@@ -438,6 +440,12 @@ this is the only file to fix.
 **`service\src\environment.ts`** — Knows the tiers (`presetFor`): starts the broker, appSMM and hardware for the
 chosen tier, restarts appSMM or the broker, collects their logs.
 
+**`service\src\copFaults.ts`** — Wraps the COP link between the real appSMM and the hardware twin (offline) and
+drops, delays or answers with an error the messages that match the fault rules of `/hardware/faults` (Section 10.8.1).
+
+**`src\smm_automation\sil.py`** — Reads appSMM's SmartInspect `.sil` log files (binary, rotating) and extracts the
+ICD messages appSMM logged; used by the log keywords (Section 10.8.3).
+
 **`service\src\bridgeSession.ts`** — The headless Bridge: connects to the broker, publishes ICD messages,
 records everything on the timeline, validates schemas, detects request/response pairing problems ("pair issues")
 and implements the waits.
@@ -447,7 +455,7 @@ and implements the waits.
 **`service\src\mock\mockAppSmm.ts`** — A scripted imitation of appSMM's state machine for the mock tier. It follows
 the appSMM handlers and the SDS texts but is **not** a reference for correct behaviour.
 
-**`service\test\*.test.ts`** and **`tests\*.py`** — Self-tests of the framework (21 vitest tests, 34 pytest tests).
+**`service\test\*.test.ts`** and **`tests\*.py`** — Self-tests of the framework (46 vitest tests, 69 pytest tests).
 They test the framework, not appSMM.
 
 **`.github\agents\smm-test-author.agent.md`** — Instructions for the AI test author (input = brief, output = test
@@ -614,7 +622,7 @@ cd D:\projects\AI-TestBench\smm-automation
   about appSMM.
 - **offline** — to get real verdicts about appSMM on your PC. Needs appSMM and Mosquitto. Pilot ≈17 minutes.
 - **rig** — on the automation instrument. Never restarts appSMM (tests tagged `requires:restart` are excluded) and
-  never uses the twin (tests tagged `needs:twin` are excluded).
+  never uses the twin (tests tagged `needs:twin` are excluded); it cannot read appSMM's log files yet (`needs:applog`\n  excluded). mock excludes `needs:twin` and `needs:applog`.
 
 ### 7.2 Most common commands
 
@@ -644,7 +652,7 @@ Rules for the command line:
 ### 7.3 What `smm-auto run` does for you
 
 1. Picks the variable file `robot\environments\<tier>.py`.
-2. Excludes the tier's tags (`needs:twin` and/or `requires:restart`); `review:pending` only with `--exclude-pending`.
+2. Excludes the tier's tags (`needs:twin`, `needs:applog` and/or `requires:restart`); `review:pending` only with `--exclude-pending`.
 3. Runs Robot on `robot\suites` (or the `--suites` you gave) into `results\<tier>-<date>-<time>\`.
 4. Builds the traceability report from `output.xml`, the catalog and the review ledger.
 5. Prints the failures by class (NEW FAIL, KNOWN FAIL, FIXED?) and exits with the number of **new** failures
@@ -659,7 +667,7 @@ It prints the exact `robot …` command it runs, so you can copy and adapt it.
 Useful when you want full control:
 
 ```powershell
-.\.venv\Scripts\robot --variablefile robot\environments\mock.py --exclude needs:twin --outputdir results\manual robot\suites\pilot\shutdown.robot
+.\.venv\Scripts\robot --variablefile robot\environments\mock.py --exclude needs:twin --exclude needs:applog --outputdir results\manual robot\suites\pilot\shutdown.robot
 .\.venv\Scripts\smm-auto report --output results\manual\output.xml
 ```
 
@@ -911,7 +919,7 @@ Line by line:
 |---|---|
 | `SDS-2428419 E-Stop Is …` | Test name: `SDS-<id>` + the behaviour in Title Case. Must be unique in the file. |
 | `[Documentation]` | The specification text **verbatim**; add your interpretations on extra `...` lines. |
-| `[Tags]` | Spec ID, spec hash **copied from the brief**, `review:pending` until reviewed, plus `needs:twin` / `requires:restart` if applicable. |
+| `[Tags]` | Spec ID, spec hash **copied from the brief**, `review:pending` until reviewed, plus `needs:twin` / `requires:restart` / `needs:applog` if applicable. |
 | `Bring SMM To State    Idle …` | Precondition. Not a check; it drives appSMM to Idle by whatever route needed. |
 | `Send ICD Message    ShutdownRequest` | The trigger. Also sets a **mark**: following waits only look at newer messages. |
 | `Wait For Message Sequence` | The check: these messages must arrive **in this order** (others may come in between). |
@@ -941,7 +949,7 @@ A **second person** checks, against the specification:
 - [ ] Every assertion is backed by a sentence of the specification (nothing more, nothing less).
 - [ ] The precondition really is what the spec assumes.
 - [ ] Negative cases exist where the spec says "only when …".
-- [ ] Tags: `SDS-<id>`, `spechash:` equal to the brief, correct `needs:twin` / `requires:restart`.
+- [ ] Tags: `SDS-<id>`, `spechash:` equal to the brief, correct `needs:twin` / `requires:restart` / `needs:applog`.
 - [ ] No `Sleep`, no hard-coded timeouts unless the spec states the time.
 - [ ] The test passed (or failed for a documented reason) on offline/rig.
 
@@ -1292,6 +1300,51 @@ Valid state names: `PowerOn`, `NotInitialized`, `Initializing`, `Idle`, `Clearin
 | `Wait For Hardware Command` | `command`, `timeout=30s`, `since=` | Waits (in the service, event-driven) until appSMM sends that COP command to the hardware (e.g. `InitializeCmd`, `DeInitializeCmd`, `AppMan.EmergencyStopCmd`). Looks after the last mark (section 10.2); `since=test`, `all` or a trace id widen the window. |
 | `Hardware Command Should Not Be Sent` | `command`, `duration=3s`, `since=` | Fails as soon as appSMM sends that command (already after the mark, or within `duration`); the failure names the COP entry. |
 
+#### 10.8.1 COP fault injection (offline; tag `needs:twin`)
+
+The service sits between appSMM and the twin on the COP link and can make it misbehave, so specifications about a
+missing or late hardware reply ("if rtc_appl does not answer within 20 s…") become testable.
+
+| Keyword | Arguments | What it does |
+|---|---|---|
+| `Set Hardware Faults` | `*rules` | Replaces the fault rules. A rule is `Message \| action=drop\|delay\|error \| ms= \| code= \| skip= \| count=` (or a dict); `delay=15s` is short for `action=delay \| ms=15000`. `Message` is the COP name as the trace shows it (`DeInitializeRsp` twin → appSMM, `InitializeCmd` appSMM → twin), optionally with the module (`AppMan.DeInitializeRsp`). `skip` lets the first n matches through, `count` limits how many are hit. Rules survive appSMM restarts; the test teardown clears them. |
+| `Clear Hardware Faults` | — | Back to a well-behaved link. |
+| `Get Hardware Fault Status` | — | Active rules and, per rule, how often a message matched and the fault was applied. |
+| `Hardware Fault Should Have Been Applied` | `message`, `times=` | Guards against a vacuous test: the rule for `message` hit at least once (or exactly `times`). |
+
+#### 10.8.2 Timing (all tiers)
+
+| Keyword | Arguments | What it does |
+|---|---|---|
+| `Get Time Between` | `earlier`, `later` | Seconds between two entries (from `Send ICD Message`, `Wait For Message Entry`, `Wait For Message Sequence`, `Wait For Hardware Command`) or times. |
+| `Time Between Should Be Less Than` | `earlier`, `later`, `limit` | "Within N s": fails if `later` came `limit` or more after `earlier` (or before it). |
+| `Time Between Should Be At Least` | `earlier`, `later`, `minimum` | "After N s without a reply": fails if `later` came sooner. |
+
+The limit stated by the specification goes into `${SDS_<id>_LIMIT}`; the wait around it uses a larger
+`${SDS_<id>_WAIT}` so the assertion, not the wait, decides. Example (SDS-2532404):
+
+```robotframework
+Set Hardware Faults    InitializeCmd | action=drop
+${request}=    Send ICD Message    InitializationRequest
+${entry}=    Wait For Message Entry    InitializationResponse    timeout=${SDS_2532404_WAIT}
+Response Should Have Status On is/iw/tx    ${entry}    Error
+Time Between Should Be At Least    ${request}    ${entry}    ${SDS_2532404_LIMIT}
+Hardware Fault Should Have Been Applied    InitializeCmd
+```
+
+#### 10.8.3 appSMM log files (offline; tag `needs:applog`)
+
+appSMM logs to SmartInspect `.sil` files configured in `trace.config` next to `appSMM.exe`
+(`file(filename=D:\smm\logs\appSMM.sil, rotate=daily, …)`, files `appSMM-<UTC time>.sil`). The library reads them
+directly (`smm_automation\sil.py`); ICD traffic appears in the `BridgeInterface` session as
+`RX(/is/iw/rx): {…}` (received by appSMM) and `TX(/is/iw/tx): {…}` (published).
+
+| Keyword | Arguments (default) | What it does |
+|---|---|---|
+| `Get appSMM Log Location` | — | `${APPSMM_LOG}` if set, else the file from `trace.config` next to the appSMM.exe the environment runs (`GET /environment` → `appSmm.exe`); None on mock and rig. |
+| `Get appSMM Log Messages` | `name=`, `since=test` | The ICD messages appSMM logged: `{time, way, topic, name, body, line}`. |
+| `ICD Messages Should Be Logged By appSMM` | `*names`, `since=test`, `timeout=10s` | Every `names` message exchanged on the timeline in the window has its own log line with the same direction, topic, name and content (logged within 2 s). Waits up to `timeout` for appSMM to write; the failure lists the missing messages. |
+
 ### 10.9 Quality checks
 
 | Keyword | Arguments (default) | What it does |
@@ -1318,6 +1371,7 @@ Valid state names: `PowerOn`, `NotInitialized`, `Initializing`, `Idle`, `Clearin
 | `Bring SMM To E-Stop With Shutdown` | Idle, then ShutdownRequest → E-Stop. |
 | `Finish SMM Test And Empty The Instrument` | Teardown for tests that load racks: removes racks, restarts appSMM and initializes to Idle if any were removed. |
 | `Messages From appSMM Should Use Topic` (`name`, `topic=/is/iw/tx`) | Every `name` received in this test came on `topic`. |
+| `Response Should Have Status On is/iw/tx` (`entry`, `status`) | The entry came on `/is/iw/tx` with `Status=status`. |
 
 ---
 
@@ -1331,7 +1385,8 @@ Valid state names: `PowerOn`, `NotInitialized`, `Initializing`, `Idle`, `Clearin
 | `spechash:<8 hex>` | every test | Fingerprint of the spec text the test was written/reviewed against. **Copy from the brief.** A test with several `SDS-<id>` tags carries one `spechash:<id>:<8 hex>` per specification instead (a plain `spechash:` only counts on a single-spec test). | Author / reviewer |
 | `review:pending` | new tests | Not reviewed by a human yet. Runs everywhere, shown as UNREVIEWED; the spec is never VERIFIED. Remove only with a ledger entry in `catalog\reviews.toml`. | Author adds, reviewer removes |
 | `known-issue:FINDING-<n>` | tests failing because of a documented candidate finding | Failure counts as KNOWN FAIL (run stays green); passing shows FIXED?. Ignored on mock. | Triage (Section 8.4) |
-| `needs:twin` | tests that drive the hardware twin | Excluded on mock and rig. | Author |
+| `needs:twin` | tests that drive the hardware twin (including COP faults) | Excluded on mock and rig. | Author |
+| `needs:applog` | tests that read appSMM's log files | Excluded on mock and rig (until the rig's logs can be fetched). | Author |
 | `requires:restart` | tests that restart appSMM or the broker | Excluded on rig. | Author |
 | `area:<name>` | suite (`Test Tags`) | Area/suite name, for selection and statistics. | Suite |
 | `pilot` | suite (`Test Tags`) | Belongs to the pilot scope. | Suite |
@@ -1361,6 +1416,7 @@ Valid state names: `PowerOn`, `NotInitialized`, `Initializing`, `Idle`, `Clearin
 | **SMM03** literal-timeout | `timeout=` / `duration=` and the `Wait Until Keyword Succeeds` timeout are variables. | Tier variable (Section 10.1) or `${SDS_<id>_LIMIT}`. |
 | **SMM04** twin-tag | A test that uses a hardware keyword outside `IF` is tagged `needs:twin`; a `needs:twin` test uses at least one. | Add/remove the tag, or put the hardware step inside `IF    '${TIER}' == 'offline'` to keep it tier-adaptive. |
 | **SMM05** restart-tag | Same for `Restart appSMM` / `Restart MQTT Broker` and `requires:restart`. | Add/remove the tag. |
+| **SMM06** applog-tag | Same for the appSMM log keywords (Section 10.8.3) and `needs:applog`. | Add/remove the tag. |
 
 Keyword use is followed through user keywords (`smm.resource`, the suite's own keywords, `Run Keyword…`), so
 `Restart appSMM And Wait Until NotInitialized` counts as a restart. `Run Keyword If/Unless` counts as conditional.
@@ -1740,10 +1796,10 @@ On mock, only Robot and the service exist; the broker (aedes) and the fake appSM
 
 | Method & path | Body / query | Purpose |
 |---|---|---|
-| GET `/health` | | `ok`, `apiVersion` (1.2.0), TestBench info, ICD version |
+| GET `/health` | | `ok`, `apiVersion` (1.3.0), TestBench info, ICD version |
 | GET `/icd` | | ICD version, message list, schema names |
 | GET `/schemas/:name` | | JSON schema of one message |
-| GET `/environment` | | Tier, broker, appSMM, hardware status; `trace` = `{size, cap, droppedThrough, lastId}` |
+| GET `/environment` | | Tier, broker, appSMM (`appSmm.exe` = the appSMM.exe started on offline), hardware status; `trace` = `{size, cap, droppedThrough, lastId}` |
 | POST `/environment/start` | `{tier, overrides}` | Start a tier |
 | POST `/environment/stop` | | Disconnect and stop everything |
 | POST `/environment/restart-appsmm` | `{downMs}` | Kill + restart appSMM (mock/offline) |
@@ -1754,6 +1810,9 @@ On mock, only Robot and the service exist; the broker (aedes) and the fake appSM
 | POST `/hardware/trace/wait` | `{command, since, timeoutMs}` | Wait for a COP command from appSMM (408 on timeout; 409 `unavailable` without twin) |
 | POST `/hardware/trace/expect-none` | `{command, since, durationMs}` | Fail (409, `details.entry`) if appSMM sends that command |
 | POST `/hardware/actions/:action` | action args | Operate the twin |
+| GET `/hardware/faults` | | Active COP fault rules with `matched`/`applied` counts (409 without twin) |
+| POST `/hardware/faults` | `{faults}` | Replace the COP fault rules (`{message, action: drop\|delay\|error, ms, code, skip, count}`; 400 on an invalid rule) |
+| DELETE `/hardware/faults` | | Remove all COP fault rules |
 | GET `/session` | | Bridge link status, settings, analyzers, `smm.systemState`; `timeline` = `{size, cap, droppedThrough}` |
 | POST `/session/connect` | `{timeoutMs, clear, host, port, mode}` | Connect as Bridge (`mode: listen` = only observe) |
 | POST `/session/disconnect` | `{abrupt}` | Disconnect |
@@ -2039,7 +2098,7 @@ findings section and in Section 16.
 
 ### 18.1 For every new or changed test
 
-- [ ] `SDS-<id>`, `spechash:<8>`, `area:<x>` (+ `needs:twin` / `requires:restart` if applicable) tags
+- [ ] `SDS-<id>`, `spechash:<8>`, `area:<x>` (+ `needs:twin` / `requires:restart` / `needs:applog` if applicable) tags
 - [ ] `[Documentation]` explains spec, ET, and the reasoning
 - [ ] Given/When/Then structure; no `Sleep`; timeouts from variables (spec limits as `${SDS_<id>_LIMIT}`)
 - [ ] `smm-auto lint` and `robocop check robot` clean

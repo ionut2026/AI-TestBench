@@ -135,3 +135,16 @@ SDS-2653086 E-Stop After A Fatal Error Is Notified From Idle
     Wait For Message    SystemStatusNotification    timeout=${RESPONSE_TIMEOUT}
     ...    PreviousState=Idle    CurrentState=E-Stop
     Received Messages Should Be Schema Valid
+
+SDS-2528708 SystemStatus Messages Are Logged With Topic And Content
+    [Documentation]    The SystemStatusRequest, SystemStatusResponse and SystemStatusNotification messages are
+    ...    logged in appSMM log files. The message topic and content of each exchanged message is included in
+    ...    the log files.
+    ...    Checked in appSMM's SmartInspect log (trace.config next to appSMM.exe): every request as an
+    ...    RX(/is/iw/rx) line, every response and notification (the restart's NotInitialized notification) as a
+    ...    TX(/is/iw/tx) line, each with the exchanged JSON content.
+    [Tags]    SDS-2528708    spechash:4786b9fb    needs:applog    requires:restart    review:pending
+    Restart appSMM And Wait Until NotInitialized
+    Request And Wait For Response    SystemStatusRequest    timeout=${RESPONSE_TIMEOUT}
+    ICD Messages Should Be Logged By appSMM
+    ...    SystemStatusRequest    SystemStatusResponse    SystemStatusNotification    timeout=${RESPONSE_TIMEOUT}

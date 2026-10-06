@@ -7,7 +7,8 @@
   variables (tier timeouts from ``robot/environments``, spec limits as ``${SDS_<id>_LIMIT}``), not literals
 * SMM04 twin-tag        - a test that drives the hardware twin unconditionally (not inside ``IF``) is tagged
   ``needs:twin``; a ``needs:twin`` test uses at least one hardware keyword
-* SMM05 restart-tag     - same for restarting appSMM or the broker and ``requires:restart``
+* SMM05 restart-tag     - same for restarting appSMM or the broker and `requires:restart`
+* SMM06 applog-tag      - same for reading appSMM's log files and `needs:applog` (only where the log is reachable)
 
 Keyword use is followed through user keywords (resource files and the suite's own keywords), so
 ``Restart appSMM And Wait Until NotInitialized`` counts as a restart.
@@ -23,8 +24,10 @@ QUOTE_WORDS = 5
 HARDWARE_KEYWORDS = {
     "triggerhardwareaction", "triggeremergencystop", "gethardwaresnapshot", "hardwarestateshouldbe",
     "clearhardwaretwinracks", "waitforhardwarecommand", "hardwarecommandshouldnotbesent",
+    "sethardwarefaults", "clearhardwarefaults", "gethardwarefaultstatus", "hardwarefaultshouldhavebeenapplied",
 }
 RESTART_KEYWORDS = {"restartappsmm", "restartmqttbroker"}
+APPLOG_KEYWORDS = {"getappsmmlogmessages", "icdmessagesshouldbeloggedbyappsmm"}
 TIMING_ARGS = ("timeout=", "duration=")
 RUN_KEYWORD_CONDITIONAL = {"runkeywordif", "runkeywordunless"}
 
@@ -125,7 +128,7 @@ class KeywordIndex:
         n = norm(call.name)
         if n.startswith("runkeyword") or n in ("waituntilkeywordsucceeds", "repeatkeyword"):
             cond = call.conditional or n in RUN_KEYWORD_CONDITIONAL
-            return [Call(a, (), call.line, cond) for a in call.args if norm(a) in self.keywords or norm(a) in HARDWARE_KEYWORDS | RESTART_KEYWORDS]
+            return [Call(a, (), call.line, cond) for a in call.args if norm(a) in self.keywords or norm(a) in HARDWARE_KEYWORDS | RESTART_KEYWORDS | APPLOG_KEYWORDS]
         return []
 
     def uses(self, calls: list[Call], targets: set[str]) -> tuple[bool, bool]:
@@ -239,6 +242,7 @@ def lint(paths: list[Path], catalog: dict | None = None) -> list[Violation]:
             for rule, tag, targets, what in (
                 ("SMM04", "needs:twin", HARDWARE_KEYWORDS, "drives the hardware twin"),
                 ("SMM05", "requires:restart", RESTART_KEYWORDS, "restarts appSMM or the broker"),
+                ("SMM06", "needs:applog", APPLOG_KEYWORDS, "reads the appSMM log files"),
             ):
                 used, uncond = index.uses(calls, targets)
                 if uncond and tag not in tags:

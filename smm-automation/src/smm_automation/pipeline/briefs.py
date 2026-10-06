@@ -18,7 +18,9 @@ RULES = """\
    and explain any interpretation you made on extra `...` lines.
 3. Tags: exactly the tags under "Tags" below, plus `review:pending`, plus capability tags:
    `needs:twin` when the test drives the simulated hardware (Trigger Hardware Action, Wait For Hardware
-   Command as a *required* step), `requires:restart` when it restarts appSMM or the broker. A test that
+   Command as a *required* step, or COP faults with `Set Hardware Faults`), `requires:restart` when it restarts
+   appSMM or the broker, `needs:applog` when it reads appSMM's log files (`ICD Messages Should Be Logged By appSMM`).
+   A test that
    covers several specifications carries `SDS-<id>` and `spechash:<id>:<hash>` for each of them
    (a plain `spechash:<hash>` only works on a single-specification test).
 4. Only use keywords from the list below and Robot BuiltIn/Collections. No `Sleep` (`smm-auto lint` rejects it):
@@ -34,8 +36,10 @@ RULES = """\
 7. Timeouts come from variables (`${RESPONSE_TIMEOUT}`, `${STARTUP_TIMEOUT}`, `${INIT_TIMEOUT}`,
    `${RECOVER_TIMEOUT}`, `${QUIET_PERIOD}`, `${SHORT_QUIET_PERIOD}`). A time stated by the specification goes into a
    suite variable `${SDS_<id>_LIMIT}` (quote it in the documentation); literal `timeout=`/`duration=` values are
-   rejected by `smm-auto lint`.
-8. If the behaviour cannot be observed through the ICD or the hardware twin, do not write a test: say why,
+   rejected by `smm-auto lint`. Assert the stated time itself with `Time Between Should Be Less Than` (and, for
+   "if no reply within N s", `Time Between Should Be At Least`); a missing or late hardware reply is simulated
+   with `Set Hardware Faults` (`DeInitializeRsp | action=drop`, `... | delay=15s`).
+8. If the behaviour cannot be observed through the ICD, the hardware twin or appSMM's log, do not write a test: say why,
    so the specification can be listed under `[deferred]` in the scope file.
 9. Add the test to the suite file named under "Target"; keep the suite's Settings unchanged.
 10. A human reviews every generated test against the specification and removes `review:pending`.

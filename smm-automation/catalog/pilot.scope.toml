@@ -32,10 +32,6 @@ other = [2327588]
 
 # Testable in principle, but not automated yet: the reason is shown in the traceability report.
 [deferred]
-2528710 = "Checks appSMM log files: appSMM logs to SmartInspect .sil files, a SIL reader is not available yet"
-2528708 = "Checks appSMM log files: appSMM logs to SmartInspect .sil files, a SIL reader is not available yet"
-2532404 = "Needs RTC fault injection (rtc_appl not starting initialization); the hardware twin has no such fault mode yet"
-2532508 = "Needs RTC fault injection (no DeInitializeRsp within 20 s); the hardware twin has no such fault mode yet"
 
 # Suite assignment: the first area whose keywords appear in the specification text.
 [areas]

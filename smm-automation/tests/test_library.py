@@ -173,6 +173,18 @@ class FakeClient:
         raise ServiceError(409, f"appSMM sent {command}", "expectation",
                            {"entry": {"id": since + 2, "name": "AppMan." + command, "text": "args"}})
 
+    def set_hardware_faults(self, faults):
+        self.calls.append(("set_hardware_faults", faults))
+        self.faults = faults
+        return {"faults": faults, "stats": [{"message": f["message"], "action": f["action"], "matched": 0, "applied": 0} for f in faults]}
+
+    def clear_hardware_faults(self):
+        self.calls.append(("clear_hardware_faults",))
+        self.faults = []
+
+    def hardware_faults(self):
+        return {"faults": getattr(self, "faults", []), "stats": getattr(self, "fault_stats", [])}
+
 
 @pytest.fixture
 def smm(monkeypatch):
@@ -301,3 +313,54 @@ def test_timeline_html_shows_reconnections():
     assert out.index("Bridge connected again") < out.index("<b>B</b>")
     assert out.index("<b>A</b>") < out.index("Bridge connected again")
     assert out.rindex("appSMM restarted") > out.index("<b>B</b>")
+
+
+def test_hardware_fault_rules_from_robot_specs_and_cleared_by_teardown(smm):
+    smm.set_hardware_faults("DeInitializeRsp | action=delay | ms=15000", {"message": "InitializeCmd", "action": "drop"},
+                            '{"message": "InitializeRsp", "action": "error", "code": 3}')
+    assert _last(smm.client, "set_hardware_faults")[1] == [
+        {"message": "DeInitializeRsp", "action": "delay", "ms": 15000},
+        {"message": "InitializeCmd", "action": "drop"},
+        {"message": "InitializeRsp", "action": "error", "code": 3},
+    ]
+    smm.set_hardware_faults("EmergencyStopRsp | delay=1.5s | count=1")
+    assert _last(smm.client, "set_hardware_faults")[1] == [{"message": "EmergencyStopRsp", "action": "delay", "ms": 1500, "count": 1}]
+    with pytest.raises(ValueError, match="key=value"):
+        smm.set_hardware_faults("DeInitializeRsp | drop")
+    smm.finish_smm_test()
+    assert ("clear_hardware_faults",) in smm.client.calls
+    smm.client.calls.clear()
+    smm.begin_smm_test()
+    smm.finish_smm_test()
+    assert ("clear_hardware_faults",) not in smm.client.calls
+
+
+def test_hardware_fault_should_have_been_applied(smm):
+    smm.client.fault_stats = [{"message": "DeInitializeRsp", "action": "drop", "matched": 2, "applied": 1}]
+    smm.hardware_fault_should_have_been_applied("DeInitializeRsp")
+    smm.hardware_fault_should_have_been_applied("DeInitializeRsp", times=1)
+    with pytest.raises(AssertionError, match="applied 1 time"):
+        smm.hardware_fault_should_have_been_applied("DeInitializeRsp", times=2)
+    with pytest.raises(AssertionError, match="No COP fault rule"):
+        smm.hardware_fault_should_have_been_applied("InitializeRsp")
+    smm.client.fault_stats = [{"message": "DeInitializeRsp", "action": "drop", "matched": 0, "applied": 0}]
+    with pytest.raises(AssertionError, match="at least 1"):
+        smm.hardware_fault_should_have_been_applied("DeInitializeRsp")
+
+
+def test_time_between_entries_iso_and_epoch(smm):
+    sent = {"id": 1, "name": "RecoverRequest", "time": "2026-01-01T10:00:00.000Z"}
+    answer = {"id": 9, "name": "RecoverResponse", "time": "2026-01-01T10:00:15.250Z"}
+    assert smm.get_time_between(sent, answer) == 15.25
+    assert smm.time_between_should_be_less_than(sent, answer, "20s") == 15.25
+    assert smm.time_between_should_be_at_least(sent, answer, "15s") == 15.25
+    with pytest.raises(AssertionError, match=r"came 15\.250 s after #1 RecoverRequest, limit 15s"):
+        smm.time_between_should_be_less_than(sent, answer, "15s")
+    with pytest.raises(AssertionError, match="expected at least 16s"):
+        smm.time_between_should_be_at_least(sent, answer, "16s")
+    with pytest.raises(AssertionError, match="before"):
+        smm.time_between_should_be_less_than(answer, sent, "20s")
+    assert smm.get_time_between(1_000, "3500") == 2.5
+    assert smm.get_time_between({"time": 0}, "1970-01-01T00:00:01+00:00") == 1.0
+    with pytest.raises(ValueError, match="no time"):
+        smm.get_time_between({"id": 1}, 0)

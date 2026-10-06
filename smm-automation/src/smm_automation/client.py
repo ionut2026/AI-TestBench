@@ -99,6 +99,15 @@ class ServiceClient:
     def hardware_action(self, action: str, args: dict | None = None) -> dict:
         return self.post(f"/hardware/actions/{action}", args)
 
+    def hardware_faults(self) -> dict:
+        return self.get("/hardware/faults")
+
+    def set_hardware_faults(self, faults: list[dict]) -> dict:
+        return self.post("/hardware/faults", {"faults": faults})
+
+    def clear_hardware_faults(self) -> dict:
+        return self.call("DELETE", "/hardware/faults")
+
     def hardware_trace(self, since: int = 0) -> list[dict]:
         """COP commands/responses between appSMM and the hardware twin (``way`` rx = from appSMM)."""
         return self.get("/hardware/trace", since=since)

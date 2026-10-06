@@ -89,7 +89,7 @@
    "areaSource": "scope",
    "testable": true,
    "notTestableReason": null,
-   "deferredReason": "Needs RTC fault injection (rtc_appl not starting initialization); the hardware twin has no such fault mode yet",
+   "deferredReason": null,
    "baseline": {
     "state": "Open",
     "satisfies": [
@@ -128,7 +128,7 @@
    "areaSource": "scope",
    "testable": true,
    "notTestableReason": null,
-   "deferredReason": "Checks appSMM log files: appSMM logs to SmartInspect .sil files, a SIL reader is not available yet",
+   "deferredReason": null,
    "baseline": {
     "state": "Open",
     "satisfies": [],
@@ -493,7 +493,7 @@
    "areaSource": "scope",
    "testable": true,
    "notTestableReason": null,
-   "deferredReason": "Checks appSMM log files: appSMM logs to SmartInspect .sil files, a SIL reader is not available yet",
+   "deferredReason": null,
    "baseline": {
     "state": "Open",
     "satisfies": [],
@@ -883,7 +883,7 @@
    "areaSource": "scope",
    "testable": true,
    "notTestableReason": null,
-   "deferredReason": "Needs RTC fault injection (no DeInitializeRsp within 20 s); the hardware twin has no such fault mode yet",
+   "deferredReason": null,
    "baseline": {
     "state": "Open",
     "satisfies": [

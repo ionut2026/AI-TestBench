@@ -94,6 +94,16 @@ SDS-1 Tagged And Used
     [Tags]    SDS-1    needs:twin    requires:restart
     Run Keyword And Ignore Error    Restart MQTT Broker
     Trigger Hardware Action    insertFrontIn
+
+SDS-1 Reads The Log Without Tag
+    [Documentation]    Variant of 1.
+    [Tags]    SDS-1
+    ICD Messages Should Be Logged By appSMM    SystemStatusRequest
+
+SDS-1 Fault Rule Is A Twin Use
+    [Documentation]    Variant of 1.
+    [Tags]    SDS-1    needs:twin    needs:applog
+    Set Hardware Faults    DeInitializeRsp | action=drop
 """
     found = {(v.item, v.rule) for v in _lint(tmp_path, tests)}
     assert found == {
@@ -101,6 +111,8 @@ SDS-1 Tagged And Used
         ("SDS-1 Twin Without Tag", "SMM04"),
         ("SDS-1 Tagged Without Use", "SMM04"),
         ("SDS-1 Tagged Without Use", "SMM05"),
+        ("SDS-1 Reads The Log Without Tag", "SMM06"),
+        ("SDS-1 Fault Rule Is A Twin Use", "SMM06"),
     }
 
 

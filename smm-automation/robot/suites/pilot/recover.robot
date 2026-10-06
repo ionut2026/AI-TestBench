@@ -12,6 +12,10 @@ Test Tags           area:recover    pilot
 *** Variables ***
 # Time limit stated in the specification (not a tier timeout).
 ${SDS_2532504_LIMIT}      20s
+# 2532508: how long to wait for the Error response (the 20 s limit plus a margin).
+${SDS_2532508_WAIT}       30s
+# Stimulus: how late the hardware answers DeInitialize in the boundary test (inside the 20 s limit).
+${LATE_DEINITIALIZE_RSP}    15s
 
 
 *** Test Cases ***
@@ -84,6 +88,40 @@ SDS-2532504 RecoverResponse OK Matches The ICD Schema
     ${entry}=    Wait For Message Entry    RecoverResponse    timeout=${SDS_2532504_LIMIT}    Status=OK
     Should Be Equal    ${entry}[topic]    /is/iw/tx
     Should Be True    ${entry}[valid]    RecoverResponse breaks the ICD schema: ${entry}[errors]
+    Received Messages Should Be Schema Valid
+
+SDS-2532504 RecoverResponse OK When DeInitializeRsp Comes Late But Within 20 Seconds
+    [Documentation]    If rtc_appl replies with 'DeInitializeRsp' within 20 seconds, appSMM software
+    ...    publishes the RecoverResponse message with Status "OK" over the is/iw/tx topic.
+    ...    Boundary case: a COP fault rule delays the hardware's DeInitializeRsp by 15 s, so appSMM has to
+    ...    wait for it and still answer OK, within the 20 s.
+    [Tags]    SDS-2532504    spechash:bba306d8    needs:twin    review:pending
+    Require Hardware Twin
+    Bring SMM To E-Stop With Shutdown
+    Set Hardware Faults    DeInitializeRsp | delay=${LATE_DEINITIALIZE_RSP}
+    ${request}=    Send ICD Message    RecoverRequest
+    ${entry}=    Wait For Message Entry    RecoverResponse    timeout=${SDS_2532504_LIMIT}
+    Response Should Have Status On is/iw/tx    ${entry}    OK
+    Time Between Should Be At Least    ${request}    ${entry}    ${LATE_DEINITIALIZE_RSP}
+    Time Between Should Be Less Than    ${request}    ${entry}    ${SDS_2532504_LIMIT}
+    Hardware Fault Should Have Been Applied    DeInitializeRsp    times=1
+
+SDS-2532508 RecoverResponse Error When DeInitializeRsp Does Not Come Within 20 Seconds
+    [Documentation]    If rtc_appl does not reply with "DeInitializeRsp" during 20 seconds (see 2532504), appSMM
+    ...    software publishes the RecoverResponse message with Status "Error" over the is/iw/tx topic.
+    ...    Note: The timeout for receiving the rtc_appl reply for any command
+    ...    ("CommandResponseTimeoutMilliseconds") is configured in the appSMM.yaml file.
+    ...    A COP fault rule drops the hardware's DeInitializeRsp; the offline appSMM.yaml keeps the 20 s.
+    [Tags]    SDS-2532508    spechash:54f35f78    needs:twin    review:pending
+    Require Hardware Twin
+    Bring SMM To E-Stop With Shutdown
+    Set Hardware Faults    DeInitializeRsp | action=drop
+    ${request}=    Send ICD Message    RecoverRequest
+    Wait For Hardware Command    DeInitializeCmd    timeout=${RESPONSE_TIMEOUT}
+    ${entry}=    Wait For Message Entry    RecoverResponse    timeout=${SDS_2532508_WAIT}
+    Response Should Have Status On is/iw/tx    ${entry}    Error
+    Time Between Should Be At Least    ${request}    ${entry}    ${SDS_2532504_LIMIT}
+    Hardware Fault Should Have Been Applied    DeInitializeRsp
     Received Messages Should Be Schema Valid
 
 SDS-2532510 Initialization Starts After RecoverResponse

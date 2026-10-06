@@ -26,7 +26,7 @@ from smm_automation import FRAMEWORK_ROOT
 
 DEFAULT_SCOPE = FRAMEWORK_ROOT / "catalog" / "pilot.scope.toml"
 REVIEWS = FRAMEWORK_ROOT / "catalog" / "reviews.toml"
-TIER_EXCLUDES = {"mock": ["needs:twin"], "offline": [], "rig": ["needs:twin", "requires:restart"]}
+TIER_EXCLUDES = {"mock": ["needs:twin", "needs:applog"], "offline": [], "rig": ["needs:twin", "requires:restart", "needs:applog"]}
 
 
 def _catalog_path(args) -> Path:

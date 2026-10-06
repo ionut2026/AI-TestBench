@@ -33,9 +33,9 @@ flowchart LR
 
 | Tier | appSMM | Hardware | Use | Excluded tags |
 |---|---|---|---|---|
-| `mock` | scripted mock in the service | none | framework self-test, CI on every push. **Verdicts are not product evidence.** | `needs:twin` |
+| `mock` | scripted mock in the service | none | framework self-test, CI on every push. **Verdicts are not product evidence.** | `needs:twin`, `needs:applog` |
 | `offline` | real `appSMM.exe` on this PC | SMM TestBench hardware twin | developer PC, nightly | — |
-| `rig` | real appSMM on the instrument | real | dedicated automation instrument (`SMM_RIG_BROKER=host:port`) | `needs:twin`, `requires:restart` |
+| `rig` | real appSMM on the instrument | real | dedicated automation instrument (`SMM_RIG_BROKER=host:port`) | `needs:twin`, `requires:restart`, `needs:applog` |
 
 `review:pending` tests run on every tier and are labelled UNREVIEWED in the report (`--exclude-pending` leaves them out).
 `smm-auto run` exits with the number of **new** failures: failures of tests tagged `known-issue:FINDING-<n>` (see
@@ -71,7 +71,7 @@ override with `WINDCHILL_MCP_SERVER`) with the `RVS_*` settings from the environ
 .\.venv\Scripts\smm-auto drift --strict         # stale hashes, orphans, uncovered specs, RV&S state/link changes, retired specs, lint (exit 1 on problems)
 .\.venv\Scripts\smm-auto accept 2428419         # after checking the tests: accept a spec's new RV&S state/links as baseline
 .\.venv\Scripts\smm-auto migrate-hashes --from results\pilot-old.json   # after a hashing change: re-tag unchanged specs
-.\.venv\Scripts\smm-auto lint                   # test rules SMM01-05 (no Sleep, doc quotes spec, variable timeouts, tier tags)
+.\.venv\Scripts\smm-auto lint                   # test rules SMM01-06 (no Sleep, doc quotes spec, variable timeouts, capability tags)
 .\.venv\Scripts\smm-auto briefs --spec 2528698  # generated/briefs/SDS-2528698.md for the authoring agent
 .\.venv\Scripts\smm-auto run --tier mock        # results/mock-<ts>/: log.html, report.html, traceability.html/json
 .\.venv\Scripts\smm-auto run --tier offline --include initialization   # extra args go to robot
@@ -98,8 +98,9 @@ override with `WINDCHILL_MCP_SERVER`) with the `RVS_*` settings from the environ
    `spechash:<id>:<hash>` per specification. Handbook sections 12.4–12.5.1.
 
 Rules: one behaviour per test, assert what the specification states (message, fields, order, topic, timing), wait for
-events (never `Sleep`), only use keywords from the library/resource, add `needs:twin` if hardware-twin state is
-required and `requires:restart` if appSMM or the broker must be restarted. Timeouts are variables (time limits stated
+events (never `Sleep`), only use keywords from the library/resource, add `needs:twin` if hardware-twin state (or a COP
+fault) is required, `requires:restart` if appSMM or the broker must be restarted and `needs:applog` if appSMM's log
+files are read. Timeouts are variables (time limits stated
 by a specification as `${SDS_<id>_LIMIT}` in the suite). `smm-auto lint` and `robocop check robot` enforce these rules
 in CI (handbook Section 11.3). Each wait consumes the message it matched; order is asserted with
 `Wait For Message Sequence` (or `since=last`), not by consecutive waits (handbook Section 10.2).

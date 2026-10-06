@@ -184,6 +184,8 @@ describe('service API v1', () => {
     expect(wait.status).toBe(409)
     expect(wait.data.kind).toBe('unavailable')
     expect((await call('POST', '/hardware/trace/expect-none', { command: 'InitializeCmd', durationMs: 100 })).status).toBe(409)
+    expect((await call('GET', '/hardware/faults')).status).toBe(409)
+    expect((await call('POST', '/hardware/faults', { faults: [{ message: 'DeInitializeRsp', action: 'drop' }] })).status).toBe(409)
   })
 
   it('returns the timeline and COP trace marks together', async () => {

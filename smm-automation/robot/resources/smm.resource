@@ -6,6 +6,7 @@ Documentation       Shared setup for all SMM suites: one test environment per su
 ...                 - ``SDS-<id>``: the RV&S specification the test verifies (REQ/US/ET links come from the catalog)
 ...                 - ``spechash:<8 hex>``: hash of the specification text the test was written against (drift check)
 ...                 - ``needs:twin``: drives the simulated hardware (offline tier only)
+...                 - ``needs:applog``: reads appSMM's SmartInspect log files (offline tier only, until the rig's logs can be fetched)
 ...                 - ``requires:restart``: restarts appSMM or the broker (not on the shared rig)
 ...                 - ``review:pending``: generated, not yet reviewed by a human. Runs on every tier; the report
 ...                 labels it UNREVIEWED and its specification is never VERIFIED. Remove it only together with an
@@ -78,3 +79,10 @@ Messages From appSMM Should Use Topic
     FOR    ${entry}    IN    @{entries}
         Should Be Equal    ${entry}[topic]    ${topic}    ${entry}[id] ${name} was published on ${entry}[topic]
     END
+
+Response Should Have Status On is/iw/tx
+    [Documentation]    The response ``entry`` (from Wait For Message Entry) has ``Status`` = ``status`` and was
+    ...    published on is/iw/tx.
+    [Arguments]    ${entry}    ${status}
+    Should Be Equal    ${entry}[body][Status]    ${status}    ${entry}[name] has Status ${entry}[body][Status]
+    Should Be Equal    ${entry}[topic]    /is/iw/tx    ${entry}[name] was published on ${entry}[topic]

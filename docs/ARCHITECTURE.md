@@ -141,3 +141,7 @@ troubleshooting) is [`docs/SMM-AUTOMATION-HANDBOOK.md`](SMM-AUTOMATION-HANDBOOK.
     requirements and user stories.
 - **Test effectiveness.** `smm-auto mutate` injects defects (fault rules from `catalog/mutants.toml`) into the mock
   appSMM and checks that the tests of the affected specifications fail; a nightly CI job reports surviving mutants.
+- **Fault injection and logs (offline tier).** The service wraps the COP link between the real appSMM and the
+  hardware twin (`service/src/copFaults.ts`, `/hardware/faults`) to drop, delay or answer with an error, so
+  "no reply within N s" specifications are testable; `smm_automation/sil.py` reads appSMM's SmartInspect `.sil`
+  logs for specifications about what appSMM logs.

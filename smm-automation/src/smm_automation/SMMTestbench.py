@@ -28,6 +28,8 @@ from __future__ import annotations
 import html
 import json
 import time
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from robot.api import logger
@@ -35,6 +37,7 @@ from robot.api.deco import keyword, library
 from robot.libraries.BuiltIn import BuiltIn
 from robot.utils import timestr_to_secs
 
+from smm_automation import sil
 from smm_automation.client import DEFAULT_URL, ServiceClient, ServiceError, ensure_service
 
 STATES = ("PowerOn", "NotInitialized", "Initializing", "Idle", "NormalOperation", "E-Stop", "Configuring", "Clearing")
@@ -42,6 +45,8 @@ TRANSIENT_STATES = ("PowerOn", "Initializing", "Clearing", "Configuring")
 FILTER_FIELDS = {"way", "topic", "analyzer", "valid", "since"}
 # After Initializing -> Idle appSMM goes on to Clearing; how long to wait for it before taking Idle as settled.
 CLEARING_GRACE_S = 15.0
+# appSMM's log lines may be stamped slightly before the service saw the message (same PC, different clocks).
+LOG_CLOCK_SLACK_MS = 2000
 
 
 @library(scope="GLOBAL", auto_keywords=False)
@@ -62,6 +67,7 @@ class SMMTestbench:
         self._last_match: int | None = None
         # (mark, label) of reconnections and restarts inside the test, shown in the test's timeline.
         self._segments: list[tuple[int, str]] = []
+        self._hardware_faults_set = False
 
     # ================================================================== service and environment
 
@@ -464,6 +470,142 @@ class SMMTestbench:
             e = (err.details or {}).get("entry")
             raise AssertionError(f"{err}: COP #{e['id']} {e['name']} {e.get('text', '')}" if e else str(err)) from None
 
+    @keyword
+    def set_hardware_faults(self, *rules: Any) -> dict:
+        """Makes the COP link between appSMM and the hardware twin misbehave (offline tier). Each rule is
+        ``Message | action=drop|delay|error | ms=... | code=... | skip=... | count=...`` (or a dict / JSON
+        object); ``delay=15s`` is short for ``action=delay | ms=15000``. Message is the COP name as the trace shows it: ``DeInitializeRsp`` (twin -> appSMM),
+        ``InitializeCmd`` or ``Initialize`` (appSMM -> twin), optionally with the module
+        (``AppMan.DeInitializeRsp``). Replaces earlier rules; the test teardown clears them. Example:
+        ``Set Hardware Faults    DeInitializeRsp | action=delay | ms=15000``."""
+        faults = [_fault_rule(r) for r in rules]
+        self._hardware_faults_set = bool(faults)
+        try:
+            status = self.client.set_hardware_faults(faults)
+        except ServiceError as err:
+            raise AssertionError(str(err)) from None
+        logger.info(f"COP fault rules: {json.dumps(faults)}")
+        return status
+
+    @keyword
+    def clear_hardware_faults(self) -> None:
+        """Back to a well-behaved COP link (also done by the test teardown after Set Hardware Faults)."""
+        self._hardware_faults_set = False
+        self.client.clear_hardware_faults()
+
+    @keyword
+    def get_hardware_fault_status(self) -> dict:
+        """The active COP fault rules and per rule how often a message matched and the fault was applied."""
+        return self.client.hardware_faults()
+
+    @keyword
+    def hardware_fault_should_have_been_applied(self, message: str, times: int | None = None) -> None:
+        """Guards against a vacuous test: the fault rule for ``message`` hit at least once (or exactly
+        ``times``)."""
+        stats = [s for s in self.client.hardware_faults()["stats"] if s["message"] == message]
+        if not stats:
+            raise AssertionError(f"No COP fault rule for {message}")
+        applied = stats[0]["applied"]
+        if (times is None and applied < 1) or (times is not None and applied != int(times)):
+            raise AssertionError(f"COP fault rule for {message} was applied {applied} time(s), expected {times if times is not None else 'at least 1'}")
+
+    # ================================================================== timing
+
+    @keyword
+    def get_time_between(self, earlier: Any, later: Any) -> float:
+        """Seconds from ``earlier`` to ``later``: entries returned by Send ICD Message, Wait For Message
+        (Entry), Wait For Message Sequence or Wait For Hardware Command, or times (ISO text or epoch ms)."""
+        seconds = (_epoch_ms(later) - _epoch_ms(earlier)) / 1000
+        logger.info(f"{_label(earlier)} -> {_label(later)}: {seconds:.3f} s")
+        return seconds
+
+    @keyword
+    def time_between_should_be_less_than(self, earlier: Any, later: Any, limit: str) -> float:
+        """SDS timing requirements ("within 20 s"): fails unless ``later`` came less than ``limit`` after
+        ``earlier``, and if it came before it. Returns the seconds."""
+        seconds = self.get_time_between(earlier, later)
+        if seconds < 0:
+            raise AssertionError(f"{_label(later)} came {-seconds:.3f} s before {_label(earlier)}")
+        if seconds >= timestr_to_secs(limit):
+            raise AssertionError(f"{_label(later)} came {seconds:.3f} s after {_label(earlier)}, limit {limit}")
+        return seconds
+
+    @keyword
+    def time_between_should_be_at_least(self, earlier: Any, later: Any, minimum: str) -> float:
+        """Fails if ``later`` came less than ``minimum`` after ``earlier`` (e.g. proves a delay fault took
+        effect, or that appSMM waited as specified). Returns the seconds."""
+        seconds = self.get_time_between(earlier, later)
+        if seconds < timestr_to_secs(minimum):
+            raise AssertionError(f"{_label(later)} came {seconds:.3f} s after {_label(earlier)}, expected at least {minimum}")
+        return seconds
+
+    # ================================================================== appSMM log files
+
+    @keyword
+    def get_appsmm_log_location(self) -> str | None:
+        """The configured appSMM log file (``...\\appSMM.sil``): the variable ``${APPSMM_LOG}`` if set, else
+        ``trace.config`` next to the appSMM.exe the environment runs (offline tier). None if unknown (mock; rig
+        until its logs can be fetched)."""
+        configured = BuiltIn().get_variable_value("${APPSMM_LOG}")
+        if configured:
+            return str(configured)
+        try:
+            exe = (self.client.environment().get("appSmm") or {}).get("exe")
+        except ServiceError:
+            return None
+        target = sil.log_target(Path(exe).parent) if exe else None
+        return str(target) if target else None
+
+    @keyword
+    def get_appsmm_log_messages(self, name: str | None = None, since: Any = "test") -> list:
+        """ICD messages appSMM wrote to its SmartInspect log (``.sil``) since ``since`` (``test``, ``all``, an
+        entry or a time). Each is ``{time, way (RX/TX from appSMM's side), topic, name, body, line}``."""
+        target = self._log_target()
+        found = [m.as_dict() for m in sil.logged_messages(target, self._log_since_ms(since)) if not name or m.name == name]
+        logger.info(f"{len(found)} ICD message(s){' ' + name if name else ''} in the appSMM log {target}")
+        return found
+
+    @keyword
+    def icd_messages_should_be_logged_by_appsmm(self, *names: str, since: Any = "test", timeout: str = "10s") -> list:
+        """Every ``names`` message exchanged with appSMM on the timeline since ``since`` (``test``, ``all`` or a
+        timeline entry) is in appSMM's log
+        file with its topic and content: received ones as ``RX(<topic>)``, published ones as ``TX(<topic>)``.
+        Waits up to ``timeout`` for appSMM to write the file. Returns the matching log entries."""
+        if not names:
+            raise ValueError("Name at least one ICD message")
+        target = self._log_target()
+        since_ms = self._log_since_ms(since)
+        start = int(since["id"]) - 1 if isinstance(since, dict) else (0 if str(since).lower() in ("all", "none") else self._test_mark)
+        exchanged = [e for e in self.client.query({"since": start}, 2000) if e.get("name") in names]
+        if not exchanged:
+            raise AssertionError(f"No {', '.join(names)} exchanged with appSMM in this window: nothing to look for in the log")
+        deadline = time.monotonic() + timestr_to_secs(timeout)
+        while True:
+            # the log stamps lines with appSMM's clock; allow for the time between receiving and logging
+            logged = sil.logged_messages(target, since_ms - LOG_CLOCK_SLACK_MS)
+            matched, missing = _match_logged(exchanged, logged)
+            if not missing or time.monotonic() >= deadline:
+                break
+            time.sleep(0.5)
+        if missing:
+            lines = "\n".join(f"  #{e['id']} {'RX' if e['way'] == 'tx' else 'TX'}({e['topic']}) {e['name']} {json.dumps(e['body'])}" for e in missing)
+            raise AssertionError(f"{len(missing)} of {len(exchanged)} message(s) not in the appSMM log {target}:\n{lines}")
+        logger.info(f"All {len(exchanged)} {', '.join(names)} message(s) are in the appSMM log:\n" + "\n".join(m["line"] for m in matched))
+        return matched
+
+    def _log_target(self) -> Path:
+        location = self.get_appsmm_log_location()
+        if not location:
+            raise AssertionError("The appSMM log location is unknown in this tier (set ${APPSMM_LOG})")
+        return Path(location)
+
+    def _log_since_ms(self, since: Any) -> float:
+        if since is None or str(since).lower() == "test":
+            return float(self._test_started_ms)
+        if str(since).lower() in ("all", "none"):
+            return 0.0
+        return _epoch_ms(since)
+
     def _trace_since(self, since: Any) -> int:
         if since is None or since == "":
             return self._trace_mark
@@ -515,6 +657,12 @@ class SMMTestbench:
         """Test teardown: logs the test's timeline (and service logs when the test failed), and fails
         the test if the service dropped part of its evidence (timeline or COP trace cap reached)."""
         self._in_test = False
+        if self._hardware_faults_set:
+            self._hardware_faults_set = False
+            try:
+                self.client.clear_hardware_faults()
+            except ServiceError as err:
+                logger.warn(f"COP fault rules not cleared: {err}")
         try:
             entries = self.client.query({"since": self._test_mark}, 500)
         except ServiceError as err:
@@ -688,6 +836,72 @@ def _as_obj(value: Any) -> dict | None:
     if not isinstance(parsed, dict):
         raise ValueError(f"Expected a JSON object, got {value!r}")
     return parsed
+
+
+def _fault_rule(rule: Any) -> dict:
+    """``DeInitializeRsp | action=delay | ms=15000`` (or ``| delay=15s``, or a dict / JSON object) -> COP fault rule."""
+    if isinstance(rule, dict):
+        return dict(rule)
+    text = str(rule).strip()
+    if text.startswith("{"):
+        return _as_obj(text) or {}
+    parts = [p.strip() for p in text.split("|")]
+    out: dict[str, Any] = {"message": parts[0]}
+    for part in parts[1:]:
+        key, sep, value = part.partition("=")
+        if not sep:
+            raise ValueError(f"'{part}' in '{rule}' is not key=value")
+        if key.strip() == "delay":
+            out["action"] = "delay"
+            out["ms"] = round(timestr_to_secs(value.strip()) * 1000)
+        else:
+            out[key.strip()] = _coerce(value.strip())
+    return out
+
+
+def _match_logged(exchanged: list[dict], logged: list[sil.LoggedMessage]) -> tuple[list[dict], list[dict]]:
+    """Pairs each timeline entry with its own log line (same direction, topic, name and content, logged within
+    LOG_CLOCK_SLACK_MS). The timeline's ``tx`` (sent by the test) is appSMM's ``RX``."""
+    used: set[int] = set()
+    matched, missing = [], []
+    for e in sorted(exchanged, key=lambda x: _epoch_ms(x)):
+        way = "RX" if e["way"] == "tx" else "TX"
+        when = _epoch_ms(e)
+        body = _canonical(e.get("body"))
+        hit = next((i for i, m in enumerate(logged) if i not in used and m.way == way and m.topic == e["topic"]
+                    and m.name == e["name"] and abs(m.time_ms - when) <= LOG_CLOCK_SLACK_MS and _canonical(m.body) == body), None)
+        if hit is None:
+            missing.append(e)
+        else:
+            used.add(hit)
+            matched.append(logged[hit].as_dict())
+    return matched, missing
+
+
+def _canonical(body: Any) -> str:
+    return json.dumps(body, sort_keys=True, separators=(",", ":"))
+
+
+def _epoch_ms(value: Any) -> float:
+    """Entry (``time`` field), epoch ms or ISO 8601 text -> epoch ms."""
+    if isinstance(value, dict):
+        if "time" not in value:
+            raise ValueError(f"Entry has no time: {value!r}")
+        value = value["time"]
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value).strip()
+    try:
+        return float(text)
+    except ValueError:
+        pass
+    return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp() * 1000
+
+
+def _label(value: Any) -> str:
+    if isinstance(value, dict):
+        return f"#{value.get('id', '?')} {value.get('name', '?')}"
+    return str(value)
 
 
 def _put(target: dict, dotted: str, value: Any) -> None:

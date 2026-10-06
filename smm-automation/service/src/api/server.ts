@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { BridgeSession, ExpectationError, WaitTimeoutError, summarize } from '../bridgeSession'
 import { CommandSentError, CommandTimeoutError, Environment, UnavailableError, presetFor, type EnvironmentConfig, type Tier } from '../environment'
 import { checkFilter, type MessageFilter } from '../messageFilter'
+import { CopFaultError } from '../copFaults'
 import { FaultError } from '../mock/faults'
 import { ICD_SCHEMA_VERSION, MESSAGES, testbenchInfo, type BeaconSettings, type ConnectionSettings, type TimelineEntry } from '../testbench'
 
@@ -10,7 +11,7 @@ import { ICD_SCHEMA_VERSION, MESSAGES, testbenchInfo, type BeaconSettings, type 
  * Versioned HTTP/JSON API of the SMM automation service. Breaking changes need a new major
  * API_VERSION and a new /api/vN prefix; the Robot library checks the major version at start-up.
  */
-export const API_VERSION = '1.2.0'
+export const API_VERSION = '1.3.0'
 const PREFIX = '/api/v1'
 
 export class HttpError extends Error {
@@ -91,6 +92,9 @@ export class AutomationService {
 
     // ---- hardware twin
     this.route('GET', '/hardware', () => env.hardwareSnapshot())
+    this.route('GET', '/hardware/faults', () => env.hardwareFaultStatus())
+    this.route('POST', '/hardware/faults', ({ body }) => env.setHardwareFaults(body.faults ?? []))
+    this.route('DELETE', '/hardware/faults', () => env.setHardwareFaults([]))
     this.route('GET', '/hardware/trace', ({ query }) => env.getTrace(num(query.get('since'), 0)))
     this.route('POST', '/hardware/trace/wait', async ({ body }) => {
       requireTwin(env)
@@ -198,7 +202,7 @@ export class AutomationService {
       send(res, 200, (await route.handler({ body, params, query: url.searchParams })) ?? { ok: true })
     } catch (err) {
       if (err instanceof HttpError) send(res, err.status, { error: err.message, details: err.details })
-      else if (err instanceof FaultError) send(res, 400, { error: err.message })
+      else if (err instanceof FaultError || err instanceof CopFaultError) send(res, 400, { error: err.message })
       else if (err instanceof WaitTimeoutError || err instanceof CommandTimeoutError) send(res, 408, { error: err.message, kind: 'timeout', details: err.details })
       else if (err instanceof UnavailableError) send(res, 409, { error: err.message, kind: 'unavailable' })
       else if (err instanceof ExpectationError || err instanceof CommandSentError) send(res, 409, { error: err.message, kind: 'expectation', details: err.details })

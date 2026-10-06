@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { createServer, Socket, type Server } from 'node:net'
 import { dirname, join } from 'node:path'
 import { Aedes } from 'aedes'
+import { CopFaultInjector, FaultyCopLink, validateCopFaults, type CopFaultEvent, type CopNamer } from './copFaults'
 import { validateFaults, type MockFault } from './mock/faults'
 import { MockAppSmm, type MockSmmOptions } from './mock/mockAppSmm'
 import {
@@ -82,6 +83,8 @@ export class Environment extends EventEmitter<{ log: [LogLine]; trace: [CopTrace
   private mockFaults: MockFault[] = []
   private twin?: HardwareTwin
   private cop?: CopServer
+  /** COP fault rules between appSMM and the twin; reset by every environment start. */
+  private copFaults = new CopFaultInjector()
   private logs: LogLine[] = []
   private trace: CopTraceEntry[] = []
   /** Service-wide trace ids: each environment start creates a new twin whose own ids restart at 1. */
@@ -118,6 +121,7 @@ export class Environment extends EventEmitter<{ log: [LogLine]; trace: [CopTrace
     if (this.config) await this.stop()
     this.config = config
     this.mockFaults = faults
+    this.copFaults = new CopFaultInjector()
     this.log('Service', `Starting ${config.tier} environment`)
     try {
       await this.startBroker()
@@ -260,26 +264,52 @@ export class Environment extends EventEmitter<{ log: [LogLine]; trace: [CopTrace
     const bundled = join(this.hwsimDir, 'resources', 'InstrumentModules.config')
     const instances = existsSync(local) ? local : bundled
     if (existsSync(instances)) catalog.addInstances(readFileSync(instances, 'utf8'))
-    this.twin = new HardwareTwin(new IcolCodec(catalog), hw)
+    const codec = new IcolCodec(catalog)
+    this.twin = new HardwareTwin(codec, hw)
     this.twin.on('log', (line) => this.log('Hardware', line))
-    this.twin.on('trace', (entry) => {
-      const recorded = { ...entry, id: ++this.traceSeq }
-      this.trace.push(recorded)
-      if (this.trace.length > this.traceCap) {
-        const lost = this.trace.splice(0, this.trace.length - this.traceCap)
-        this.traceDroppedThrough = lost[lost.length - 1].id
-      }
-      this.emit('trace', recorded)
-    })
+    this.twin.on('trace', (entry) => this.record(entry))
+    const namer = copNamer(codec)
     this.cop = new CopServer()
     this.cop.on('connection', (link) => {
       this.log('Hardware', 'appSMM connected to the hardware (COP)')
-      this.twin?.attach(link)
+      const faulty = new FaultyCopLink(link, () => this.copFaults, namer, (event) => this.onCopFault(event))
+      this.twin?.attach(faulty as unknown as Parameters<HardwareTwin['attach']>[0])
     })
     this.cop.on('error', (err) => this.log('Hardware', `COP server error: ${err.message}`))
     await this.cop.listen(hw.port, hw.host)
     this.twin.start()
     this.log('Hardware', `Hardware twin listening on ${hw.host}:${hw.port}`)
+  }
+
+  private record(entry: Omit<CopTraceEntry, 'id'>): void {
+    const recorded = { ...entry, id: ++this.traceSeq }
+    this.trace.push(recorded)
+    if (this.trace.length > this.traceCap) {
+      const lost = this.trace.splice(0, this.trace.length - this.traceCap)
+      this.traceDroppedThrough = lost[lost.length - 1].id
+    }
+    this.emit('trace', recorded)
+  }
+
+  private onCopFault({ direction, name, action, payload }: CopFaultEvent): void {
+    this.log('Hardware', `COP fault rule: ${action} ${name}`)
+    // The twin never sees a dropped command: record it so the trace still shows what appSMM sent.
+    if (direction === 'command' && action === 'drop') {
+      this.record({ time: Date.now(), way: 'rx', hex: hexOf(payload), name, text: '{}', error: 'dropped by a COP fault rule' })
+    }
+  }
+
+  /** Replaces the COP fault rules between appSMM and the twin; [] restores normal behaviour. */
+  setHardwareFaults(input: unknown) {
+    this.requireTwin()
+    this.copFaults = new CopFaultInjector(validateCopFaults(input))
+    this.log('Service', `COP fault rules: ${this.copFaults.rules.length}`)
+    return this.hardwareFaultStatus()
+  }
+
+  hardwareFaultStatus() {
+    this.requireTwin()
+    return { faults: this.copFaults.rules, stats: this.copFaults.stats() }
   }
 
   private requireTwin(): HardwareTwin {
@@ -353,8 +383,9 @@ export class Environment extends EventEmitter<{ log: [LogLine]; trace: [CopTrace
         mockState: this.mock?.systemState,
         mockFaults: c.appSmm === 'mock' ? this.mockFaults.length : undefined,
         process: this.runner?.appSmm.status(),
+        exe: c.appSmm === 'real' ? c.runner.appSmmExe : undefined,
       },
-      hardware: c && { kind: c.hardware, state: this.twin?.snapshot().state, connected: this.twin?.connected },
+      hardware: c && { kind: c.hardware, state: this.twin?.snapshot().state, connected: this.twin?.connected, copFaults: this.twin ? this.copFaults.rules.length : undefined },
       trace: { size: this.trace.length, cap: this.traceCap, droppedThrough: this.traceDroppedThrough, lastId: this.traceSeq },
       processes: this.runner?.statuses() ?? [],
     }
@@ -433,7 +464,21 @@ export class CommandSentError extends Error {
 }
 
 function traceOut(t: CopTraceEntry) {
-  return { id: t.id, time: new Date(t.time).toISOString(), way: t.way, name: t.name, text: t.text }
+  return { id: t.id, time: new Date(t.time).toISOString(), way: t.way, name: t.name, text: t.text, ...(t.error ? { error: t.error } : {}) }
+}
+
+const hexOf = (bytes: Uint8Array) => [...bytes].map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ')
+
+/** Names raw ICoL messages the way the twin's trace does: ``AppMan.InitializeCmd``, ``AppMan.DeInitializeRsp``, ``...Err`` (events). */
+export function copNamer(codec: IcolCodec): CopNamer {
+  return (payload, direction) => {
+    const kind = direction === 'command' ? 'command' : payload[1] === 0 ? 'event' : 'response'
+    const d = codec.decode(payload, kind)
+    if (!d.def) return undefined
+    const device = d.address !== d.def.address ? codec.catalog.instanceName(d.address) : undefined
+    const suffix = kind === 'command' ? 'Cmd' : kind === 'response' ? 'Rsp' : 'Err'
+    return `${device ?? d.def.module.replace(/^7251_/, '')}.${d.def.name}${suffix}`
+  }
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))

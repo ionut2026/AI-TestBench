@@ -116,6 +116,15 @@ leak between mutants. A baseline run without faults must pass first. CI job `mut
 | 4.4 | Deferred 2532404, 2532508 | Automate with RTC faults (no `DeInitializeRsp`, rtc_appl not starting) via 4.2 |
 | 4.5 | Deferred 2528708, 2528710 | `.sil` (SmartInspect) log reader keyword; on offline read the local log, on rig fetch via the rig adapter (Phase 6) |
 
+*4.1–4.5 status:* done (service API 1.3.0) except the rig log fetch, which moves to Phase 6 (tag `needs:applog` is
+excluded on mock and rig until then; lint rule SMM06). 4.1: `Get Time Between`, `Time Between Should Be Less Than` /
+`At Least` on entry times; spec limits as `${SDS_<id>_LIMIT}`. 4.2: `copFaults.ts` wraps the twin's COP link inside the
+service (drop/delay/error, `skip`/`count`, rules survive appSMM restarts), keywords `Set Hardware Faults` etc.
+4.3: boundary tests with a 15 s late reply for 2532504 (DeInitializeRsp) and 2428417 (EmergencyStopRsp, assumed to be
+the spec's "StopRsp"); the "over the limit" side is the drop tests of 4.4. 4.4: 2532404 (InitializeCmd dropped) and
+2532508 (DeInitializeRsp dropped) → Error after ≥ 20 s. 4.5: `sil.py` + `ICD Messages Should Be Logged By appSMM`
+(log location from `trace.config` next to `appSMM.exe`, or `${APPSMM_LOG}`). The `[deferred]` list is now empty.
+
 ## Phase 5 — Coverage depth — 4–5 days
 
 | # | Work |
