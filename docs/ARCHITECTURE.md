@@ -126,8 +126,9 @@ troubleshooting) is [`docs/SMM-AUTOMATION-HANDBOOK.md`](SMM-AUTOMATION-HANDBOOK.
   - their requirements (`Satisfies`) and user stories (`Described In`);
   - the Explorative Tests, parsed into preconditions, steps and expected results.
 - **Generation.** `smm-auto briefs` turns each catalog entry into a brief for the
-  `.github/agents/smm-test-author.agent.md` agent. The agent writes the Robot tests tagged `review:pending`, and a
-  human reviews them.
+  `.github/agents/smm-test-author.agent.md` agent. The agent writes the Robot tests tagged `review:pending`, the
+  read-only `.github/agents/smm-test-reviewer.agent.md` agent can give an independent review, and a human approves
+  them.
 - **Execution.** `smm-automation/service/` is a headless TypeScript service bundled from the SMM TestBench sources
   at a pinned commit:
   - It acts as the SMM Bridge and runs the tier environment: a mock appSMM, the real appSMM.exe plus the hardware
