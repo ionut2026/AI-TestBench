@@ -1,0 +1,313 @@
+# Mutant catalogue for mutation testing of the suites (smm-auto mutate, plan 3.2).
+#
+# Each [[mutant]] is a defect injected into the MOCK appSMM through fault rules (service
+# src/mock/faults.ts). `smm-auto mutate` runs the tests tagged SDS-<spec> for the mutant's `specs`
+# with the faults active: a failing test kills the mutant; if all pass it SURVIVED, i.e. the suites
+# would not notice that defect in appSMM. Mutants measure the tests, never the product.
+#
+# Fault rule keys: message (name or "*"), action (drop | duplicate | delay | reorder | wrongTopic |
+# set | unset | invalid), when (body values that must match), ms (delay; reorder: longest hold),
+# topic (wrongTopic, default /is/hca1/tx), fields (set), remove (unset), skip, count.
+# The first matching rule decides; skip/count are counted per mock appSMM start.
+#
+# `specs` lists only the specifications whose text the defect violates. A mutant that survives
+# because no specification forbids it (an "equivalent" mutant) does not belong here.
+
+# ------------------------------------------------------------------ Initialization
+
+[[mutant]]
+id = "init-response-dropped"
+description = "InitializationResponse OK is never published"
+specs = [2528698]
+faults = [{ message = "InitializationResponse", when = { Status = "OK" }, action = "drop" }]
+
+[[mutant]]
+id = "init-response-error"
+description = "InitializationResponse says Error although the initialization starts"
+specs = [2528698]
+faults = [{ message = "InitializationResponse", when = { Status = "OK" }, action = "set", fields = { Status = "Error" } }]
+
+[[mutant]]
+id = "init-response-after-initializing"
+description = "Initializing is notified before the InitializationResponse"
+specs = [2528698]
+faults = [{ message = "InitializationResponse", when = { Status = "OK" }, action = "reorder" }]
+
+[[mutant]]
+id = "init-response-wrong-topic"
+description = "InitializationResponse is published on an analyzer topic instead of is/iw/tx"
+specs = [2528698]
+faults = [{ message = "InitializationResponse", action = "wrongTopic" }]
+
+[[mutant]]
+id = "initializing-not-notified"
+description = "The NotInitialized -> Initializing notification is missing"
+specs = [2525423, 2528698]
+faults = [{ message = "SystemStatusNotification", when = { CurrentState = "Initializing" }, action = "drop" }]
+
+[[mutant]]
+id = "initializing-wrong-previous-state"
+description = "The Initializing notification names the wrong PreviousState"
+specs = [2525423, 2528698]
+faults = [{ message = "SystemStatusNotification", when = { CurrentState = "Initializing" }, action = "set", fields = { PreviousState = "Idle" } }]
+
+[[mutant]]
+id = "initializing-invalid"
+description = "The Initializing notification breaks the ICD schema (unknown property)"
+specs = [2528698, 2525390]
+faults = [{ message = "SystemStatusNotification", when = { CurrentState = "Initializing" }, action = "invalid" }]
+
+[[mutant]]
+id = "clearing-to-idle-not-notified"
+description = "The Clearing -> Idle notification is missing (the state still becomes Idle)"
+specs = [2528703]
+faults = [{ message = "SystemStatusNotification", when = { PreviousState = "Clearing", CurrentState = "Idle" }, action = "drop" }]
+
+[[mutant]]
+id = "clearing-to-idle-invalid"
+description = "The Clearing -> Idle notification breaks the ICD schema"
+specs = [2528703]
+faults = [{ message = "SystemStatusNotification", when = { PreviousState = "Clearing", CurrentState = "Idle" }, action = "invalid" }]
+
+[[mutant]]
+id = "idle-before-clearing-not-notified"
+description = "The Initializing -> Idle notification before Clearing is missing"
+specs = [2528706]
+faults = [{ message = "SystemStatusNotification", when = { PreviousState = "Initializing", CurrentState = "Idle" }, action = "drop" }]
+
+[[mutant]]
+id = "clearing-before-idle"
+description = "Clearing is notified before Idle (wrong order)"
+specs = [2528706]
+faults = [{ message = "SystemStatusNotification", when = { PreviousState = "Initializing", CurrentState = "Idle" }, action = "reorder" }]
+
+# ------------------------------------------------------------------ System status
+
+[[mutant]]
+id = "status-response-wrong-state"
+description = "SystemStatusResponse reports Idle while the system is NotInitialized"
+specs = [2955303]
+faults = [{ message = "SystemStatusResponse", when = { CurrentState = "NotInitialized" }, action = "set", fields = { CurrentState = "Idle" } }]
+
+[[mutant]]
+id = "status-response-invalid"
+description = "SystemStatusResponse breaks the ICD schema"
+specs = [2955303, 2525392]
+faults = [{ message = "SystemStatusResponse", action = "invalid" }]
+
+[[mutant]]
+id = "status-response-wrong-topic"
+description = "SystemStatusResponse is published on an analyzer topic instead of is/iw/tx"
+specs = [2525392]
+faults = [{ message = "SystemStatusResponse", action = "wrongTopic" }]
+
+[[mutant]]
+id = "status-response-duplicated"
+description = "Every SystemStatusRequest gets two SystemStatusResponses"
+specs = [2525392]
+faults = [{ message = "SystemStatusResponse", action = "duplicate" }]
+
+[[mutant]]
+id = "status-response-missing-state"
+description = "SystemStatusResponse has no CurrentState"
+specs = [2525392]
+faults = [{ message = "SystemStatusResponse", action = "unset", remove = ["CurrentState"] }]
+
+[[mutant]]
+id = "poweron-not-notified"
+description = "The PowerOn notification after connecting to the broker is missing"
+specs = [2525388]
+faults = [{ message = "SystemStatusNotification", when = { CurrentState = "PowerOn" }, action = "drop" }]
+
+[[mutant]]
+id = "poweron-notified-twice"
+description = "PowerOn is notified twice after connecting to the broker"
+specs = [2525388]
+faults = [{ message = "SystemStatusNotification", when = { CurrentState = "PowerOn" }, action = "duplicate" }]
+
+[[mutant]]
+id = "notinitialized-before-poweron"
+description = "NotInitialized is notified before PowerOn after connecting to the broker"
+specs = [2525388]
+# Delay rather than reorder: other messages are published between the two notifications, so a
+# reorder hold would be released by one of them and the order would not change.
+faults = [{ message = "SystemStatusNotification", when = { CurrentState = "PowerOn" }, action = "delay", ms = 3000 }]
+
+[[mutant]]
+id = "notinitialized-wrong-topic"
+description = "The NotInitialized notification after a restart is published on an analyzer topic"
+specs = [2752658, 2525388]
+faults = [{ message = "SystemStatusNotification", when = { CurrentState = "NotInitialized" }, action = "wrongTopic" }]
+
+[[mutant]]
+id = "idle-notification-wrong-topic"
+description = "The Idle notification is published on an analyzer topic instead of is/iw/tx"
+specs = [2525390]
+faults = [{ message = "SystemStatusNotification", when = { CurrentState = "Idle" }, action = "wrongTopic" }]
+
+[[mutant]]
+id = "configuring-not-notified"
+description = "SetConfigurationRequest in NotInitialized does not notify Configuring"
+specs = [2427781]
+faults = [{ message = "SystemStatusNotification", when = { CurrentState = "Configuring" }, action = "drop" }]
+
+[[mutant]]
+id = "configuring-wrong-topic"
+description = "The Configuring notification is published on an analyzer topic"
+specs = [2427781]
+faults = [{ message = "SystemStatusNotification", when = { CurrentState = "Configuring" }, action = "wrongTopic" }]
+
+[[mutant]]
+id = "notinitialized-before-config-response"
+description = "Configuring -> NotInitialized is notified before the SetConfigurationResponse"
+specs = [2551270]
+faults = [{ message = "SetConfigurationResponse", action = "reorder" }]
+
+[[mutant]]
+id = "config-response-wrong-topic"
+description = "SetConfigurationResponse is published on an analyzer topic"
+specs = [2551270]
+faults = [{ message = "SetConfigurationResponse", action = "wrongTopic" }]
+
+[[mutant]]
+id = "config-to-notinitialized-not-notified"
+description = "The Configuring -> NotInitialized notification is missing"
+specs = [2551270]
+faults = [{ message = "SystemStatusNotification", when = { PreviousState = "Configuring" }, action = "drop" }]
+
+# ------------------------------------------------------------------ Shutdown
+
+[[mutant]]
+id = "shutdown-response-dropped"
+description = "ShutdownResponse is never published"
+specs = [2428419, 2428417]
+faults = [{ message = "ShutdownResponse", action = "drop" }]
+
+[[mutant]]
+id = "shutdown-response-error"
+description = "ShutdownResponse says Error"
+specs = [2428417]
+faults = [{ message = "ShutdownResponse", action = "set", fields = { Status = "Error" } }]
+
+[[mutant]]
+id = "shutdown-response-wrong-topic"
+description = "ShutdownResponse is published on an analyzer topic"
+specs = [2428417]
+faults = [{ message = "ShutdownResponse", action = "wrongTopic" }]
+
+[[mutant]]
+id = "shutdown-response-invalid"
+description = "ShutdownResponse breaks the ICD schema"
+specs = [2428417]
+faults = [{ message = "ShutdownResponse", action = "invalid" }]
+
+[[mutant]]
+id = "shutdown-response-late"
+description = "ShutdownResponse comes after the 20 s limit"
+specs = [2428417]
+faults = [{ message = "ShutdownResponse", action = "delay", ms = 25000 }]
+
+[[mutant]]
+id = "estop-before-shutdown-response"
+description = "E-Stop is notified before the ShutdownResponse"
+specs = [2428419]
+faults = [{ message = "ShutdownResponse", action = "reorder" }]
+
+[[mutant]]
+id = "estop-wrong-previous-state"
+description = "The E-Stop notification after Shutdown names the wrong PreviousState"
+specs = [2428419]
+faults = [{ message = "SystemStatusNotification", when = { CurrentState = "E-Stop" }, action = "set", fields = { PreviousState = "NotInitialized" } }]
+
+# ------------------------------------------------------------------ Recover
+
+[[mutant]]
+id = "recover-response-dropped"
+description = "RecoverResponse OK is never published"
+specs = [2532504, 2532510, 2653094]
+faults = [{ message = "RecoverResponse", when = { Status = "OK" }, action = "drop" }]
+
+[[mutant]]
+id = "recover-response-invalid"
+description = "RecoverResponse breaks the ICD schema"
+specs = [2532504]
+faults = [{ message = "RecoverResponse", when = { Status = "OK" }, action = "invalid" }]
+
+[[mutant]]
+id = "recover-response-wrong-topic"
+description = "RecoverResponse is published on an analyzer topic"
+specs = [2532504]
+faults = [{ message = "RecoverResponse", when = { Status = "OK" }, action = "wrongTopic" }]
+
+[[mutant]]
+id = "recover-response-late"
+description = "RecoverResponse comes after the 20 s limit"
+specs = [2532504]
+faults = [{ message = "RecoverResponse", when = { Status = "OK" }, action = "delay", ms = 25000 }]
+
+[[mutant]]
+id = "recover-ok-outside-estop"
+description = "RecoverRequest outside E-Stop is answered with OK"
+specs = [2532492]
+faults = [{ message = "RecoverResponse", when = { Status = "Error" }, action = "set", fields = { Status = "OK" } }]
+
+[[mutant]]
+id = "initializing-before-recover-response"
+description = "Initialization is notified before the RecoverResponse"
+specs = [2532510, 2653094]
+# NotInitialized and Initializing follow each other at once: a short delay puts the response after both.
+faults = [{ message = "RecoverResponse", when = { Status = "OK" }, action = "delay", ms = 500 }]
+
+[[mutant]]
+id = "recover-not-reinitialized"
+description = "After RecoverResponse the Initializing notification is missing"
+specs = [2532510, 2653094]
+# skip = 1: the first initialization (precondition Idle) is left alone.
+faults = [{ message = "SystemStatusNotification", when = { PreviousState = "NotInitialized", CurrentState = "Initializing" }, action = "drop", skip = 1 }]
+
+# ------------------------------------------------------------------ Bridge connection
+
+[[mutant]]
+id = "bridge-loss-hidden"
+description = "After a Bridge loss the system looks Idle: no E-Stop notification, status says Idle"
+specs = [2854109]
+faults = [
+  { message = "SystemStatusNotification", when = { CurrentState = "E-Stop" }, action = "drop" },
+  { message = "SystemStatusResponse", when = { CurrentState = "E-Stop" }, action = "set", fields = { CurrentState = "Idle" } },
+]
+
+[[mutant]]
+id = "reconnect-warning-dropped"
+description = "No operator warning when the Bridge connection is re-established"
+specs = [2854281]
+faults = [{ message = "EventNotification", action = "drop" }]
+
+[[mutant]]
+id = "reconnect-warning-severity"
+description = "The reconnection warning has Severity Info"
+specs = [2854281]
+faults = [{ message = "EventNotification", action = "set", fields = { Severity = "Info" } }]
+
+[[mutant]]
+id = "reconnect-warning-category"
+description = "The reconnection warning has Category Service instead of Operator"
+specs = [2854281]
+faults = [{ message = "EventNotification", action = "set", fields = { Category = "Service" } }]
+
+[[mutant]]
+id = "reconnect-warning-text"
+description = "The reconnection warning has a different text"
+specs = [2854281]
+faults = [{ message = "EventNotification", action = "set", fields = { Message = "Connection to SMMBridge re-established." } }]
+
+[[mutant]]
+id = "reconnect-warning-args"
+description = "The reconnection warning carries EventArgs"
+specs = [2854281]
+faults = [{ message = "EventNotification", action = "set", fields = { EventArgs = ["SMMBridge"] } }]
+
+[[mutant]]
+id = "reconnect-warning-wrong-topic"
+description = "The reconnection warning is published on an analyzer topic"
+specs = [2854281]
+faults = [{ message = "EventNotification", action = "wrongTopic" }]

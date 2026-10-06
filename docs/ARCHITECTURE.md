@@ -139,3 +139,5 @@ troubleshooting) is [`docs/SMM-AUTOMATION-HANDBOOK.md`](SMM-AUTOMATION-HANDBOOK.
     (against a baseline accepted with `smm-auto accept`) and retired specifications.
   - `smm-auto run` writes `traceability.html/json` next to Robot's log, with specification verdicts rolled up to
     requirements and user stories.
+- **Test effectiveness.** `smm-auto mutate` injects defects (fault rules from `catalog/mutants.toml`) into the mock
+  appSMM and checks that the tests of the affected specifications fail; a nightly CI job reports surviving mutants.

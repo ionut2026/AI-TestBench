@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { API_VERSION, AutomationService } from '../src/api/server'
 import { BridgeSession } from '../src/bridgeSession'
-import { CommandSentError, CommandTimeoutError, Environment, commandMatches } from '../src/environment'
+import { CommandSentError, CommandTimeoutError, Environment, commandMatches, presetFor } from '../src/environment'
 import { testbenchInfo } from '../src/testbench'
 
 // Contract test of the HTTP API (what the Robot library relies on), against the mock tier.
@@ -209,6 +209,53 @@ describe('service API v1', () => {
     expect(data.timeline.cap).toBe(20000)
     expect(data.timeline.droppedThrough).toBe(0)
     expect(data.timeline.size).toBeGreaterThan(0)
+  })
+
+  it('injects mock appSMM faults and clears them', async () => {
+    const request = async () => {
+      const { data: m } = await call('POST', '/timeline/mark')
+      await call('POST', '/messages', { name: 'SystemStatusRequest', body: {} })
+      return m.mark as number
+    }
+    expect((await call('POST', '/mock/faults', { faults: [{ message: 'X', action: 'explode' }] })).status).toBe(400)
+    const set = await call('POST', '/mock/faults', {
+      faults: [
+        { message: 'SystemStatusResponse', action: 'invalid', count: 1 },
+        { message: 'TubeIdStatusResponse', action: 'wrongTopic' },
+      ],
+    })
+    expect(set.status).toBe(200)
+    expect((await call('GET', '/environment')).data.appSmm.mockFaults).toBe(2)
+
+    let since = await request()
+    const invalid = await call('POST', '/timeline/wait', { filter: { name: 'SystemStatusResponse', since }, timeoutMs: 3000 })
+    expect(invalid.data.valid).toBe(false)
+    since = await request()
+    expect((await call('POST', '/timeline/wait', { filter: { name: 'SystemStatusResponse', since }, timeoutMs: 3000 })).data.valid).toBe(true)
+
+    const { data: m } = await call('POST', '/timeline/mark')
+    await call('POST', '/messages', { name: 'TubeIdStatusRequest', body: {} })
+    const routed = await call('POST', '/timeline/wait', { filter: { name: 'TubeIdStatusResponse', since: m.mark }, timeoutMs: 3000 })
+    expect(routed.data.topic).toBe('/is/hca1/tx')
+
+    const status = await call('GET', '/mock/faults')
+    expect(status.data.stats.map((s: any) => s.applied)).toEqual([1, 1])
+
+    await call('POST', '/mock/faults', { faults: [{ message: 'SystemStatusResponse', action: 'reorder', ms: 5000, count: 1 }] })
+    since = await request()
+    expect((await call('POST', '/timeline/expect-none', { filter: { name: 'SystemStatusResponse', since }, durationMs: 300 })).status).toBe(200)
+    await request()
+    const both = await call('POST', '/timeline/sequence', { since, timeoutMs: 3000, filters: [{ name: 'SystemStatusResponse' }, { name: 'SystemStatusResponse' }] })
+    expect(both.status).toBe(200)
+
+    expect((await call('DELETE', '/mock/faults')).data.faults).toEqual([])
+    expect((await call('GET', '/environment')).data.appSmm.mockFaults).toBe(0)
+  })
+
+  it('refuses faults outside the mock appSMM', async () => {
+    const env = new Environment('unused')
+    expect(() => env.setMockFaults([])).toThrow(/mock/)
+    await expect(env.start(presetFor('offline', { mock: { faults: [{ message: 'X', action: 'drop' }] } }))).rejects.toThrow(/mock/)
   })
 })
 

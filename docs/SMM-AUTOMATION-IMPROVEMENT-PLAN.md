@@ -98,6 +98,14 @@ ingest warning and an informational "area guessed" drift list.
 | 3.3 | `smm-auto mutate --tier mock`: runs the affected tests per mutant, reports killed/survived per spec and an overall detection score |
 | 3.4 | Nightly CI job; surviving mutants become test-improvement issues; target ≥ 90 % killed |
 
+*3.1–3.4 status:* done (service API 1.2.0). Fault rules are generic (`message`/`when`/`action`/`skip`/`count`) rather
+than one mode per row above; "wrong state" and "wrong field value" are `set` rules. Rules reach the mock through
+`SMM_MOCK_FAULTS` → `robot\environments\mock.py` overrides, so every mutant is an isolated Robot run and no state can
+leak between mutants. A baseline run without faults must pass first. CI job `mutation` (nightly/manual) files an issue
+"SMM automation: surviving mutants". Handbook 14.10. First local run: 47 mutants, score 0.979; the one survivor
+(`notinitialized-before-poweron`) was a weak mutant (its `reorder` hold was released by an unrelated message), now a
+`delay` and killed, so 47/47.
+
 ## Phase 4 — Timing and twin fault injection — 3–4 days
 
 | # | Finding | Work |

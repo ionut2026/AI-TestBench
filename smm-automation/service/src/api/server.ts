@@ -3,13 +3,14 @@ import { join } from 'node:path'
 import { BridgeSession, ExpectationError, WaitTimeoutError, summarize } from '../bridgeSession'
 import { CommandSentError, CommandTimeoutError, Environment, UnavailableError, presetFor, type EnvironmentConfig, type Tier } from '../environment'
 import { checkFilter, type MessageFilter } from '../messageFilter'
+import { FaultError } from '../mock/faults'
 import { ICD_SCHEMA_VERSION, MESSAGES, testbenchInfo, type BeaconSettings, type ConnectionSettings, type TimelineEntry } from '../testbench'
 
 /**
  * Versioned HTTP/JSON API of the SMM automation service. Breaking changes need a new major
  * API_VERSION and a new /api/vN prefix; the Robot library checks the major version at start-up.
  */
-export const API_VERSION = '1.1.0'
+export const API_VERSION = '1.2.0'
 const PREFIX = '/api/v1'
 
 export class HttpError extends Error {
@@ -82,6 +83,11 @@ export class AutomationService {
       return env.status()
     })
     this.route('GET', '/environment/logs', ({ query }) => env.getLogs(num(query.get('since'), 0), query.get('source') ?? undefined))
+
+    // ---- mock appSMM fault injection (mutation testing, tier mock only)
+    this.route('GET', '/mock/faults', () => env.mockFaultStatus())
+    this.route('POST', '/mock/faults', ({ body }) => ({ faults: env.setMockFaults(body.faults ?? []) }))
+    this.route('DELETE', '/mock/faults', () => ({ faults: env.setMockFaults([]) }))
 
     // ---- hardware twin
     this.route('GET', '/hardware', () => env.hardwareSnapshot())
@@ -192,6 +198,7 @@ export class AutomationService {
       send(res, 200, (await route.handler({ body, params, query: url.searchParams })) ?? { ok: true })
     } catch (err) {
       if (err instanceof HttpError) send(res, err.status, { error: err.message, details: err.details })
+      else if (err instanceof FaultError) send(res, 400, { error: err.message })
       else if (err instanceof WaitTimeoutError || err instanceof CommandTimeoutError) send(res, 408, { error: err.message, kind: 'timeout', details: err.details })
       else if (err instanceof UnavailableError) send(res, 409, { error: err.message, kind: 'unavailable' })
       else if (err instanceof ExpectationError || err instanceof CommandSentError) send(res, 409, { error: err.message, kind: 'expectation', details: err.details })

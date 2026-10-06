@@ -98,6 +98,70 @@ jobs:
             smm-automation/coverage.xml
             smm-automation/service/coverage
 
+  mutation:
+    # Mutation testing of the suites (plan Phase 3): defects are injected into the mock appSMM and the tests of the
+    # affected specifications must fail. Nightly/manual only (about 20 minutes). Survivors are filed as an issue.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: framework
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      issues: write
+    env:
+      SMM_TESTBENCH_DIR: ${{ github.workspace }}\smm-testbench
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pinned SMM TestBench commit
+        id: lock
+        run: |
+          $lock = Get-Content smm-automation/testbench.lock.json | ConvertFrom-Json
+          "commit=$($lock.commit)" >> $env:GITHUB_OUTPUT
+      - uses: actions/checkout@v4
+        with:
+          repository: ionut2026/SMM-TestBench
+          ref: ${{ steps.lock.outputs.commit }}
+          path: smm-testbench
+          token: ${{ secrets.SMM_TESTBENCH_TOKEN || github.token }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          npm ci --prefix smm-testbench/simulator
+          npm ci --prefix smm-testbench/hwsim
+          npm ci --prefix smm-automation/service
+          npm run build --prefix smm-automation/service
+          python -m pip install -r smm-automation/requirements-dev.lock
+          python -m pip install --no-deps -e smm-automation
+      - name: Mutation testing (mock tier)
+        working-directory: smm-automation
+        run: smm-auto mutate --outdir results/mutation
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smm-mutation
+          path: smm-automation/results/mutation
+      - name: File surviving mutants
+        if: always() && hashFiles('smm-automation/results/mutation/survivors.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $title = "SMM automation: surviving mutants"
+          $number = gh issue list --repo $env:GITHUB_REPOSITORY --state open --search "in:title `"$title`"" --json number --jq '.[0].number'
+          $body = "smm-automation/results/mutation/survivors.md"
+          if ($number) {
+            gh issue comment $number --repo $env:GITHUB_REPOSITORY --body-file $body
+          } else {
+            gh issue create --repo $env:GITHUB_REPOSITORY --title $title --body-file $body
+          }
+
   hardware:
     if: vars.SMM_RIG_RUNNER == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     needs: framework

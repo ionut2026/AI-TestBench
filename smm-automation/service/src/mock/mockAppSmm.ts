@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events'
 import mqtt, { type MqttClient } from 'mqtt'
+import { FaultInjector, type Delivery, type MockFault } from './faults'
 
 /**
  * Scripted stand-in for appSMM, for the "mock" tier: it lets the framework itself (service,
@@ -19,6 +20,8 @@ export interface MockSmmOptions {
   initializingMs?: number
   clearingMs?: number
   deinitMs?: number
+  /** Fault rules for mutation testing (see faults.ts); none = the scripted behaviour. */
+  faults?: MockFault[]
 }
 
 /** appSMM event id for "went to E-Stop because the connection to SMMBridge was lost" (ET 2855849). */
@@ -32,10 +35,25 @@ export class MockAppSmm extends EventEmitter<{ log: [string] }> {
   private timers = new Set<NodeJS.Timeout>()
   private bridgeLost = false
   private readonly o: Required<MockSmmOptions>
+  private injector: FaultInjector
+  /** Delayed publications (faults): not cancelled by E-Stop, only by stop(). */
+  private faultTimers = new Set<NodeJS.Timeout>()
+  private held: { delivery: Delivery; timer: NodeJS.Timeout }[] = []
 
   constructor(options: MockSmmOptions) {
     super()
-    this.o = { powerUpMs: 1000, initializingMs: 1500, clearingMs: 800, deinitMs: 500, ...options }
+    this.o = { powerUpMs: 1000, initializingMs: 1500, clearingMs: 800, deinitMs: 500, faults: [], ...options }
+    this.injector = new FaultInjector(this.o.faults)
+  }
+
+  /** Replaces the fault rules (their counters restart). */
+  setFaults(faults: MockFault[]): void {
+    this.injector = new FaultInjector(faults)
+    if (faults.length) this.emit('log', `fault rules active: ${JSON.stringify(faults)}`)
+  }
+
+  get faultStats() {
+    return this.injector.stats()
   }
 
   get systemState(): SystemState {
@@ -83,8 +101,10 @@ export class MockAppSmm extends EventEmitter<{ log: [string] }> {
 
   /** Stops like a killed process: no goodbye, the broker publishes the last will. */
   async stop(): Promise<void> {
-    for (const t of this.timers) clearTimeout(t)
+    for (const t of [...this.timers, ...this.faultTimers, ...this.held.map((h) => h.timer)]) clearTimeout(t)
     this.timers.clear()
+    this.faultTimers.clear()
+    this.held = []
     const client = this.client
     this.client = undefined
     if (!client) return
@@ -206,7 +226,40 @@ export class MockAppSmm extends EventEmitter<{ log: [string] }> {
   }
 
   private publish(name: string, body: unknown): void {
-    this.client?.publish(IW_TX, JSON.stringify(env(name, body)))
+    for (const d of this.injector.deliveries(IW_TX, name, body)) {
+      if (d.hold) {
+        const timer = setTimeout(() => this.release(d), d.delayMs)
+        this.held.push({ delivery: d, timer })
+      } else if (d.delayMs > 0) {
+        const timer = setTimeout(() => {
+          this.faultTimers.delete(timer)
+          this.send(d)
+        }, d.delayMs)
+        this.faultTimers.add(timer)
+      } else {
+        this.send(d)
+        this.releaseHeld()
+      }
+    }
+  }
+
+  private send(d: Delivery): void {
+    this.client?.publish(d.topic, d.payload)
+  }
+
+  /** reorder: held messages go out right after the next message. */
+  private releaseHeld(): void {
+    const held = this.held
+    this.held = []
+    for (const h of held) {
+      clearTimeout(h.timer)
+      this.send(h.delivery)
+    }
+  }
+
+  private release(d: Delivery): void {
+    this.held = this.held.filter((h) => h.delivery !== d)
+    this.send(d)
   }
 }
 

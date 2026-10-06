@@ -77,6 +77,7 @@ override with `WINDCHILL_MCP_SERVER`) with the `RVS_*` settings from the environ
 .\.venv\Scripts\smm-auto run --tier offline --include initialization   # extra args go to robot
 .\.venv\Scripts\smm-auto --suites robot\suites\pilot\recover.robot run --tier offline
 .\.venv\Scripts\smm-auto report --output results\rig-20261005-101500\output.xml
+.\.venv\Scripts\smm-auto mutate                 # mutation testing: do the tests notice defects injected into the mock appSMM? (catalog/mutants.toml)
 ```
 
 ## Writing tests

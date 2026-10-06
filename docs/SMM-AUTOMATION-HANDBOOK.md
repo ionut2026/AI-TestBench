@@ -1740,7 +1740,7 @@ On mock, only Robot and the service exist; the broker (aedes) and the fake appSM
 
 | Method & path | Body / query | Purpose |
 |---|---|---|
-| GET `/health` | | `ok`, `apiVersion` (1.1.0), TestBench info, ICD version |
+| GET `/health` | | `ok`, `apiVersion` (1.2.0), TestBench info, ICD version |
 | GET `/icd` | | ICD version, message list, schema names |
 | GET `/schemas/:name` | | JSON schema of one message |
 | GET `/environment` | | Tier, broker, appSMM, hardware status; `trace` = `{size, cap, droppedThrough, lastId}` |
@@ -1770,6 +1770,9 @@ On mock, only Robot and the service exist; the broker (aedes) and the fake appSM
 | POST `/timeline/sequence` | `{filters, timeoutMs, since}` | Wait for an ordered sequence |
 | POST `/timeline/expect-none` | `{filter, durationMs}` | Fail if a match exists/arrives |
 | GET `/pair-issues` | | Request/response pairing problems |
+| GET `/mock/faults` | | Active mock appSMM fault rules and how often each matched/was applied (409 outside the mock) |
+| POST `/mock/faults` | `{faults}` | Replace the fault rules (400 on an invalid rule; Section 14.10) |
+| DELETE `/mock/faults` | | Remove all fault rules |
 
 You can try the API by hand in PowerShell, e.g.
 `Invoke-RestMethod http://127.0.0.1:8765/api/v1/environment`.
@@ -1821,7 +1824,8 @@ Idle → Clearing → Idle; ShutdownRequest → E-Stop (+ OK); RecoverRequest on
 NotInitialized/initialization; publishes SystemStatusNotifications only on changes; reacts to the Bridge's last will.
 Durations are short (1–1.5 s). It exists so the framework can be tested without appSMM, **it is not a reference for
 correct behaviour**. When appSMM's real behaviour is clarified, the mock may be adjusted to keep mock runs green, but
-never use the mock to decide what is correct.
+never use the mock to decide what is correct. For mutation testing it can be told to misbehave (fault rules,
+Section 14.10); without rules it behaves as described above.
 
 ### 14.8 How the service is built from the TestBench
 
@@ -1844,10 +1848,47 @@ always runs the built file.
 | vitest (`service\test`) | `npm test` in `service` (`npm run coverage` with floors) | API contract against the mock tier, message filter rules |
 | pytest (`tests`) | `.\.venv\Scripts\python -m pytest` (`--cov` with floor) | Library keywords with a fake client, ingest helpers (hash, ET parsing, refs, areas), drift, report verdicts, briefs, lint rules |
 | mock tier | `smm-auto run --tier mock` | Whole chain end-to-end without appSMM |
+| mutation testing | `smm-auto mutate` (nightly in CI) | Whether the **suites** notice defects injected into the mock appSMM (Section 14.10) |
 
 Static checks: `npm run lint` (eslint) and `npm run typecheck` in `service`; `ruff check src tests` and `mypy` in
 `smm-automation`. Coverage floors sit just below the measured values (Python 55 %, service 75 % lines / 73 %
 branches): raise them when you add tests, never lower them to make CI green.
+
+### 14.10 Mutation testing (`smm-auto mutate`)
+
+Code coverage says which framework code ran; it says nothing about whether a **test would notice a wrong appSMM**.
+Mutation testing measures exactly that: the mock appSMM is made deliberately wrong in one small way (a *mutant*), the
+tests of the affected specifications run, and at least one of them must fail (*killed*). A mutant whose tests all
+still pass (*survived*) is a defect in appSMM the suites would let through.
+
+- **Mutants** live in `catalog\mutants.toml`: `id`, `description` (the defect in words), `specs` (whose tests must
+  notice it) and `faults` (rules for the mock). Only the tests tagged `SDS-<spec>` of those specs run (minus the tier
+  excludes), each mutant in its own Robot run with its own output folder.
+- **Fault rules** (`service\src\mock\faults.ts`): `message` (ICD name or `*`), `action` and optional `when` (partial
+  body match, dotted keys allowed), `skip` (leave the first n matches alone), `count` (apply at most n times).
+  Actions: `drop`, `duplicate`, `delay` (`ms`), `reorder` (hold until the next message of any kind, at most `ms`; use `delay` when other messages can come in between), `wrongTopic`
+  (`topic`, default `/is/hca1/tx`), `set` (`fields`), `unset` (`remove`), `invalid` (adds an unknown field so the
+  message breaks its schema). The first matching rule applies; rules reset with every environment start.
+- **How it gets into the mock:** `robot\environments\mock.py` reads the environment variable `SMM_MOCK_FAULTS` (JSON
+  list of rules) into `OVERRIDES.mock.faults`; `smm-auto mutate` sets it per mutant. By hand, use the API (14.3).
+- **Baseline:** first all selected tests run once without faults; if any fails the run is aborted (exit code 2),
+  because the results would be meaningless.
+- **Output:** `results\mutation-<date>\mutation.html` / `mutation.json` (per mutant: killed by which test, and whether
+  in setup or in the test itself; per specification: killed/survived), `survivors.md` when something survived, and
+  the list of specifications with tests but no mutant. Exit code 1 when the score (killed / (killed + survived)) is
+  below `--min-score` (0.9).
+
+```powershell
+.\.venv\Scripts\smm-auto mutate                                          # all mutants (~20 min)
+.\.venv\Scripts\smm-auto mutate --mutant estop-wrong-previous-state      # one mutant
+```
+
+**What to do with a survivor:** read the specification. If appSMM really could behave like the mutant and the
+specification forbids it, strengthen the test (an extra check, an exact count, the topic, a field). If the mutant is
+*equivalent* (the specification allows that behaviour), remove it from the catalogue and say why in the pull request.
+Never weaken a mutant to make it die. Mutation results describe the **tests**, not appSMM: they are not product
+evidence. When you add a test for a new specification, add at least one mutant for it (the report lists the
+specifications without one).
 
 ---
 
@@ -1860,8 +1901,8 @@ File: `.github\workflows\smm-automation.yml`. CI = GitHub runs the checks automa
 | Trigger | What runs |
 |---|---|
 | Push or pull request that changes `smm-automation/**` | Job **framework** |
-| Every weekday at 02:00 (UTC) | **framework**, then **hardware** (offline tier) — hardware only if the variable `SMM_RIG_RUNNER` is `true` |
-| Manually: *Actions → SMM automation → Run workflow*, choose tier `offline` or `rig` | **framework**, then **hardware** with that tier (same condition) |
+| Every weekday at 02:00 (UTC) | **framework**, then **mutation** (14.10) and **hardware** (offline tier) — hardware only if the variable `SMM_RIG_RUNNER` is `true` |
+| Manually: *Actions → SMM automation → Run workflow*, choose tier `offline` or `rig` | **framework**, then **mutation** and **hardware** with that tier (same condition) |
 
 ### 15.2 Job "framework" (GitHub-hosted Windows machine)
 
@@ -1875,6 +1916,13 @@ File: `.github\workflows\smm-automation.yml`. CI = GitHub runs the checks automa
 
 A red framework job on a pull request means: do not merge until fixed. The most common reason is `drift --strict`
 (e.g. a test was added without `spechash:`).
+
+### 15.2.1 Job "mutation" (nightly / manual, GitHub-hosted)
+
+Same installation as *framework*, then `smm-auto mutate` (Section 14.10, about 20 minutes). Uploads **smm-mutation**
+(`mutation.html`, `mutation.json`, one Robot output per mutant). When mutants survive, it opens an issue
+"SMM automation: surviving mutants" (or comments on the open one) with the list; the job is red when the score is
+below 0.9 or the baseline failed.
 
 ### 15.3 Job "hardware" (your own machine)
 
@@ -2047,6 +2095,7 @@ cd D:\projects\AI-TestBench\smm-automation
 .\.venv\Scripts\smm-auto run --tier rig                  # real lab (SMM_RIG_BROKER)
 .\.venv\Scripts\smm-auto run --tier offline --include SDS-2428419        # one spec
 .\.venv\Scripts\smm-auto run --tier offline --exclude-pending           # without unreviewed tests
+.\.venv\Scripts\smm-auto mutate                          # do the tests notice a wrong appSMM? (mock, ~20 min)
 
 # --- RV&S
 .\.venv\Scripts\smm-auto ingest                          # download specs/requirements/stories/ETs
@@ -2068,6 +2117,7 @@ cd service; npm run lint; npm run build; npm run coverage; cd ..
 | Shared Robot keywords | `robot\resources\smm.resource` |
 | Python keywords | `src\smm_automation\SMMTestbench.py` |
 | Which specs are in scope | `catalog\pilot.scope.toml` |
+| Mutants (mutation testing) | `catalog\mutants.toml` |
 | Downloaded RV&S data | `catalog\pilot.json` |
 | Tests | `robot\suites\pilot\*.robot` |
 | Service (TypeScript) | `service\src\` |

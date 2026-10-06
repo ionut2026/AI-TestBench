@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { createServer, Socket, type Server } from 'node:net'
 import { dirname, join } from 'node:path'
 import { Aedes } from 'aedes'
+import { validateFaults, type MockFault } from './mock/faults'
 import { MockAppSmm, type MockSmmOptions } from './mock/mockAppSmm'
 import {
   CopServer, HardwareTwin, IcolCatalog, IcolCodec, Runner, defaultHwSettings, defaultRack, defaultRunnerSettings, defaultTrays,
@@ -77,6 +78,8 @@ export class Environment extends EventEmitter<{ log: [LogLine]; trace: [CopTrace
   private broker?: { aedes: Aedes; server: Server; sockets: Set<Socket> }
   private runner?: Runner
   private mock?: MockAppSmm
+  /** Fault rules of the mock appSMM; kept across restart-appsmm, reset by every environment start. */
+  private mockFaults: MockFault[] = []
   private twin?: HardwareTwin
   private cop?: CopServer
   private logs: LogLine[] = []
@@ -110,8 +113,11 @@ export class Environment extends EventEmitter<{ log: [LogLine]; trace: [CopTrace
   // ---------------------------------------------------------------- lifecycle
 
   async start(config: EnvironmentConfig): Promise<void> {
+    const faults = validateFaults(config.mock?.faults)
+    if (faults.length && config.appSmm !== 'mock') throw new UnavailableError('Fault injection exists only for the mock appSMM (tier mock)')
     if (this.config) await this.stop()
     this.config = config
+    this.mockFaults = faults
     this.log('Service', `Starting ${config.tier} environment`)
     try {
       await this.startBroker()
@@ -203,7 +209,7 @@ export class Environment extends EventEmitter<{ log: [LogLine]; trace: [CopTrace
   private async startAppSmm(): Promise<void> {
     const config = this.config!
     if (config.appSmm === 'mock') {
-      this.mock = new MockAppSmm({ ...config.mock, brokerUrl: this.brokerUrl! })
+      this.mock = new MockAppSmm({ ...config.mock, faults: this.mockFaults, brokerUrl: this.brokerUrl! })
       this.mock.on('log', (l) => this.log('MockAppSMM', l))
       await this.mock.start()
     } else if (config.appSmm === 'real') {
@@ -228,6 +234,21 @@ export class Environment extends EventEmitter<{ log: [LogLine]; trace: [CopTrace
     await this.stopAppSmm()
     await sleep(downMs)
     await this.startAppSmm()
+  }
+
+  /** Replaces the fault rules of the mock appSMM (mutation testing); [] restores the scripted behaviour. */
+  setMockFaults(input: unknown): MockFault[] {
+    if (this.config?.appSmm !== 'mock') throw new UnavailableError('Fault injection exists only for the mock appSMM (tier mock)')
+    this.mockFaults = validateFaults(input)
+    this.mock?.setFaults(this.mockFaults)
+    this.log('Service', `Mock fault rules: ${this.mockFaults.length}`)
+    return this.mockFaults
+  }
+
+  /** The fault rules and how often each matched/was applied since the mock appSMM (re)started. */
+  mockFaultStatus() {
+    if (this.config?.appSmm !== 'mock') throw new UnavailableError('Fault injection exists only for the mock appSMM (tier mock)')
+    return { faults: this.mockFaults, stats: this.mock?.faultStats ?? [] }
   }
 
   // ---------------------------------------------------------------- hardware twin
@@ -330,6 +351,7 @@ export class Environment extends EventEmitter<{ log: [LogLine]; trace: [CopTrace
         kind: c.appSmm,
         running: c.appSmm === 'mock' ? !!this.mock?.running : c.appSmm === 'real' ? !!this.runner?.appSmm.status().running : undefined,
         mockState: this.mock?.systemState,
+        mockFaults: c.appSmm === 'mock' ? this.mockFaults.length : undefined,
         process: this.runner?.appSmm.status(),
       },
       hardware: c && { kind: c.hardware, state: this.twin?.snapshot().state, connected: this.twin?.connected },

@@ -9,6 +9,7 @@
   smm-auto run      [--tier mock|offline|rig] [--fail-on new|any|none] [robot args...]
                                                                  run suites, then the traceability report
   smm-auto report   --output results/.../output.xml              traceability report for an existing run
+  smm-auto mutate   [--mutant <id> ...] [--min-score 0.9]          mutation testing of the suites on the mock appSMM
   smm-auto service                                               run the automation service in the foreground
 """
 
@@ -196,6 +197,58 @@ def cmd_run(args, robot_args: list[str]) -> int:
     return _exit_code(rc, output, args.fail_on)
 
 
+def cmd_mutate(args) -> int:
+    from smm_automation.pipeline.drift import collect_tests
+    from smm_automation.pipeline.mutation import (
+        MutantError,
+        load_mutants,
+        mutate,
+        specs_without_mutants,
+        survivors_markdown,
+        write_report,
+    )
+
+    try:
+        mutants = load_mutants(Path(args.mutants))
+    except MutantError as err:
+        print(err, file=sys.stderr)
+        return 2
+    if args.mutant:
+        unknown = set(args.mutant) - {m["id"] for m in mutants}
+        if unknown:
+            print(f"unknown mutant(s): {', '.join(sorted(unknown))}", file=sys.stderr)
+            return 2
+        mutants = [m for m in mutants if m["id"] in args.mutant]
+    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    out_dir = Path(args.outdir) if args.outdir else FRAMEWORK_ROOT / "results" / f"mutation-{stamp}"
+    suites = _suites(args)
+    tests = collect_tests(suites)
+    excludes = list(TIER_EXCLUDES[args.tier])
+    print(f"{len(mutants)} mutant(s) on the {args.tier} tier -> {out_dir}")
+    result = mutate(mutants, tests, out_dir, tier=args.tier, variablefile=FRAMEWORK_ROOT / "robot" / "environments" / f"{args.tier}.py",
+                    excludes=excludes, suites=suites, baseline=not args.no_baseline)
+    if not args.mutant:
+        result["specsWithoutMutants"] = specs_without_mutants(mutants, tests, excludes)
+    report = write_report(result, out_dir)
+    survivors = survivors_markdown(result)
+    if survivors:
+        (out_dir / "survivors.md").write_text(survivors, encoding="utf-8")
+    print(f"Mutation report: {report}")
+    if result.get("aborted"):
+        print(f"ABORTED: {result['aborted']} ({result['baseline']['failed']})", file=sys.stderr)
+        return 2
+    sc = result["score"]
+    print(f"Mutation score: {sc['score']} (killed {sc['killed']}, survived {sc['survived']}, no tests {sc['noTests']}, errors {sc['errors']})")
+    for m in result["mutants"]:
+        if m["status"] == "survived":
+            print(f"  SURVIVED {m['id']} (SDS-{', SDS-'.join(map(str, m['specs']))}): {m['description']}")
+    if result.get("specsWithoutMutants"):
+        print(f"Specifications with tests but no mutant: {', '.join(map(str, result['specsWithoutMutants']))}")
+    if sc["errors"]:
+        return 2
+    return 1 if sc["score"] is not None and sc["score"] < args.min_score else 0
+
+
 def cmd_service(args) -> int:
     dist = FRAMEWORK_ROOT / "service" / "dist" / "smm-automation-service.mjs"
     if not dist.exists():
@@ -236,6 +289,13 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("report", allow_abbrev=False, help="traceability report for an existing output.xml")
     p.add_argument("--output", required=True)
     p.add_argument("--outdir")
+    p = sub.add_parser("mutate", allow_abbrev=False, help="mutation testing: inject defects into the mock appSMM and check that the tests notice")
+    p.add_argument("--tier", choices=["mock"], default="mock", help="only the mock appSMM supports fault injection")
+    p.add_argument("--mutants", default=str(FRAMEWORK_ROOT / "catalog" / "mutants.toml"))
+    p.add_argument("--mutant", action="append", help="only this mutant id (repeatable)")
+    p.add_argument("--outdir")
+    p.add_argument("--min-score", type=float, default=0.9, help="exit code 1 when the share of killed mutants is lower (default 0.9)")
+    p.add_argument("--no-baseline", action="store_true", help="skip the run without faults (the selected tests must pass without faults)")
     p = sub.add_parser("service", allow_abbrev=False, help="run the automation service in the foreground")
     p.add_argument("--port", type=int, default=8765)
 
@@ -245,7 +305,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run":
         return cmd_run(args, extra)
     return {"ingest": cmd_ingest, "briefs": cmd_briefs, "drift": cmd_drift, "accept": cmd_accept, "migrate-hashes": cmd_migrate_hashes,
-            "lint": cmd_lint, "report": cmd_report, "service": cmd_service}[args.command](args)
+            "lint": cmd_lint, "report": cmd_report, "mutate": cmd_mutate, "service": cmd_service}[args.command](args)
 
 
 if __name__ == "__main__":
