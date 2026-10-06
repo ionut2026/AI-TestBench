@@ -402,6 +402,74 @@ class SMMTestbench:
             timeout=f"{budget}s",
         )
 
+    # ================================================================== state x request matrix
+
+    @keyword
+    def observe_request_outcome(self, request: str, body: Any = None, timeout: str = "10s", observe: str = "3s",
+                                settle: str = "180s") -> dict:
+        """Sends ``request`` and records what appSMM does, without judging it: the response (waited for up
+        to ``timeout``), the SystemStatusNotifications within the observation window ``observe`` after it,
+        and the state appSMM settles in (waiting up to ``settle`` while it is in a transient state).
+        Returns ``{request, response, notifications, settled}`` for `Request Outcome Should Match`."""
+        response_name = request.replace("Request", "Response")
+        mark = self._set_marks()
+        self.send_icd_message(request, body)
+        response = None
+        try:
+            response = self.client.wait({"name": response_name, "way": "rx", "since": mark, "exclude": sorted(self._hidden)},
+                                        timestr_to_secs(timeout))
+            self._consume([response])
+        except ServiceError as err:
+            if err.kind != "timeout":
+                raise
+        time.sleep(timestr_to_secs(observe))  # observation window, not a wait for an expected event
+        try:
+            settled = self._settled_state(time.monotonic() + timestr_to_secs(settle))
+        except AssertionError as err:
+            settled = f"unsettled ({err})"
+        notes = self.client.query({"name": "SystemStatusNotification", "way": "rx", "since": mark, "exclude": sorted(self._hidden)})
+        outcome = {
+            "request": request,
+            "response": response and {"name": response["name"], "topic": response.get("topic"), "body": response.get("body")},
+            "notifications": [f"{(n.get('body') or {}).get('PreviousState')} -> {(n.get('body') or {}).get('CurrentState')}" for n in notes],
+            "settled": settled,
+        }
+        logger.info(f"Outcome of {request}: {json.dumps(outcome)}")
+        return outcome
+
+    @keyword
+    def request_outcome_should_match(self, outcome: dict, state: str, response: str = "", next_state: str = "",
+                                     questions: str = "", checked: Any = False) -> None:
+        """Checks an outcome of `Observe Request Outcome` (sent in precondition ``state``) against a state
+        matrix cell. ``response``: ``Name | Field=Value | @topic=...``, ``none`` (no answer allowed) or empty
+        (unspecified). ``next_state``: the state appSMM must reach, ``unchanged`` or empty (unspecified).
+        ``questions``: a text whose part after ``Open:`` lists what the specification leaves open (`` / ``
+        separated), e.g. the test documentation; logged as a warning with the observed outcome. ``checked``: something was already verified by the caller (e.g. a COP command).
+        When nothing was specified or checked on this tier, the test is skipped with the observation."""
+        errors: list[str] = []
+        observed = _describe_outcome(outcome)
+        if response.strip().lower() == "none":
+            if outcome["response"]:
+                errors.append(f"appSMM answered {outcome['request']} with {json.dumps(outcome['response'])}; no answer is allowed")
+        elif response.strip():
+            errors += _response_errors(outcome["response"], response)
+        if next_state.strip().lower() == "unchanged":
+            if outcome["notifications"] or outcome["settled"] != state:
+                errors.append(f"state changed: notifications {outcome['notifications']}, settled in {outcome['settled']}; expected unchanged {state}")
+        elif next_state.strip():
+            reached = [n.split(" -> ")[-1] for n in outcome["notifications"]] + [outcome["settled"]]
+            if next_state.strip() not in reached:
+                errors.append(f"state {next_state.strip()} not reached: notifications {outcome['notifications']}, settled in {outcome['settled']}")
+        if errors:
+            raise AssertionError("; ".join(errors) + f". Observed: {observed}")
+        open_questions = [q.strip() for q in _open_part(questions).split(" / ") if q.strip()]
+        if open_questions:
+            logger.warn(f"Unspecified behaviour of {outcome['request']} in {state}: {' / '.join(open_questions)} Observed: {observed}")
+        if not (response.strip() or next_state.strip() or _truthy(checked)):
+            from robot.api import SkipExecution
+
+            raise SkipExecution(f"Not specified; observed: {observed}. Open: {' / '.join(open_questions) or '-'}")
+
     # ================================================================== hardware
 
     @keyword
@@ -825,6 +893,41 @@ def _coerce(value: Any) -> Any:
         except ValueError:
             return value
     return value
+
+
+def _open_part(text: str) -> str:
+    """The open questions in ``text``: everything after ``Open:`` (nothing without it), whitespace normalised."""
+    text = " ".join(str(text or "").split())
+    return text.split("Open:", 1)[1] if "Open:" in text else ""
+
+
+def _describe_outcome(outcome: dict) -> str:
+    resp = outcome.get("response")
+    answer = f"{resp['name']} {json.dumps(resp['body'])} on {resp['topic']}" if resp else "no response"
+    states = ", ".join(outcome.get("notifications") or []) or "no state notification"
+    return f"{answer}; {states}; settled in {outcome.get('settled')}"
+
+
+def _response_errors(resp: dict | None, expected: str) -> list[str]:
+    """Differences between an observed response and ``Name | Field=Value | @topic=...``."""
+    parts = [p.strip() for p in expected.split("|") if p.strip()]
+    if not resp:
+        return [f"no {parts[0]} received"]
+    errors = []
+    if resp["name"] != parts[0]:
+        errors.append(f"got {resp['name']}, expected {parts[0]}")
+    for part in parts[1:]:
+        key, _, value = part.partition("=")
+        key, want = key.strip(), _coerce(value.strip())
+        if key.startswith("@"):
+            got: Any = resp.get(key[1:])
+        else:
+            got = resp.get("body") or {}
+            for step in key.split("."):
+                got = got.get(step) if isinstance(got, dict) else None
+        if got != want:
+            errors.append(f"{resp['name']} {key} is {json.dumps(got)}, expected {json.dumps(want)}")
+    return errors
 
 
 def _as_obj(value: Any) -> dict | None:

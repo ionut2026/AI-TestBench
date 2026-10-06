@@ -82,6 +82,9 @@ jobs:
       - name: Drift check (suites vs committed catalog and review ledger)
         working-directory: smm-automation
         run: smm-auto drift --strict
+      - name: State matrix suite is generated from the model
+        working-directory: smm-automation
+        run: smm-auto matrix --check
       - name: Mock tier (framework self-test, not product evidence)
         working-directory: smm-automation
         run: smm-auto run --tier mock --outdir results/mock

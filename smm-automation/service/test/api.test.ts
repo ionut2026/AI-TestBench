@@ -143,6 +143,16 @@ describe('service API v1', () => {
     expect(res.data.valid).toBe(false)
   })
 
+  it('keeps the mock appSMM answering after non-object and invalid payloads', async () => {
+    for (const raw of ['null', '[]', '42', '"text"', '{"Version":7', '']) {
+      expect((await call('POST', '/messages/raw', { topic: '/is/iw/rx', raw })).status).toBe(200)
+    }
+    const { data: m } = await call('POST', '/timeline/mark')
+    await call('POST', '/messages', { name: 'SystemStatusRequest', body: {} })
+    const res = await call('POST', '/timeline/wait', { filter: { name: 'SystemStatusResponse', since: m.mark }, timeoutMs: 3000 })
+    expect(res.status).toBe(200)
+  })
+
   it('emulates a lost Bridge through the broker last will', async () => {
     const { data: m } = await call('POST', '/timeline/mark')
     expect((await call('POST', '/session/disconnect', { abrupt: true })).status).toBe(200)

@@ -7,7 +7,10 @@ human review (no ``review:pending`` tag). Per requirement and user story: the wo
 specifications.
 
 Per test: failures of tests tagged ``known-issue:<id>`` are KNOWN FAIL, other failures NEW FAIL, and a passing
-known-issue test is FIXED? (the finding may be fixed: re-check and remove the tag)."""
+known-issue test is FIXED? (the finding may be fixed: re-check and remove the tag).
+
+Tests of behaviour no specification states (``nospec:<kind>``: robustness, unspecified state x request cells)
+are listed in their own section; they never change a specification verdict."""
 
 from __future__ import annotations
 
@@ -19,6 +22,7 @@ from typing import Any
 
 from smm_automation.pipeline.drift import (
     KNOWN_ISSUE_TAG,
+    NOSPEC_TAG,
     PENDING_TAG,
     SDS_TAG,
     TestRef,
@@ -83,6 +87,7 @@ def read_results(output_xml: Path) -> tuple[list[dict], dict]:
                 "hashes": per_spec,
                 "pending": any(x.lower() == PENDING_TAG for x in tags),
                 "knownIssues": [m[1] for x in tags if (m := KNOWN_ISSUE_TAG.match(x))],
+                "nospec": [m[1] for x in tags if (m := NOSPEC_TAG.match(x))],
             })
         for child in suite.suites:
             walk(child)
@@ -191,6 +196,11 @@ def build_report(catalog: dict, tests: list[dict], meta: dict, known: list[TestR
             "verified": sum(1 for s in specs_out if s["verified"]),
         },
         "specifications": sorted(specs_out, key=lambda s: (ORDER.index(s["verdict"]), s["area"], s["id"])),
+        "nospec": [
+            {**{k: t[k] for k in ("name", "suite", "status", "message", "elapsed")}, "outcome": outcome(t, product),
+             "kind": ",".join(t.get("nospec") or []), "pending": bool(t.get("pending"))}
+            for t in tests if not t["specs"] and t.get("nospec")
+        ],
         "requirements": roll_up(catalog.get("requirements", {}), "satisfies"),
         "userStories": roll_up(catalog.get("userStories", {}), "userStories"),
         "drift": check(catalog, known, reviews) if known else None,
@@ -264,6 +274,16 @@ def render_html(report: dict) -> str:
         )
         return f"<table><tr><th>Verdict</th><th>ID</th><th>Title</th><th>RV&amp;S state</th><th>Specifications in scope</th></tr>{rows}</table>"
 
+    nospec_rows = "".join(
+        f"<tr><td>{_badge(t['outcome'])}</td><td>{e(t['kind'])}</td><td>{e(t['name'])}"
+        + (f" {_badge('UNREVIEWED')}" if t.get("pending") else "")
+        + f"</td><td><small>{e(t['message'][:600])}</small></td></tr>"
+        for t in report.get("nospec") or []
+    )
+    nospec_html = ("<h2>Tests without a specification</h2><p>Robustness and unspecified state x request cells "
+                   "(<code>nospec:</code>): they do not count for any specification; a SKIP carries what appSMM did.</p>"
+                   f"<table><tr><th>Outcome</th><th>Kind</th><th>Test</th><th>Message / observation</th></tr>{nospec_rows}</table>"
+                   if nospec_rows else "")
     drift = report.get("drift") or {}
     drift_html = ""
     for key in ("stale", "orphan", "untagged", "nohash", "unrecorded", "uncovered", "stateChanged", "linksChanged", "retired", "suspect", "pending"):
@@ -291,6 +311,7 @@ table.meta{{width:auto}}
 <p>{summary}</p>
 <h2>Specifications</h2>
 <table><tr><th>Verdict</th><th>Review</th><th>Spec</th><th>Text</th><th>Tests</th><th>Links / notes</th></tr>{''.join(spec_rows)}</table>
+{nospec_html}
 <h2>Requirements</h2>{roll_table(report['requirements'], 'REQ')}
 <h2>User stories</h2>{roll_table(report['userStories'], 'US')}
 <h2>Drift</h2>{drift_html or '<p>No drift problems.</p>'}

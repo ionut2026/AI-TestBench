@@ -2,7 +2,8 @@
 
 * SMM01 no-sleep        - no ``Sleep``: wait for a message/state, or assert silence (`Message Should Not Arrive`)
 * SMM02 documentation   - every test has ``[Documentation]`` that quotes its specification (at least
-  ``QUOTE_WORDS`` consecutive words of the spec text) or, for a variant, names the specification id
+  ``QUOTE_WORDS`` consecutive words of the spec text) or, for a variant, names the specification id. A test
+  without a specification (``nospec:<kind>`` tag, e.g. robustness) needs documentation saying what it expects
 * SMM03 literal-timeout - ``timeout=`` / ``duration=`` and the `Wait Until Keyword Succeeds` timeout are
   variables (tier timeouts from ``robot/environments``, spec limits as ``${SDS_<id>_LIMIT}``), not literals
 * SMM04 twin-tag        - a test that drives the hardware twin unconditionally (not inside ``IF``) is tagged
@@ -11,7 +12,8 @@
 * SMM06 applog-tag      - same for reading appSMM's log files and `needs:applog` (only where the log is reachable)
 
 Keyword use is followed through user keywords (resource files and the suite's own keywords), so
-``Restart appSMM And Wait Until NotInitialized`` counts as a restart.
+``Restart appSMM And Wait Until NotInitialized`` counts as a restart. A templated test (``Test Template`` /
+``[Template]``) uses its template keyword.
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ HARDWARE_KEYWORDS = {
 RESTART_KEYWORDS = {"restartappsmm", "restartmqttbroker"}
 APPLOG_KEYWORDS = {"getappsmmlogmessages", "icdmessagesshouldbeloggedbyappsmm"}
 TIMING_ARGS = ("timeout=", "duration=")
+NOSPEC_PREFIX = "nospec:"
 RUN_KEYWORD_CONDITIONAL = {"runkeywordif", "runkeywordunless"}
 
 
@@ -224,16 +227,25 @@ def lint(paths: list[Path], catalog: dict | None = None) -> list[Violation]:
         index.add(model)
         suite_tags = list(getattr(_setting(model, "TestTags"), "values", ()) or ()) + list(getattr(_setting(model, "ForceTags"), "values", ()) or ())
         suite_setup, suite_teardown = _setting(model, "TestSetup"), _setting(model, "TestTeardown")
+        suite_template = _setting(model, "TestTemplate")
         for test in _section_items(model, "TestCaseSection"):
             nodes = {type(n).__name__: n for n in test.body}
             tags = [t.lower() for t in suite_tags + list(getattr(nodes.get("Tags"), "values", ()) or ())]
             spec_ids = [int(t[4:]) for t in tags if re.fullmatch(r"sds-\d+", t)]
             doc = nodes["Documentation"].value if "Documentation" in nodes else ""
+            nospec = not spec_ids and any(t.startswith(NOSPEC_PREFIX) for t in tags)
             if not doc.strip():
-                out.append(Violation("SMM02", src, test.lineno, test.name, "No [Documentation]: quote the specification text"))
-            elif not cites(doc, spec_ids, catalog):
+                what = "say what the test expects" if nospec else "quote the specification text"
+                out.append(Violation("SMM02", src, test.lineno, test.name, f"No [Documentation]: {what}"))
+            elif not nospec and not cites(doc, spec_ids, catalog):
                 out.append(Violation("SMM02", src, test.lineno, test.name, f"[Documentation] does not quote the specification text ({QUOTE_WORDS}+ consecutive words) or name the specification id"))
-            calls = list(_calls(test.body))
+            template = nodes.get("Template")
+            template_name = template.value if template is not None else (suite_template.value if suite_template is not None else None)
+            if template_name and template_name.upper() != "NONE":
+                # data rows of a templated test are arguments, not keyword calls
+                calls = [Call(template_name, (), test.lineno, False)]
+            else:
+                calls = list(_calls(test.body))
             _check_calls(calls, src, test.name, out)
             if "Setup" not in nodes and suite_setup is not None and suite_setup.name:
                 calls.append(Call(suite_setup.name, tuple(suite_setup.args), suite_setup.lineno, False))

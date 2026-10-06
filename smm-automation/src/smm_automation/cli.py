@@ -6,6 +6,7 @@
   smm-auto accept   (<spec id> ... | --all)                       accept RV&S state/link changes of specifications as the new baseline
   smm-auto migrate-hashes --from <old catalog.json>               re-tag tests whose spec text is unchanged but whose hash changed
   smm-auto lint                                                  test rules (no Sleep, documentation, timing variables, tier tags)
+  smm-auto matrix   [--check]                                     state x request matrix suite + open questions from catalog/state-matrix.toml
   smm-auto run      [--tier mock|offline|rig] [--fail-on new|any|none] [robot args...]
                                                                  run suites, then the traceability report
   smm-auto report   --output results/.../output.xml              traceability report for an existing run
@@ -125,6 +126,32 @@ def cmd_lint(args) -> int:
     violations = lint(_suites(args), load_catalog(catalog_path) if catalog_path.exists() else None)
     print(format_text(violations, FRAMEWORK_ROOT))
     return 1 if violations else 0
+
+
+def cmd_matrix(args) -> int:
+    from smm_automation.pipeline.drift import collect_tests, load_reviews
+    from smm_automation.pipeline.ingest import load_catalog
+    from smm_automation.pipeline.matrix import MatrixError, generate, load_model, validate, write
+
+    try:
+        model = load_model(Path(args.model))
+    except (MatrixError, TypeError) as err:
+        print(f"{args.model}: {err}", file=sys.stderr)
+        return 2
+    catalog = load_catalog(_catalog_path(args))
+    errors = validate(model, catalog, collect_tests(_suites(args)))
+    if errors:
+        print("\n".join(f"{args.model}: {e}" for e in errors), file=sys.stderr)
+        return 2
+    paths = {"suite": Path(args.suite), "questions": Path(args.questions)}
+    differ = write(generate(model, catalog, load_reviews(Path(args.reviews))), paths, check=args.check)
+    if args.check:
+        for p in differ:
+            print(f"OUT OF DATE: {p} (run smm-auto matrix)")
+        return 1 if differ else 0
+    generated = sum(1 for c in model.cells if c.generated)
+    print(f"{len(model.cells)} cells, {generated} generated test(s); written: {', '.join(map(str, differ)) or '(unchanged)'}")
+    return 0
 
 
 def _report(catalog_path: Path, output_xml: Path, out_dir: Path, suites: list[Path], reviews: Path = REVIEWS) -> dict:
@@ -278,6 +305,11 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("migrate-hashes", allow_abbrev=False, help="update spechash tags after a hashing change (same text, new hash)")
     p.add_argument("--from", dest="old", required=True, help="the catalog JSON before the re-ingestion")
     sub.add_parser("lint", allow_abbrev=False, help="check the test rules (exit code 1 on violations)")
+    p = sub.add_parser("matrix", allow_abbrev=False, help="generate the state x request matrix suite and its open questions")
+    p.add_argument("--model", default=str(FRAMEWORK_ROOT / "catalog" / "state-matrix.toml"))
+    p.add_argument("--suite", default=str(FRAMEWORK_ROOT / "robot" / "suites" / "pilot" / "state_matrix.robot"))
+    p.add_argument("--questions", default=str(FRAMEWORK_ROOT / "catalog" / "state-matrix.questions.md"))
+    p.add_argument("--check", action="store_true", help="only check that the generated files are up to date (exit code 1 if not)")
     p = sub.add_parser("run", allow_abbrev=False, help="run suites against a tier and write the traceability report (extra args go to robot)")
     p.add_argument("--tier", choices=sorted(TIER_EXCLUDES), default="mock")
     p.add_argument("--outdir")
@@ -305,7 +337,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run":
         return cmd_run(args, extra)
     return {"ingest": cmd_ingest, "briefs": cmd_briefs, "drift": cmd_drift, "accept": cmd_accept, "migrate-hashes": cmd_migrate_hashes,
-            "lint": cmd_lint, "report": cmd_report, "mutate": cmd_mutate, "service": cmd_service}[args.command](args)
+            "lint": cmd_lint, "matrix": cmd_matrix, "report": cmd_report, "mutate": cmd_mutate, "service": cmd_service}[args.command](args)
 
 
 if __name__ == "__main__":

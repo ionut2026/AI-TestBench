@@ -211,6 +211,8 @@ Use this to choose preconditions and timeouts and to recognise expected noise; *
 
 **Traceability**
 - [ ] Name starts with `SDS-<id>`; tags `SDS-<id>`, `spechash:` (from the brief), `review:pending`; capability tags correct.
+- [ ] Not in `state_matrix.robot` (generated: change `catalog/state-matrix.toml` and run `smm-auto matrix`). Never
+      use `nospec:<kind>` for behaviour a specification states; it is only for robustness/matrix tests without one.
 - [ ] Documentation holds the spec text verbatim and every interpretation.
 
 **Fidelity to the specification**

@@ -1,0 +1,174 @@
+# State x request model of appSMM (plan 5.1). `smm-auto matrix` generates from it
+#   robot/suites/pilot/state_matrix.robot   one test per cell that no hand-written test covers yet
+#   catalog/state-matrix.questions.md       the open questions for the specification owner
+# Edit this file, run `smm-auto matrix`, review the generated tests; never edit the generated files by hand
+# (`smm-auto matrix --check` and CI fail when they differ from this model).
+#
+# Precondition states are the stable states a test can reach: NotInitialized (only by restarting appSMM,
+# because Recover re-initializes; such cells are tagged requires:restart), Idle and E-Stop.
+#
+# One [[cell]] per state x request:
+#   state, request   the precondition state and the request sent on is/iw/rx
+#   body             optional request body (JSON); requests with required fields need one
+#   specs            RV&S specifications that say something about this cell (empty: nothing is specified)
+#   response         expected response: "<Name> | Field=Value | ...", "none" (must not answer) or "" (unspecified)
+#   next             state appSMM must be in afterwards: a state, "unchanged" (no state change at all) or "" (unspecified)
+#   no_command       COP command appSMM must not send to rtc_appl (checked only where the hardware twin is present)
+#   questions        what the specifications leave open; asked to the specification owner, logged as a warning
+#                    (the generated test reads them from the "Open:" part of its documentation)
+#   covered_by       hand-written tests that already verify the cell; no test is generated for it
+#   note             why the expectation follows from the specifications (goes into the test documentation)
+#
+# A cell with no specs and no expectation is observed only: its test sends the request, records what appSMM
+# does and is SKIPPED with the open questions (tag nospec:state-matrix), until the specification answers them.
+
+states = ["NotInitialized", "Idle", "E-Stop"]
+requests = ["SystemStatusRequest", "InitializationRequest", "RecoverRequest", "ShutdownRequest", "SetConfigurationRequest"]
+
+# ------------------------------------------------------------------ SystemStatusRequest
+
+[[cell]]
+state = "NotInitialized"
+request = "SystemStatusRequest"
+specs = [2955303, 2525392]
+response = "SystemStatusResponse | CurrentState=NotInitialized | @topic=/is/iw/tx"
+next = "unchanged"
+covered_by = ["SDS-2955303 SystemStatusResponse Reports NotInitialized Before Initialization Starts"]
+
+[[cell]]
+state = "Idle"
+request = "SystemStatusRequest"
+specs = [2525392]
+response = "SystemStatusResponse | CurrentState=Idle | @topic=/is/iw/tx"
+next = "unchanged"
+note = "CurrentState is the state appSMM is in (meaning of the ICD field); the request must not change the state."
+
+[[cell]]
+state = "E-Stop"
+request = "SystemStatusRequest"
+specs = [2525392]
+response = "SystemStatusResponse | CurrentState=E-Stop | @topic=/is/iw/tx"
+next = "unchanged"
+note = "CurrentState is the state appSMM is in (meaning of the ICD field); the request must not change the state."
+
+# ------------------------------------------------------------------ InitializationRequest
+
+[[cell]]
+state = "NotInitialized"
+request = "InitializationRequest"
+specs = [2525423, 2528698]
+response = "InitializationResponse | Status=OK"
+next = "Initializing"
+covered_by = [
+  "SDS-2525423 Initialization Starts On InitializationRequest In NotInitialized",
+  "SDS-2528698 Initializing Is Notified After InitializationResponse OK",
+]
+
+[[cell]]
+state = "Idle"
+request = "InitializationRequest"
+specs = [2525423]
+next = "unchanged"
+no_command = "InitializeCmd"
+questions = ["Does appSMM answer an InitializationRequest in Idle with an InitializationResponse, and with which Status?"]
+covered_by = ["SDS-2525423 InitializationRequest Outside NotInitialized Does Not Start Initialization"]
+
+[[cell]]
+state = "E-Stop"
+request = "InitializationRequest"
+specs = [2525423]
+next = "unchanged"
+no_command = "InitializeCmd"
+questions = ["Does appSMM answer an InitializationRequest in E-Stop with an InitializationResponse, and with which Status?"]
+note = "So in E-Stop no initialization starts (the state stays E-Stop) and no InitializeCmd is sent."
+
+# ------------------------------------------------------------------ RecoverRequest
+
+[[cell]]
+state = "NotInitialized"
+request = "RecoverRequest"
+specs = [2532492]
+no_command = "DeInitializeCmd"
+questions = [
+  "Does appSMM answer a RecoverRequest in NotInitialized with a RecoverResponse, and with which Status?",
+  "Does a RecoverRequest outside E-Stop change the system state (2532492 only forbids the DeInitializeCmd)?",
+]
+
+[[cell]]
+state = "Idle"
+request = "RecoverRequest"
+specs = [2532492]
+no_command = "DeInitializeCmd"
+questions = ["Does appSMM answer a RecoverRequest in Idle with a RecoverResponse, and with which Status?"]
+covered_by = ["SDS-2532492 RecoverRequest Outside E-Stop Does Not De-Initialize"]
+
+[[cell]]
+state = "E-Stop"
+request = "RecoverRequest"
+specs = [2532492, 2532504, 2532510]
+response = "RecoverResponse | Status=OK"
+covered_by = [
+  "SDS-2532492 RecoverRequest In E-Stop Sends DeInitializeCmd To RTC",
+  "SDS-2532504 RecoverResponse OK Matches The ICD Schema",
+  "SDS-2532510 Initialization Starts After RecoverResponse",
+]
+
+# ------------------------------------------------------------------ ShutdownRequest
+
+[[cell]]
+state = "NotInitialized"
+request = "ShutdownRequest"
+questions = [
+  "Does appSMM accept a ShutdownRequest in NotInitialized? Which ShutdownResponse Status does it publish?",
+  "Which state follows a ShutdownRequest in NotInitialized (E-Stop, or unchanged)?",
+]
+
+[[cell]]
+state = "Idle"
+request = "ShutdownRequest"
+specs = [2428417, 2428419]
+response = "ShutdownResponse | Status=OK"
+next = "E-Stop"
+covered_by = [
+  "SDS-2428417 ShutdownResponse OK Is Published On is/iw/tx And Matches The ICD Schema",
+  "SDS-2428419 E-Stop Is Notified After ShutdownResponse",
+]
+
+[[cell]]
+state = "E-Stop"
+request = "ShutdownRequest"
+questions = [
+  "Does appSMM answer a ShutdownRequest in E-Stop (already stopped)? With which ShutdownResponse Status?",
+  "Is a StopCmd sent to rtc_appl again in E-Stop?",
+]
+
+# ------------------------------------------------------------------ SetConfigurationRequest
+
+[[cell]]
+state = "NotInitialized"
+request = "SetConfigurationRequest"
+body = '{"STI.Barcode.Code128": "Enabled"}'
+specs = [2427781, 2551270]
+next = "NotInitialized"
+covered_by = [
+  "SDS-2427781 SetConfigurationRequest In NotInitialized Notifies Configuring",
+  "SDS-2551270 NotInitialized Is Notified After SetConfigurationResponse",
+]
+
+[[cell]]
+state = "Idle"
+request = "SetConfigurationRequest"
+body = '{"STI.Barcode.Code128": "Enabled"}'
+questions = [
+  "Is a SetConfigurationRequest accepted in Idle (2427781 only covers NotInitialized)? Which SetConfigurationResponse does appSMM publish?",
+  "Does appSMM go through Configuring in Idle, and which state follows?",
+]
+
+[[cell]]
+state = "E-Stop"
+request = "SetConfigurationRequest"
+body = '{"STI.Barcode.Code128": "Enabled"}'
+questions = [
+  "Is a SetConfigurationRequest accepted in E-Stop? Which SetConfigurationResponse does appSMM publish?",
+  "Which state follows a SetConfigurationRequest in E-Stop?",
+]

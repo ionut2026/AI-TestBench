@@ -134,6 +134,16 @@ the spec's "StopRsp"); the "over the limit" side is the drop tests of 4.4. 4.4: 
 | 5.3 | Robustness suite with `Send Raw Payload`: invalid JSON, schema-invalid, unknown message, wrong topic, duplicate requests, burst; expected behaviour per ICD (no crash, error response or ignore) |
 | 5.4 | Robustness on rig only after offline is clean and with the user's go |
 
+*5.1–5.3 status:* done; 5.4 waits for the user's go. 5.1: the model is `catalog\state-matrix.toml` (stable states
+NotInitialized, Idle, E-Stop × 5 requests = 15 cells; transient states are reached only through hand-written tests,
+since a request cannot be timed into them reliably). 5.2: `smm-auto matrix` generates `state_matrix.robot` for the 8
+cells no hand-written test covers and `state-matrix.questions.md` for the spec owner; open cells SKIP with appSMM's
+observed answer; CI runs `matrix --check`. 5.3: `robustness.robot` (11 `nospec:robustness` input tests, a second
+InitializationRequest during Initializing, a burst of 50 SystemStatusRequests); `nospec:<kind>` tests are reported
+apart. Offline (appSMM 0.7.2305.25001): 21 tests, 17 pass, 4 skip, 0 fail. Observed in the open cells: ShutdownRequest
+in NotInitialized → OK but stays NotInitialized; in E-Stop → OK, stays E-Stop; SetConfigurationRequest in Idle and in
+E-Stop → per-key `Error`, state unchanged. The mock appSMM crashed on a `null`/array payload (fixed, regression test).
+
 ## Phase 6 — Real-hardware coverage — depends on rig access
 
 | # | Finding | Work |

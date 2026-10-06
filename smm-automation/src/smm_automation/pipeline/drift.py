@@ -2,7 +2,9 @@
 
 * stale     - a test's spechash for one of its specifications differs from the current specification text
 * orphan    - a test references ``SDS-<id>`` that is not in the catalog (removed or out of scope)
-* untagged  - a test without any ``SDS-<id>`` tag (no traceability)
+* untagged  - a test without any ``SDS-<id>`` tag (no traceability) and without a ``nospec:<kind>`` tag
+* nospec    - (information) tests that verify behaviour no specification states (``nospec:<kind>``, e.g.
+  robustness or unspecified state x request cells): listed, not a problem
 * nohash    - a test without a spechash for one of its specifications. A test with one ``SDS-<id>`` tag uses
   ``spechash:<hash>``; a test with several uses ``spechash:<id>:<hash>`` for each of them
 * uncovered - a testable, not deferred, not retired specification without any test
@@ -27,6 +29,7 @@ from pathlib import Path
 SDS_TAG = re.compile(r"^SDS-(\d+)$", re.I)
 HASH_TAG = re.compile(r"^spechash:(?:(\d+):)?([0-9a-f]{6,64})$", re.I)
 KNOWN_ISSUE_TAG = re.compile(r"^known-issue:(\S+)$", re.I)
+NOSPEC_TAG = re.compile(r"^nospec:(\S+)$", re.I)
 PENDING_TAG = "review:pending"
 
 
@@ -63,6 +66,11 @@ class TestRef:
 
     def hash_for(self, spec_id: int) -> str | None:
         return hash_for(spec_id, self.specs, self.hash, self.hashes)
+
+    @property
+    def nospec(self) -> list[str]:
+        """The ``nospec:<kind>`` kinds of the test."""
+        return [m[1] for t in self.tags if (m := NOSPEC_TAG.match(t))]
 
     @property
     def pending(self) -> bool:
@@ -138,10 +146,13 @@ def check(catalog: dict, tests: list[TestRef], reviews: list[dict] | None = None
     specs = catalog["specifications"]
     retired_states = set(catalog.get("retiredStates") or ["Rejected", "To Be Deleted", "Deleted"])
     covered: dict[int, list[str]] = {}
-    stale, orphan, untagged, nohash = [], [], [], []
+    stale, orphan, untagged, nohash, nospec = [], [], [], [], []
     for t in tests:
         if not t.specs:
-            untagged.append({"test": t.name, "suite": t.suite})
+            if t.nospec:
+                nospec.append({"test": t.name, "suite": t.suite, "kind": ",".join(t.nospec)})
+            else:
+                untagged.append({"test": t.name, "suite": t.suite})
             continue
         for sid in t.specs:
             spec = specs.get(str(sid))
@@ -181,6 +192,7 @@ def check(catalog: dict, tests: list[TestRef], reviews: list[dict] | None = None
         "orphan": orphan,
         "untagged": untagged,
         "nohash": nohash,
+        "nospec": nospec,
         "uncovered": uncovered,
         "stateChanged": state_changed,
         "linksChanged": links_changed,
@@ -206,7 +218,7 @@ def format_text(result: dict) -> str:
     labels = {
         "stale": "STALE (specification text changed since the test was written)",
         "orphan": "ORPHAN (specification not in the catalog)",
-        "untagged": "UNTAGGED (no SDS-<id> tag)",
+        "untagged": "UNTAGGED (no SDS-<id> tag and no nospec:<kind> tag)",
         "nohash": "NO HASH (missing spechash: tag for a specification of the test)",
         "uncovered": "UNCOVERED specifications",
         "stateChanged": "SPEC-STATE-CHANGED (RV&S state differs from the accepted baseline: re-check the tests, then smm-auto accept)",
@@ -216,6 +228,7 @@ def format_text(result: dict) -> str:
         "pending": "PENDING human review",
         "unrecorded": "UNRECORDED REVIEW (review:pending removed without a matching entry in catalog/reviews.toml)",
         "lint": "LINT (test rule violations, see smm-auto lint)",
+        "nospec": "Tests of behaviour no specification states (nospec:<kind>)",
         "deferred": "Deferred",
         "notTestable": "Not testable",
         "areaGuessed": "Area guessed from keywords (list the specification under its area in the scope file)",

@@ -78,6 +78,7 @@ override with `WINDCHILL_MCP_SERVER`) with the `RVS_*` settings from the environ
 .\.venv\Scripts\smm-auto --suites robot\suites\pilot\recover.robot run --tier offline
 .\.venv\Scripts\smm-auto report --output results\rig-20261005-101500\output.xml
 .\.venv\Scripts\smm-auto mutate                 # mutation testing: do the tests notice defects injected into the mock appSMM? (catalog/mutants.toml)
+.\.venv\Scripts\smm-auto matrix                 # regenerate the state x request matrix suite from catalog/state-matrix.toml
 ```
 
 ## Writing tests
@@ -122,6 +123,15 @@ Scope `catalog/pilot.scope.toml`: Initialization, Recover, Shutdown, System Stat
 > **The pilot suites were written by the authoring agent and still need a human review against the
 > specifications before their verdicts are used as evidence.** Open points are listed in the test documentation
 > (e.g. the real appSMM's answer to InitializationRequest outside NotInitialized is only logged).
+
+Around the specified behaviour: `state_matrix.robot` is **generated** by `smm-auto matrix` from
+`catalog/state-matrix.toml` (every request in NotInitialized, Idle and E-Stop; cells the specifications leave open
+are skipped with appSMM's observed answer, their questions for the specification owner are in
+`catalog/state-matrix.questions.md`; do not edit the generated files, CI checks them with `smm-auto matrix --check`).
+`robustness.robot` checks that malformed or misrouted input does not disturb appSMM in Idle, plus a second
+InitializationRequest during Initializing and a burst of 50 SystemStatusRequests. Tests of behaviour no
+specification states are tagged `nospec:<kind>` instead of `SDS-<id>`; drift and the report list them apart and they
+count for no specification (handbook Section 9.13).
 
 Deferred: 2528708/2528710 (appSMM logs are SmartInspect `.sil` files; no reader yet), 2532404/2532508 (need RTC
 fault injection in the hardware twin).

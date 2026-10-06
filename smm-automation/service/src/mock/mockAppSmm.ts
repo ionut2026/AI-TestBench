@@ -123,6 +123,7 @@ export class MockAppSmm extends EventEmitter<{ log: [string] }> {
     } catch {
       return
     }
+    if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return
     const name = Object.keys(payload).find((k) => k !== 'Version')
     if (!name) return
     const body = (payload[name] ?? {}) as Record<string, unknown>
