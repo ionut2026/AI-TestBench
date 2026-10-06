@@ -5,7 +5,9 @@ name: smm-automation
 # or network access to the automation instrument (rig tier, SMM_RIG_BROKER set on the runner), and the SMM TestBench
 # at the pinned commit with `npm ci` done in simulator/ and hwsim/ (SMM_TESTBENCH_DIR set on the runner).
 #
-# Secrets: SMM_TESTBENCH_TOKEN (read access to ionut2026/SMM-TestBench).
+# Secrets (optional): SMM_TESTBENCH_TOKEN, only needed if ionut2026/SMM-TestBench becomes private (read access).
+# Variables: SMM_RIG_RUNNER = true once a self-hosted runner labelled `smm-rig` is registered; without it the
+# nightly/manual hardware job is skipped instead of waiting for a runner that does not exist.
 
 on:
   push:
@@ -43,7 +45,7 @@ jobs:
           repository: ionut2026/SMM-TestBench
           ref: ${{ steps.lock.outputs.commit }}
           path: smm-testbench
-          token: ${{ secrets.SMM_TESTBENCH_TOKEN }}
+          token: ${{ secrets.SMM_TESTBENCH_TOKEN || github.token }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -78,7 +80,7 @@ jobs:
           path: smm-automation/results/mock
 
   hardware:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: vars.SMM_RIG_RUNNER == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     needs: framework
     runs-on: [self-hosted, windows, smm-rig]
     timeout-minutes: 120

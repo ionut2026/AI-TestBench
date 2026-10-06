@@ -1636,13 +1636,13 @@ File: `.github\workflows\smm-automation.yml`. CI = GitHub runs the checks automa
 | Trigger | What runs |
 |---|---|
 | Push or pull request that changes `smm-automation/**` | Job **framework** |
-| Every weekday at 02:00 (UTC) | **framework**, then **hardware** (offline tier) |
-| Manually: *Actions → SMM automation → Run workflow*, choose tier `offline` or `rig` | **framework**, then **hardware** with that tier |
+| Every weekday at 02:00 (UTC) | **framework**, then **hardware** (offline tier) — hardware only if the variable `SMM_RIG_RUNNER` is `true` |
+| Manually: *Actions → SMM automation → Run workflow*, choose tier `offline` or `rig` | **framework**, then **hardware** with that tier (same condition) |
 
 ### 15.2 Job "framework" (GitHub-hosted Windows machine)
 
-1. Checks out this repository and the SMM TestBench at the **pinned commit** (needs the repository secret
-   `SMM_TESTBENCH_TOKEN`: a GitHub token with read access to the TestBench repository).
+1. Checks out this repository and the SMM TestBench at the **pinned commit** (the TestBench repository is public,
+   so no secret is needed; if it ever becomes private, add a repository secret `SMM_TESTBENCH_TOKEN` with read access to it).
 2. Installs Node 24 and Python 3.12; `npm ci` in TestBench simulator + hwsim and in `service`; `pip install -e`.
 3. Typecheck, build, vitest, pytest, `smm-auto drift --strict`, **mock tier** run.
 4. Uploads the results as artifact **smm-mock-results** (download it from the run page → *Artifacts*).
@@ -1661,7 +1661,9 @@ service, creates a venv, runs `smm-auto run --tier <tier>` and uploads the resul
 
 > Registering a runner: repository *Settings → Actions → Runners → New self-hosted runner*, follow the Windows
 > instructions, add the label `smm-rig`, run it as a service. Make sure the TestBench GUI is never left open on that PC
-> (it would hold port 1883).
+> (it would hold port 1883). Finally, in *Settings → Secrets and variables → Actions → Variables*, create the variable
+> `SMM_RIG_RUNNER` with the value `true`. Without it the hardware job is skipped, so the nightly run does not wait for a
+> runner that does not exist.
 
 ---
 
