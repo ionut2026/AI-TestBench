@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "robotframework-robocop>=6"]
 
 [project.scripts]
 smm-auto = "smm_automation.cli:main"
@@ -27,3 +27,16 @@ smm_automation = ["pipeline/templates/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# Generic Robot Framework lint (`robocop check robot`); the SMM-specific rules are `smm-auto lint`.
+[tool.robocop.lint]
+ignore = [
+  "NAME02",  # keyword names keep product spelling (appSMM, E-Stop)
+  "NAME18",  # same, for keyword calls
+  "TAG05",   # review:pending is removed per test, never as a suite tag
+]
+configure = [
+  "too-long-test-case.ignore_docs=True",
+  "too-long-test-case.max_len=25",
+  "line-too-long.line_length=140",
+]

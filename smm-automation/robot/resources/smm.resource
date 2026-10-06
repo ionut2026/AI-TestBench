@@ -13,18 +13,22 @@ Documentation       Shared setup for all SMM suites: one test environment per su
 ...                 - ``known-issue:<id>``: fails because of a candidate finding (README "Findings"); its
 ...                 failure is KNOWN FAIL and does not fail ``smm-auto run`` (``--fail-on new``); if it passes
 ...                 the report shows FIXED?
-Library             smm_automation.SMMTestbench
 Library             Collections
+Library             smm_automation.SMMTestbench
 
 
 *** Variables ***
 ${TIER}                 mock
-&{OVERRIDES}
+&{OVERRIDES}            &{EMPTY}
 ${RESPONSE_TIMEOUT}     10s
 ${STARTUP_TIMEOUT}      60s
 ${INIT_TIMEOUT}         180s
 ${RECOVER_TIMEOUT}      60s
 ${QUIET_PERIOD}         3s
+# Silence checked right after a response, when a forbidden message would follow immediately.
+${SHORT_QUIET_PERIOD}   1s
+# How long the Bridge stays away in a simulated Bridge crash (a stimulus, not a timeout).
+${BRIDGE_OUTAGE}        ${QUIET_PERIOD}
 
 
 *** Keywords ***
@@ -72,5 +76,5 @@ Messages From appSMM Should Use Topic
     ${entries}=    Messages Should Have Been Received    ${name}    since=test
     Should Not Be Empty    ${entries}    No ${name} received in this test
     FOR    ${entry}    IN    @{entries}
-        Should Be Equal    ${entry}[topic]    ${topic}    #${entry}[id] ${name} was published on ${entry}[topic]
+        Should Be Equal    ${entry}[topic]    ${topic}    ${entry}[id] ${name} was published on ${entry}[topic]
     END

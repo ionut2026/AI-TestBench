@@ -8,6 +8,11 @@ Test Teardown       Finish SMM Test
 Test Tags           area:shutdown    pilot
 
 
+*** Variables ***
+# Time limit stated in the specification (not a tier timeout).
+${SDS_2428417_LIMIT}      20s
+
+
 *** Test Cases ***
 SDS-2428419 E-Stop Is Notified After ShutdownResponse
     [Documentation]    After sending the ShutdownResponse, appSMM software publishes a
@@ -32,7 +37,7 @@ SDS-2428417 ShutdownResponse OK Is Published On is/iw/tx And Matches The ICD Sch
     [Tags]    SDS-2428417    spechash:01efab86    review:pending
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
     Send ICD Message    ShutdownRequest
-    ${entry}=    Wait For Message Entry    ShutdownResponse    timeout=20s    Status=OK
+    ${entry}=    Wait For Message Entry    ShutdownResponse    timeout=${SDS_2428417_LIMIT}    Status=OK
     Should Be Equal    ${entry}[topic]    /is/iw/tx
     Should Be True    ${entry}[valid]    ShutdownResponse breaks the ICD schema: ${entry}[errors]
     Pair Issues Should Be Empty

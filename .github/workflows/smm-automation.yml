@@ -67,7 +67,12 @@ jobs:
       - name: Pipeline unit tests
         working-directory: smm-automation
         run: python -m pytest -q
-      - name: Drift check (suites vs committed catalog)
+      - name: Test rules (SMM lint + Robocop)
+        working-directory: smm-automation
+        run: |
+          smm-auto lint
+          robocop check robot
+      - name: Drift check (suites vs committed catalog and review ledger)
         working-directory: smm-automation
         run: smm-auto drift --strict
       - name: Mock tier (framework self-test, not product evidence)

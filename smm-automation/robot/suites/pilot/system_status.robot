@@ -31,7 +31,7 @@ SDS-2752658 NotInitialized Is Notified After appSMM Restart
     [Tags]    SDS-2752658    spechash:e492fe7e    requires:restart    review:pending
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
     Restart appSMM    down=1s
-    ${ssn}=    Wait For System State    NotInitialized    timeout=${STARTUP_TIMEOUT}
+    Wait For System State    NotInitialized    timeout=${STARTUP_TIMEOUT}
     Messages From appSMM Should Use Topic    SystemStatusNotification
     System State Should Be    NotInitialized
 
@@ -42,7 +42,7 @@ SDS-2525392 Every SystemStatusRequest Gets A SystemStatusResponse On is/iw/tx
     ...    the is/iw/tx topic.
     [Tags]    SDS-2525392    spechash:5865c681    review:pending
     ${mark}=    Mark Timeline
-    FOR    ${i}    IN RANGE    3
+    FOR    ${_}    IN RANGE    3
         ${response}=    Request And Wait For Response    SystemStatusRequest    timeout=${RESPONSE_TIMEOUT}
         Dictionary Should Contain Key    ${response}    CurrentState
     END
@@ -114,7 +114,6 @@ SDS-2535547 NormalOperation Is Notified When A Loaded Rack Is Picked Up In Idle
     ...    - "PreviousState":"Idle"
     ...    - "CurrentState":"NormalOperation"
     [Tags]    SDS-2535547    spechash:1ccfe824    needs:twin    review:pending
-    [Teardown]    Finish SMM Test And Empty The Instrument
     Require Hardware Twin
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
     Trigger Hardware Action    insertFrontIn    rackId=A001    firstSample=1
@@ -122,6 +121,7 @@ SDS-2535547 NormalOperation Is Notified When A Loaded Rack Is Picked Up In Idle
     ...    PreviousState=Idle    CurrentState=NormalOperation
     Messages From appSMM Should Use Topic    SystemStatusNotification
     Received Messages Should Be Schema Valid
+    [Teardown]    Finish SMM Test And Empty The Instrument
 
 SDS-2653086 E-Stop After A Fatal Error Is Notified From Idle
     [Documentation]    If the SMM system goes to E-Stop following a fatal error, appSMM software publishes

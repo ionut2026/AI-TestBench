@@ -62,7 +62,8 @@ override with `WINDCHILL_MCP_SERVER`) with the `RVS_*` settings from the environ
 
 ```powershell
 .\.venv\Scripts\smm-auto ingest                 # RV&S -> catalog/pilot.json (prints what changed since the last run)
-.\.venv\Scripts\smm-auto drift --strict         # stale hashes, orphans, uncovered specs (exit 1 on problems)
+.\.venv\Scripts\smm-auto drift --strict         # stale hashes, orphans, uncovered specs, lint (exit 1 on problems)
+.\.venv\Scripts\smm-auto lint                   # test rules SMM01-05 (no Sleep, doc quotes spec, variable timeouts, tier tags)
 .\.venv\Scripts\smm-auto briefs --spec 2528698  # generated/briefs/SDS-2528698.md for the authoring agent
 .\.venv\Scripts\smm-auto run --tier mock        # results/mock-<ts>/: log.html, report.html, traceability.html/json
 .\.venv\Scripts\smm-auto run --tier offline --include initialization   # extra args go to robot
@@ -85,7 +86,9 @@ override with `WINDCHILL_MCP_SERVER`) with the `RVS_*` settings from the environ
 
 Rules: one behaviour per test, assert what the specification states (message, fields, order, topic, timing), wait for
 events (never `Sleep`), only use keywords from the library/resource, add `needs:twin` if hardware-twin state is
-required and `requires:restart` if appSMM or the broker must be restarted.
+required and `requires:restart` if appSMM or the broker must be restarted. Timeouts are variables (time limits stated
+by a specification as `${SDS_<id>_LIMIT}` in the suite). `smm-auto lint` and `robocop check robot` enforce these rules
+in CI (handbook Section 11.3).
 
 ## Reports
 

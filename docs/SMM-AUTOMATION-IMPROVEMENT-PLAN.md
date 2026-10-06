@@ -48,7 +48,7 @@ user's explicit go and an operator at the instrument (no racks or samples loaded
 | 1.3 | Known failures hide regressions | `known-issue:` tag, report classes `NEW FAIL` / `KNOWN FAIL` / `FIXED?`, `--fail-on new|any` in `smm-auto run`; tag the 6 findings | Offline run is "green with 6 known" and red on any new failure |
 | 1.4 | PASS on partial coverage | `PARTIAL` verdict when some tests of a spec were not run on the tier; summary counts it separately | pytest cases for all verdict combinations |
 | 1.5 | Rules not enforced | Robocop config + custom checks in `drift --strict`: no `Sleep`, `[Documentation]` cites the spec text, timeouts are variables, `needs:twin` iff hardware keywords used, `requires:restart` iff restart keywords used | CI fails on violations |
-| 1.6 | 2 `Sleep` in `bridge_connection.robot` (l.24, 51) | Replace with `Expect No Message … ${QUIET_PERIOD}` (asserts silence instead of waiting) | 1.5 passes on the suites |
+| 1.6 | 2 `Sleep` in `bridge_connection.robot` (l.24, 51) | Replace with `Expect No Message … ${QUIET_PERIOD}` (asserts silence instead of waiting). *Implemented as the library keyword `Interrupt Bridge Connection` (outage `${BRIDGE_OUTAGE}`): while the Bridge is disconnected nothing can be observed, so the outage is a stimulus, not a silence assertion.* | 1.5 passes on the suites |
 | 1.7 | Thin static quality | ruff + mypy (Python), eslint + `tsc --noEmit` (service), coverage (pytest-cov, vitest coverage) with floors in CI | CI job green, coverage published |
 | 1.8 | Reproducibility | Lock Python deps (`uv lock` or pip-tools `requirements.lock`), CI installs from lock; fix `pyproject` package-data `pipeline/templates/*` | Fresh venv from lock reproduces results |
 

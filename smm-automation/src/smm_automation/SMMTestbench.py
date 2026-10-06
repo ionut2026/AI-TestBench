@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import html
 import json
+import time
 from typing import Any
 
 from robot.api import logger
@@ -133,6 +134,16 @@ class SMMTestbench:
         link = self.client.session()["link"]
         if link != "connected":
             raise AssertionError(f"Bridge link is {link}")
+
+    @keyword
+    def interrupt_bridge_connection(self, outage: str = "3s", timeout: str = "10s", abrupt: bool = True) -> dict:
+        """Simulates a lost Bridge: disconnects (``abrupt``: without goodbye, so the broker publishes the
+        last will), stays away for ``outage`` and connects again. The timeline is kept (evidence from
+        before the outage stays in the log); waits afterwards look at what comes after the reconnection.
+        The outage is the stimulus; nothing can be observed while the Bridge is away."""
+        self.disconnect_bridge(abrupt)
+        time.sleep(timestr_to_secs(outage))
+        return self.connect_as_bridge(timeout, clear=False, record_version=False)
 
     def _record_appsmm_version(self) -> None:
         try:
@@ -283,7 +294,6 @@ class SMMTestbench:
 
     def _settled_state(self, budget: float) -> str:
         """Current state, waiting while appSMM is in a transient state (PowerOn, Initializing, Clearing, Configuring)."""
-        import time
 
         deadline = time.monotonic() + budget
         previous = None
@@ -356,7 +366,6 @@ class SMMTestbench:
         """Waits until appSMM sends the RTC command ``command`` to the hardware (twin COP trace, offline
         tier), e.g. ``InitializeCmd``, ``DeInitializeCmd`` or ``AppMan.EmergencyStopCmd``. Looks after
         the last `Send ICD Message` unless ``since`` (a trace id) is given."""
-        import time
 
         start = self._trace_mark if since is None else int(since)
         deadline = time.monotonic() + timestr_to_secs(timeout)
@@ -375,7 +384,6 @@ class SMMTestbench:
     @keyword
     def hardware_command_should_not_be_sent(self, command: str, duration: str = "3s", since: Any = None) -> None:
         """Fails if appSMM sends the RTC command ``command`` within ``duration``."""
-        import time
 
         start = self._trace_mark if since is None else int(since)
         time.sleep(timestr_to_secs(duration))
@@ -418,7 +426,6 @@ class SMMTestbench:
     @keyword
     def begin_smm_test(self) -> None:
         """Test setup: remembers where the test starts on the timeline."""
-        import time
 
         self._test_started_ms = int(time.time() * 1000)
         try:

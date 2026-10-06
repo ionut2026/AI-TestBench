@@ -914,10 +914,13 @@ Line by line:
 ### 9.7 Step 5 — check it
 
 ```powershell
+.\.venv\Scripts\smm-auto lint
+.\.venv\Scripts\robocop check robot
 .\.venv\Scripts\smm-auto drift
 .\.venv\Scripts\smm-auto --suites robot\suites\pilot\shutdown.robot run --tier mock --include SDS-2428419
 ```
 
+- `lint` must report **no** violations (the rules are in Section 11.3); `robocop` checks general Robot style.
 - `drift` must show **no** stale/orphan/untagged/nohash problem for your spec (it will list it under PENDING — correct).
 - The mock run must at least **execute** the test without "No keyword with name …" or syntax errors. A failure on mock
   is acceptable only if the mock does not simulate that behaviour (e.g. hardware); then tag `needs:twin` if it needs the twin
@@ -1155,8 +1158,14 @@ Set by `robot\environments\<tier>.py`; the defaults in `smm.resource` apply when
 | `${INIT_TIMEOUT}` | Full initialization | 30s | 300s | 600s | 180s |
 | `${RECOVER_TIMEOUT}` | Recover sequence | 15s | 90s | 120s | 60s |
 | `${QUIET_PERIOD}` | How long to wait to be sure something does **not** happen | 2s | 5s | 5s | 3s |
+| `${SHORT_QUIET_PERIOD}` | Short silence check right after a message that should have been the only one | | | | 1s |
+| `${BRIDGE_OUTAGE}` | How long the Bridge stays away in `Interrupt Bridge Connection` | | | | `${QUIET_PERIOD}` |
 | `${TIER}` | mock / offline / rig | | | | mock |
 | `&{OVERRIDES}` | Environment overrides passed to the service | | appSMM path | broker address | empty |
+
+A time limit that the **specification** states goes into a suite variable named after the spec, e.g.
+`${SDS_2428417_LIMIT}    20s` in the suite's `*** Variables ***`, and is used as `timeout=${SDS_2428417_LIMIT}`. Literal
+`timeout=` / `duration=` values are refused by `smm-auto lint` (rule SMM03).
 
 ### 10.2 How message matching works
 
@@ -1212,6 +1221,7 @@ wait by accident. If a message might arrive **before** your send (e.g. a notific
 |---|---|---|
 | `Connect As Bridge` | `timeout=10s`, `clear=True`, `record_version=True` | Connects to the broker as SMMBridge, announces Bridge/IW/analyzers as Connected, starts the heartbeat. `clear=True` empties the timeline. Records the appSMM version (GetVersionRequest) in the report. |
 | `Disconnect Bridge` | `abrupt=False` | Clean disconnect, or `abrupt=True` = cut the connection so the broker publishes the Bridge's last will (like a crash). |
+| `Interrupt Bridge Connection` | `outage=3s`, `timeout=10s`, `abrupt=True` | Lost-Bridge stimulus: disconnects, stays away for `outage` (nothing can be observed meanwhile), reconnects **without** clearing the timeline. Use this instead of `Disconnect Bridge` + `Sleep` + `Connect As Bridge`. |
 | `Bridge Should Be Connected` | — | Fails if the Bridge link is not connected. |
 
 ### 10.5 Sending
@@ -1313,6 +1323,24 @@ Valid state names: `PowerOn`, `NotInitialized`, `Initializing`, `Idle`, `Clearin
    `[not_testable]` with the reason.
 9. Add the test to the area's suite; keep the suite Settings unchanged.
 10. A human reviews every test and removes `review:pending`.
+
+### 11.3 Rules checked automatically (`smm-auto lint`)
+
+`smm-auto lint` (also part of `smm-auto drift --strict` as the **LINT** category, and a CI step) checks the suites:
+
+| Rule | Checks | Fix |
+|---|---|---|
+| **SMM01** no-sleep | No `Sleep` anywhere. | Wait for a message/state; assert silence with `Message Should Not Arrive`; lost Bridge → `Interrupt Bridge Connection`. |
+| **SMM02** documentation | Every test has `[Documentation]` that quotes its specification (at least 5 consecutive words of the spec text) or, for a variant, names the spec id. | Copy the spec text from the brief. |
+| **SMM03** literal-timeout | `timeout=` / `duration=` and the `Wait Until Keyword Succeeds` timeout are variables. | Tier variable (Section 10.1) or `${SDS_<id>_LIMIT}`. |
+| **SMM04** twin-tag | A test that uses a hardware keyword outside `IF` is tagged `needs:twin`; a `needs:twin` test uses at least one. | Add/remove the tag, or put the hardware step inside `IF    '${TIER}' == 'offline'` to keep it tier-adaptive. |
+| **SMM05** restart-tag | Same for `Restart appSMM` / `Restart MQTT Broker` and `requires:restart`. | Add/remove the tag. |
+
+Keyword use is followed through user keywords (`smm.resource`, the suite's own keywords, `Run Keyword…`), so
+`Restart appSMM And Wait Until NotInitialized` counts as a restart. `Run Keyword If/Unless` counts as conditional.
+
+**Robocop** (`robocop check robot`, configured in `pyproject.toml`) checks general Robot Framework style (unused
+variables, ordering of settings, length, …). Both run in CI.
 
 ---
 
@@ -1418,7 +1446,9 @@ Use `windchill-mcp-server\docs\windchill-without-ai.md` for RV&S queries by hand
 | **PENDING** | Tests tagged `review:pending` | Review them. (Informational.) |
 | **UNRECORDED REVIEW** | A test without `review:pending` has no human entry in `catalog\reviews.toml` for its current `spechash:` | Record the review (Section 9.8), or put `review:pending` back. |
 
-Only STALE, ORPHAN, UNTAGGED, NO HASH, UNCOVERED and UNRECORDED REVIEW count as problems.
+| **LINT** | A suite breaks a test rule (Section 11.3) | Fix the test (`smm-auto lint` shows file and line). |
+
+Only STALE, ORPHAN, UNTAGGED, NO HASH, UNCOVERED, UNRECORDED REVIEW and LINT count as problems.
 
 ### 12.5 When a specification changes in RV&S
 
@@ -1748,7 +1778,7 @@ File: `.github\workflows\smm-automation.yml`. CI = GitHub runs the checks automa
 1. Checks out this repository and the SMM TestBench at the **pinned commit** (the TestBench repository is public,
    so no secret is needed; if it ever becomes private, add a repository secret `SMM_TESTBENCH_TOKEN` with read access to it).
 2. Installs Node 24 and Python 3.12; `npm ci` in TestBench simulator + hwsim and in `service`; `pip install -e`.
-3. Typecheck, build, vitest, pytest, `smm-auto drift --strict`, **mock tier** run.
+3. Typecheck, build, vitest, pytest, `smm-auto lint`, `robocop check robot`, `smm-auto drift --strict`, **mock tier** run.
 4. Uploads the results as artifact **smm-mock-results** (download it from the run page → *Artifacts*).
 
 A red framework job on a pull request means: do not merge until fixed. The most common reason is `drift --strict`
@@ -1871,7 +1901,8 @@ findings section and in Section 16.
 
 - [ ] `SDS-<id>`, `spechash:<8>`, `area:<x>` (+ `needs:twin` / `requires:restart` if applicable) tags
 - [ ] `[Documentation]` explains spec, ET, and the reasoning
-- [ ] Given/When/Then structure; no `Sleep`; no hard-coded timeouts below the environment values
+- [ ] Given/When/Then structure; no `Sleep`; timeouts from variables (spec limits as `${SDS_<id>_LIMIT}`)
+- [ ] `smm-auto lint` and `robocop check robot` clean
 - [ ] `smm-auto drift` clean for this test
 - [ ] Runs green on mock (if not `needs:twin`) and was run on offline
 - [ ] Reviewed by a second person; `review:pending` removed
@@ -1924,7 +1955,8 @@ cd D:\projects\AI-TestBench\smm-automation
 
 # --- RV&S
 .\.venv\Scripts\smm-auto ingest                          # download specs/requirements/stories/ETs
-.\.venv\Scripts\smm-auto drift                           # tests vs RV&S
+.\.venv\Scripts\smm-auto drift                           # tests vs RV&S (includes lint)
+.\.venv\Scripts\smm-auto lint                            # test rules SMM01-05
 .\.venv\Scripts\smm-auto briefs --spec 2428419           # writing aid for one spec
 
 # --- after code changes

@@ -9,6 +9,11 @@ Test Teardown       Finish SMM Test
 Test Tags           area:recover    pilot
 
 
+*** Variables ***
+# Time limit stated in the specification (not a tier timeout).
+${SDS_2532504_LIMIT}      20s
+
+
 *** Test Cases ***
 SDS-2653094 System Restarts With RecoverRequest After Shutdown
     [Documentation]    If the system is shut down following a fatal error event, the SMM system can be
@@ -28,7 +33,8 @@ SDS-2653094 System Restarts With RecoverRequest After Shutdown
     Received Messages Should Be Schema Valid
 
 SDS-2653094 System Restarts With RecoverRequest After A Hardware Fatal Error
-    [Documentation]    Same as above, with the E-Stop caused by a fatal hardware error (twin emergency stop).
+    [Documentation]    Variant of 2653094 (see the previous test): the E-Stop is caused by a fatal hardware error
+    ...    (twin emergency stop).
     [Tags]    SDS-2653094    spechash:590de9f9    needs:twin    review:pending    known-issue:FINDING-2
     Require Hardware Twin
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
@@ -61,9 +67,9 @@ SDS-2532492 RecoverRequest Outside E-Stop Does Not De-Initialize
     Message Should Not Arrive    RecoverResponse    duration=${QUIET_PERIOD}    Status=OK
     ${status}=    Get Environment Status
     IF    '${status}[hardware][kind]' == 'twin'
-        Hardware Command Should Not Be Sent    DeInitializeCmd    duration=1s
+        Hardware Command Should Not Be Sent    DeInitializeCmd    duration=${SHORT_QUIET_PERIOD}
     END
-    Message Should Not Arrive    SystemStatusNotification    duration=1s    PreviousState=Idle
+    Message Should Not Arrive    SystemStatusNotification    duration=${SHORT_QUIET_PERIOD}    PreviousState=Idle
     System State Should Be    Idle
 
 SDS-2532504 RecoverResponse OK Matches The ICD Schema
@@ -75,7 +81,7 @@ SDS-2532504 RecoverResponse OK Matches The ICD Schema
     [Tags]    SDS-2532504    spechash:bba306d8    review:pending
     Bring SMM To E-Stop With Shutdown
     Send ICD Message    RecoverRequest
-    ${entry}=    Wait For Message Entry    RecoverResponse    timeout=20s    Status=OK
+    ${entry}=    Wait For Message Entry    RecoverResponse    timeout=${SDS_2532504_LIMIT}    Status=OK
     Should Be Equal    ${entry}[topic]    /is/iw/tx
     Should Be True    ${entry}[valid]    RecoverResponse breaks the ICD schema: ${entry}[errors]
     Received Messages Should Be Schema Valid

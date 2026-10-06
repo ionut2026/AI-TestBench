@@ -47,7 +47,7 @@ SDS-2525423 InitializationRequest Outside NotInitialized Does Not Start Initiali
     Message Should Not Arrive    SystemStatusNotification    duration=${QUIET_PERIOD}    CurrentState=Initializing
     ${status}=    Get Environment Status
     IF    '${status}[hardware][kind]' == 'twin'
-        Hardware Command Should Not Be Sent    InitializeCmd    duration=1s
+        Hardware Command Should Not Be Sent    InitializeCmd    duration=${SHORT_QUIET_PERIOD}
     END
     System State Should Be    Idle
 

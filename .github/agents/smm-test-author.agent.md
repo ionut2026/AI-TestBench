@@ -111,7 +111,7 @@ Preconditions are *not* verification: use the keywords below and let them fail l
 | **NormalOperation** | `Require Hardware Twin`, Idle, `Trigger Hardware Action    insertFrontIn    rackId=A001    firstSample=1` | `needs:twin` + `[Teardown]    Finish SMM Test And Empty The Instrument`. |
 | **Configuring** | NotInitialized, then `Send ICD Message    SetConfigurationRequest    body={"STI.Barcode.Code128": "Enabled"}` | Returns to NotInitialized after SetConfigurationResponse. |
 | appSMM just (re)connected to the broker | `Restart appSMM    down=1s`, then wait for `ConnectionNotification | Source=SMM | Status=Connected` | `requires:restart`. |
-| Bridge connection lost | `Disconnect Bridge    abrupt=True` (last will), `Connect As Bridge    timeout=${STARTUP_TIMEOUT}    record_version=False` | |
+| Bridge connection lost | `Interrupt Bridge Connection    outage=${BRIDGE_OUTAGE}    timeout=${STARTUP_TIMEOUT}` (abrupt disconnect = last will, outage, reconnect without clearing the timeline) | |
 | Broker outage | `Restart MQTT Broker    down=3s`, `Wait Until Keyword Succeeds    ${STARTUP_TIMEOUT}    2s    Bridge Should Be Connected` | `requires:restart`. |
 
 If a precondition depends on behaviour that is itself under test elsewhere (e.g. "E-Stop after Bridge loss" for the
@@ -170,8 +170,10 @@ Matching rules you must know:
 - Values the specification leaves open (`??`, timestamps): `Log    EventId: ${entry}[body][EventId]` — never assert a
   value the spec does not give.
 - Timeouts: always the variables `${RESPONSE_TIMEOUT}` (single answer), `${STARTUP_TIMEOUT}` (restart/reconnect),
-  `${INIT_TIMEOUT}` (initialization, clearing, rack movements), `${RECOVER_TIMEOUT}`, `${QUIET_PERIOD}` (absence
-  windows). A literal only when the specification states the time — then quote it in the documentation.
+  `${INIT_TIMEOUT}` (initialization, clearing, rack movements), `${RECOVER_TIMEOUT}`, `${QUIET_PERIOD}` /
+  `${SHORT_QUIET_PERIOD}` (absence windows). When the specification states a time, add a suite variable
+  `${SDS_<id>_LIMIT}    <time>` in `*** Variables ***`, use it, and quote the time in the documentation. Literal
+  `timeout=` / `duration=` values are rejected by `smm-auto lint`.
 
 ---
 
@@ -211,10 +213,9 @@ Use this to choose preconditions and timeouts and to recognise expected noise; *
 
 **Causality and determinism**
 - [ ] The outcome is caused by the trigger: the wait starts after the trigger (default window) or the order is asserted.
-- [ ] No `Sleep` for synchronisation. The only accepted `Sleep` is a deliberate, commented observation window where the
-      behaviour *is* the passage of time (e.g. letting a dropped connection's last will propagate) — prefer
-      `Message Should Not Arrive` for absence.
-- [ ] All timeouts are variables (or quoted from the spec).
+- [ ] No `Sleep` at all (`smm-auto lint` rejects it). Prove absence with `Message Should Not Arrive`; a lost Bridge is
+      `Interrupt Bridge Connection`.
+- [ ] All timeouts are variables (spec-stated times as `${SDS_<id>_LIMIT}`).
 
 **Isolation**
 - [ ] The test reaches its own precondition (no reliance on the previous test's end state).
@@ -234,6 +235,8 @@ Use this to choose preconditions and timeouts and to recognise expected noise; *
 Run from `smm-automation` (Windows paths):
 
 ```powershell
+.\.venv\Scripts\smm-auto lint                                                     # no violations (SMM01-05)
+.\.venv\Scripts\robocop check robot                                               # no issues
 .\.venv\Scripts\smm-auto drift                                                    # no STALE/ORPHAN/NO HASH/UNTAGGED for your SDS
 .\.venv\Scripts\smm-auto --suites robot\suites\<scope>\<area>.robot run --tier mock --include SDS-<id>
 ```

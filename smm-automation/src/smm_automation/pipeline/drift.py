@@ -136,7 +136,7 @@ def check(catalog: dict, tests: list[TestRef], reviews: list[dict] | None = None
 
 
 def problems(result: dict) -> int:
-    return sum(len(result.get(k, [])) for k in ("stale", "orphan", "untagged", "nohash", "uncovered", "unrecorded"))
+    return sum(len(result.get(k, [])) for k in ("stale", "orphan", "untagged", "nohash", "uncovered", "unrecorded", "lint"))
 
 
 def format_text(result: dict) -> str:
@@ -150,6 +150,7 @@ def format_text(result: dict) -> str:
         "suspect": "SUSPECT in RV&S (re-review the covering tests)",
         "pending": "PENDING human review",
         "unrecorded": "UNRECORDED REVIEW (review:pending removed without a matching entry in catalog/reviews.toml)",
+        "lint": "LINT (test rule violations, see smm-auto lint)",
         "deferred": "Deferred",
         "notTestable": "Not testable",
     }

@@ -48,11 +48,12 @@ For each specification get the facts **independently of the test**:
    absence of messages appSMM legitimately sends (Verbose `EventNotification`s), racks left behind by a previous test.
 5. **Rules and hygiene.** Tags (`SDS-<id>`, `spechash:` equal to the brief, `review:pending`, `needs:twin` when the twin
    is required, `requires:restart` when appSMM/broker is restarted), name convention, verbatim documentation with
-   interpretations, Given/When/Then structure, no synchronisation `Sleep`, variables for timeouts, clean-up of racks
+   interpretations, Given/When/Then structure, no `Sleep`, variables for timeouts, clean-up of racks
    (`Finish SMM Test And Empty The Instrument`), schema validity and pair-issue checks, only allowed keywords, suite
-   Settings unchanged.
+   Settings unchanged. `smm-auto lint` checks the mechanical part of these rules (SMM01-05); you still judge the rest.
 6. **Evidence (when possible).** Run, from `smm-automation`:
    ```powershell
+   .\.venv\Scripts\smm-auto lint
    .\.venv\Scripts\smm-auto drift
    .\.venv\Scripts\smm-auto --suites <suite file> run --tier mock --include SDS-<id>
    ```

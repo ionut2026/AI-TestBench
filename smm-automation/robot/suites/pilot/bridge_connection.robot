@@ -20,9 +20,7 @@ SDS-2854109 Bridge Crash Puts The System Into E-Stop
     ...    The Bridge drops its connection without a goodbye, so the broker publishes its last will.
     [Tags]    SDS-2854109    spechash:293117f8    review:pending    known-issue:FINDING-1
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
-    Disconnect Bridge    abrupt=True
-    Sleep    ${QUIET_PERIOD}
-    Connect As Bridge    timeout=${STARTUP_TIMEOUT}    record_version=False
+    Interrupt Bridge Connection    outage=${BRIDGE_OUTAGE}    timeout=${STARTUP_TIMEOUT}
     System State Should Be    E-Stop    timeout=${RESPONSE_TIMEOUT}
 
 SDS-2854109 Broker Outage Puts The System Into E-Stop
@@ -47,9 +45,7 @@ SDS-2854281 Operator Warning When The Bridge Connection Is Re-Established
     ...    EventId is still open in the specification ("??"): it is logged, not checked.
     [Tags]    SDS-2854281    spechash:ae9110ff    review:pending    known-issue:FINDING-1
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
-    Disconnect Bridge    abrupt=True
-    Sleep    ${QUIET_PERIOD}
-    Connect As Bridge    timeout=${STARTUP_TIMEOUT}    record_version=False
+    Interrupt Bridge Connection    outage=${BRIDGE_OUTAGE}    timeout=${STARTUP_TIMEOUT}
     ${state}=    Get System State
     Should Be Equal    ${state}    E-Stop
     ...    Precondition not met: appSMM is ${state}, not E-Stop, after the Bridge connection was lost (see 2854109)

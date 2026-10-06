@@ -2,7 +2,8 @@
 
   smm-auto ingest   [--scope catalog/pilot.scope.toml]          RV&S -> catalog/<scope>.json
   smm-auto briefs   [--spec 2528698 ...]                         catalog -> generated/briefs/SDS-<id>.md
-  smm-auto drift    [--strict]                                   suites vs catalog and review ledger (stale/orphan/uncovered/unrecorded)
+  smm-auto drift    [--strict]                                   suites vs catalog and review ledger (stale/orphan/uncovered/unrecorded) + lint
+  smm-auto lint                                                  test rules (no Sleep, documentation, timing variables, tier tags)
   smm-auto run      [--tier mock|offline|rig] [--fail-on new|any|none] [robot args...]
                                                                  run suites, then the traceability report
   smm-auto report   --output results/.../output.xml              traceability report for an existing run
@@ -68,11 +69,25 @@ def cmd_drift(args) -> int:
     from smm_automation.pipeline.drift import check, collect_tests, format_text, load_reviews, problems
     from smm_automation.pipeline.ingest import load_catalog
 
-    result = check(load_catalog(_catalog_path(args)), collect_tests(_suites(args)), load_reviews(Path(args.reviews)))
+    from smm_automation.pipeline.lint import lint
+
+    catalog = load_catalog(_catalog_path(args))
+    result = check(catalog, collect_tests(_suites(args)), load_reviews(Path(args.reviews)))
+    result["lint"] = [v.as_dict() for v in lint(_suites(args), catalog)]
     if args.json:
         Path(args.json).write_text(json.dumps(result, indent=1, ensure_ascii=False), encoding="utf-8")
     print(format_text(result))
     return 1 if args.strict and problems(result) else 0
+
+
+def cmd_lint(args) -> int:
+    from smm_automation.pipeline.ingest import load_catalog
+    from smm_automation.pipeline.lint import format_text, lint
+
+    catalog_path = _catalog_path(args)
+    violations = lint(_suites(args), load_catalog(catalog_path) if catalog_path.exists() else None)
+    print(format_text(violations, FRAMEWORK_ROOT))
+    return 1 if violations else 0
 
 
 def _report(catalog_path: Path, output_xml: Path, out_dir: Path, suites: list[Path], reviews: Path = REVIEWS) -> dict:
@@ -166,8 +181,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--spec", nargs="*", help="only these specification IDs")
     p.add_argument("--out", default=str(FRAMEWORK_ROOT / "generated" / "briefs"))
     p = sub.add_parser("drift", allow_abbrev=False, help="compare suites with the catalog")
-    p.add_argument("--strict", action="store_true", help="exit code 1 on stale/orphan/untagged/uncovered/unrecorded review")
+    p.add_argument("--strict", action="store_true", help="exit code 1 on stale/orphan/untagged/uncovered/unrecorded review or a lint violation")
     p.add_argument("--json", help="also write the result as JSON")
+    sub.add_parser("lint", allow_abbrev=False, help="check the test rules (exit code 1 on violations)")
     p = sub.add_parser("run", allow_abbrev=False, help="run suites against a tier and write the traceability report (extra args go to robot)")
     p.add_argument("--tier", choices=sorted(TIER_EXCLUDES), default="mock")
     p.add_argument("--outdir")
@@ -187,7 +203,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"unrecognized arguments: {' '.join(extra)}")
     if args.command == "run":
         return cmd_run(args, extra)
-    return {"ingest": cmd_ingest, "briefs": cmd_briefs, "drift": cmd_drift, "report": cmd_report, "service": cmd_service}[args.command](args)
+    return {"ingest": cmd_ingest, "briefs": cmd_briefs, "drift": cmd_drift, "lint": cmd_lint, "report": cmd_report, "service": cmd_service}[args.command](args)
 
 
 if __name__ == "__main__":
