@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { join } from 'node:path'
 import { BridgeSession, ExpectationError, WaitTimeoutError, summarize } from '../bridgeSession'
-import { Environment, UnavailableError, presetFor, type EnvironmentConfig, type Tier } from '../environment'
+import { CommandSentError, CommandTimeoutError, Environment, UnavailableError, presetFor, type EnvironmentConfig, type Tier } from '../environment'
 import { checkFilter, type MessageFilter } from '../messageFilter'
 import { ICD_SCHEMA_VERSION, MESSAGES, testbenchInfo, type BeaconSettings, type ConnectionSettings, type TimelineEntry } from '../testbench'
 
@@ -9,7 +9,7 @@ import { ICD_SCHEMA_VERSION, MESSAGES, testbenchInfo, type BeaconSettings, type 
  * Versioned HTTP/JSON API of the SMM automation service. Breaking changes need a new major
  * API_VERSION and a new /api/vN prefix; the Robot library checks the major version at start-up.
  */
-export const API_VERSION = '1.0.0'
+export const API_VERSION = '1.1.0'
 const PREFIX = '/api/v1'
 
 export class HttpError extends Error {
@@ -23,6 +23,10 @@ type Handler = (ctx: { body: Json; params: Record<string, string>; query: URLSea
 
 export interface ServiceOptions {
   testbenchDir?: string
+  /** Timeline entries kept per Bridge session (older ones are dropped and reported in /session). */
+  timelineCap?: number
+  /** COP trace entries kept (older ones are dropped and reported in /environment). */
+  traceCap?: number
 }
 
 /** The service state: one environment and one Bridge session at a time (one rig per service). */
@@ -33,8 +37,8 @@ export class AutomationService {
 
   constructor(options: ServiceOptions = {}) {
     const dir = options.testbenchDir ?? testbenchInfo.dir
-    this.env = new Environment(join(dir, 'hwsim'))
-    this.session = new BridgeSession(join(dir, 'simulator', 'resources', 'schemas'))
+    this.env = new Environment(join(dir, 'hwsim'), options.traceCap)
+    this.session = new BridgeSession(join(dir, 'simulator', 'resources', 'schemas'), options.timelineCap)
     this.defineRoutes()
   }
 
@@ -82,6 +86,15 @@ export class AutomationService {
     // ---- hardware twin
     this.route('GET', '/hardware', () => env.hardwareSnapshot())
     this.route('GET', '/hardware/trace', ({ query }) => env.getTrace(num(query.get('since'), 0)))
+    this.route('POST', '/hardware/trace/wait', async ({ body }) => {
+      requireTwin(env)
+      return env.waitForCommand(requireString(body, 'command'), num(body.since, 0), num(body.timeoutMs, 30000))
+    })
+    this.route('POST', '/hardware/trace/expect-none', async ({ body }) => {
+      requireTwin(env)
+      await env.expectNoCommand(requireString(body, 'command'), num(body.since, 0), num(body.durationMs, 3000))
+      return { ok: true }
+    })
     this.route('POST', '/hardware/actions/:action', ({ params, body }) => {
       const refused = env.hardwareAction(params.action, body)
       if (refused) throw new HttpError(409, refused)
@@ -147,7 +160,7 @@ export class AutomationService {
       return session.query(filter, num(query.get('limit'), 1000)).map(entryOut)
     })
     this.route('POST', '/timeline/query', ({ body }) => session.query(requireFilter(body.filter ?? {}), num(body.limit, 1000)).map(entryOut))
-    this.route('POST', '/timeline/mark', () => ({ mark: session.mark() }))
+    this.route('POST', '/timeline/mark', () => ({ mark: session.mark(), traceMark: env.traceMark() }))
     this.route('POST', '/timeline/wait', async ({ body }) =>
       entryOut(await session.waitFor(requireFilter(body.filter), num(body.timeoutMs, 10000))),
     )
@@ -179,9 +192,9 @@ export class AutomationService {
       send(res, 200, (await route.handler({ body, params, query: url.searchParams })) ?? { ok: true })
     } catch (err) {
       if (err instanceof HttpError) send(res, err.status, { error: err.message, details: err.details })
-      else if (err instanceof WaitTimeoutError) send(res, 408, { error: err.message, kind: 'timeout', details: err.details })
+      else if (err instanceof WaitTimeoutError || err instanceof CommandTimeoutError) send(res, 408, { error: err.message, kind: 'timeout', details: err.details })
       else if (err instanceof UnavailableError) send(res, 409, { error: err.message, kind: 'unavailable' })
-      else if (err instanceof ExpectationError) send(res, 409, { error: err.message, kind: 'expectation', details: err.details })
+      else if (err instanceof ExpectationError || err instanceof CommandSentError) send(res, 409, { error: err.message, kind: 'expectation', details: err.details })
       else send(res, 500, { error: (err as Error).message ?? String(err), kind: 'internal' })
     }
   }
@@ -231,6 +244,10 @@ function requireFilter(value: unknown, label = 'filter'): MessageFilter {
 
 function requireConnected(session: BridgeSession): void {
   if (session.link.status !== 'connected') throw new HttpError(409, `The Bridge session is not connected (link: ${session.link.status})`)
+}
+
+function requireTwin(env: Environment): void {
+  if (env.config?.hardware !== 'twin') throw new UnavailableError('No COP trace in this environment (hardware twin, offline tier only)')
 }
 
 async function readJson(req: IncomingMessage): Promise<Json> {

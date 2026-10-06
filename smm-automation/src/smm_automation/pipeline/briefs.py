@@ -21,7 +21,9 @@ RULES = """\
    Command as a *required* step), `requires:restart` when it restarts appSMM or the broker.
 4. Only use keywords from the list below and Robot BuiltIn/Collections. No `Sleep` (`smm-auto lint` rejects it):
    wait for messages (`Wait For Message`, `Wait For Message Sequence`, `Wait For System State`), prove absence
-   with `Message Should Not Arrive`, simulate a lost Bridge with `Interrupt Bridge Connection`.
+   with `Message Should Not Arrive`, simulate a lost Bridge with `Interrupt Bridge Connection`. Each wait consumes
+   the message it matched (two waits need two messages); consecutive waits do not imply order, so assert order
+   with `Wait For Message Sequence` (or `since=last`).
 5. Preconditions with `Bring SMM To State`, `Bring SMM To E-Stop With Shutdown` or
    `Restart appSMM And Wait Until NotInitialized`; they are not verification steps.
 6. Assert what the specification says and nothing more: states, message order, fields, topic (`@topic=/is/iw/tx`),

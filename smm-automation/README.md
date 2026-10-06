@@ -94,7 +94,8 @@ Rules: one behaviour per test, assert what the specification states (message, fi
 events (never `Sleep`), only use keywords from the library/resource, add `needs:twin` if hardware-twin state is
 required and `requires:restart` if appSMM or the broker must be restarted. Timeouts are variables (time limits stated
 by a specification as `${SDS_<id>_LIMIT}` in the suite). `smm-auto lint` and `robocop check robot` enforce these rules
-in CI (handbook Section 11.3).
+in CI (handbook Section 11.3). Each wait consumes the message it matched; order is asserted with
+`Wait For Message Sequence` (or `since=last`), not by consecutive waits (handbook Section 10.2).
 
 ## Reports
 

@@ -14,8 +14,13 @@ Message matching:
 Message specs (sequences): ``SystemStatusNotification | PreviousState=Idle | CurrentState=E-Stop``.
     Filter fields other than the body start with ``@``: ``@way=tx``, ``@analyzer=0``, ``@topic=/is/iw/tx``.
 
-Time windows: every send records a mark; waits look at messages after the last mark unless
-``since=`` is given (``since=test`` = since the test started, ``since=0`` = whole timeline).
+Time windows: every stimulus (send, hardware action, restart, disconnect) records a mark on the
+timeline and on the COP trace; waits look at messages after the last mark unless ``since=`` is
+given (``since=test`` = since the test started, ``since=last`` = after the previous match,
+``since=0`` = whole timeline). Within a test a message is returned by one wait only: later waits
+skip messages that earlier waits (or sequences) already matched, and the state polls of
+`Bring SMM To State` are hidden from all waits and counts. Use `Wait For Message Sequence`
+(or ``since=last``) to assert order.
 """
 
 from __future__ import annotations
@@ -33,7 +38,10 @@ from robot.utils import timestr_to_secs
 from smm_automation.client import DEFAULT_URL, ServiceClient, ServiceError, ensure_service
 
 STATES = ("PowerOn", "NotInitialized", "Initializing", "Idle", "NormalOperation", "E-Stop", "Configuring", "Clearing")
+TRANSIENT_STATES = ("PowerOn", "Initializing", "Clearing", "Configuring")
 FILTER_FIELDS = {"way", "topic", "analyzer", "valid", "since"}
+# After Initializing -> Idle appSMM goes on to Clearing; how long to wait for it before taking Idle as settled.
+CLEARING_GRACE_S = 15.0
 
 
 @library(scope="GLOBAL", auto_keywords=False)
@@ -45,7 +53,15 @@ class SMMTestbench:
         self._test_mark = 0
         self._tier: str | None = None
         self._trace_mark = 0
+        self._test_trace_mark = 0
         self._test_started_ms = 0
+        self._in_test = False
+        # Timeline ids already returned by a wait in this test, and the hidden state polls.
+        self._consumed: set[int] = set()
+        self._hidden: set[int] = set()
+        self._last_match: int | None = None
+        # (mark, label) of reconnections and restarts inside the test, shown in the test's timeline.
+        self._segments: list[tuple[int, str]] = []
 
     # ================================================================== service and environment
 
@@ -100,23 +116,34 @@ class SMMTestbench:
     @keyword
     def restart_appsmm(self, down: str = "1s") -> None:
         """Kills appSMM (no goodbye message) and starts it again after ``down``."""
-        self._mark = self.client.mark()
+        self._set_marks()
+        self._segment(f"appSMM restarted (down {down})")
         self.client.restart_appsmm(int(timestr_to_secs(down) * 1000))
 
     @keyword
     def restart_mqtt_broker(self, down: str = "2s") -> None:
         """Takes the MQTT broker down for ``down``: appSMM and the Bridge both lose the connection."""
-        self._mark = self.client.mark()
+        self._set_marks()
+        self._segment(f"MQTT broker restarted (down {down})")
         self.client.restart_broker(int(timestr_to_secs(down) * 1000))
 
     # ================================================================== Bridge session
 
     @keyword
-    def connect_as_bridge(self, timeout: str = "10s", clear: bool = True, record_version: bool = True) -> dict:
-        """Connects the Bridge (announces SMMBridge, IW and the enabled analyzers as Connected)."""
-        self._mark = None if _truthy(clear) else self.client.mark()
-        snapshot = self.client.connect(timestr_to_secs(timeout), clear=_truthy(clear))
-        if _truthy(clear):
+    def connect_as_bridge(self, timeout: str = "10s", clear: Any = None, record_version: bool = True) -> dict:
+        """Connects the Bridge (announces SMMBridge, IW and the enabled analyzers as Connected).
+
+        ``clear`` empties the timeline first. By default (``None``) it clears only outside a test
+        (suite setup); inside a test the timeline is kept, so the evidence from before a
+        reconnection stays in the test's log."""
+        do_clear = not self._in_test if clear is None or str(clear).strip().lower() in ("", "none", "auto") else _truthy(clear)
+        if do_clear:
+            self._mark = None
+        else:
+            self._set_marks()
+            self._segment("Bridge connected again")
+        snapshot = self.client.connect(timestr_to_secs(timeout), clear=do_clear)
+        if do_clear:
             self._test_mark = 0
         if _truthy(record_version):
             self._record_appsmm_version()
@@ -126,7 +153,8 @@ class SMMTestbench:
     def disconnect_bridge(self, abrupt: bool = False) -> None:
         """Disconnects the Bridge. ``abrupt=True`` drops the TCP connection so the broker publishes
         the Bridge's last will (``ConnectionNotification SMMBridge Disconnected``), like a crash."""
-        self._mark = self.client.mark()
+        self._set_marks()
+        self._segment("Bridge disconnected" + (" abruptly (last will)" if _truthy(abrupt) else ""))
         self.client.disconnect(_truthy(abrupt))
 
     @keyword
@@ -148,9 +176,10 @@ class SMMTestbench:
     def _record_appsmm_version(self) -> None:
         try:
             mark = self.client.mark()
-            self.client.send("GetVersionRequest", {})
-            body = self.client.wait({"name": "GetVersionResponse", "since": mark}, 5)["body"]
-            i = body.get("Integration", {})
+            self._hidden.add(self.client.send("GetVersionRequest", {})["id"])
+            entry = self.client.wait({"name": "GetVersionResponse", "since": mark}, 5)
+            self._hidden.add(entry["id"])
+            i = entry["body"].get("Integration", {})
             _metadata("appSMM version", f"{i.get('Major')}.{i.get('Minor')}.{i.get('Build')}.{i.get('Revision')}")
         except ServiceError as err:
             logger.info(f"appSMM version not recorded: {err}")
@@ -159,9 +188,8 @@ class SMMTestbench:
 
     @keyword
     def mark_timeline(self) -> int:
-        """Waits after this look only at newer messages. Returns the mark."""
-        self._mark = self.client.mark()
-        return self._mark
+        """Waits after this look only at newer messages (and newer COP commands). Returns the mark."""
+        return self._set_marks()
 
     @keyword
     def send_icd_message(self, name: str, body: Any = None, analyzer: int = -1, strict: bool = True, **fields: Any) -> dict:
@@ -169,8 +197,7 @@ class SMMTestbench:
         The body is ``body=`` (dict/JSON) merged with keyword fields. ``strict`` refuses bodies
         that break the ICD schema; use `Send Raw Payload` for negative tests."""
         payload = {**(_as_obj(body) or {}), **_match_from(fields)}
-        self._remember_trace()
-        self._mark = self.client.mark()
+        self._set_marks()
         entry = self.client.send(name, payload, int(analyzer), _truthy(strict))
         logger.info(f"Sent {name}: {json.dumps(payload)}")
         return entry
@@ -178,7 +205,7 @@ class SMMTestbench:
     @keyword
     def send_raw_payload(self, topic: str, raw: str) -> dict:
         """Publishes any text on any topic (invalid JSON, wrong schema, wrong topic...)."""
-        self._mark = self.client.mark()
+        self._set_marks()
         return self.client.send_raw(topic, raw)
 
     @keyword
@@ -201,9 +228,10 @@ class SMMTestbench:
     @keyword
     def wait_for_message_entry(self, name: str, timeout: str = "10s", since: Any = None, way: str = "rx", match: Any = None, **fields: Any) -> dict:
         """Like `Wait For Message` but returns the whole timeline entry (id, time, topic, body, valid, errors)."""
-        flt = self._filter(name, way, since, match, fields)
+        flt = self._filter(name, way, since, match, fields, self._wait_exclusions(since))
         entry = self._wait(flt, timeout)
         entry.setdefault("errors", [])
+        self._consume([entry])
         logger.info(f"Got #{entry['id']} {entry['name']} on {entry['topic']} at {entry['time']}: {json.dumps(entry['body'])}")
         return entry
 
@@ -211,12 +239,16 @@ class SMMTestbench:
     def wait_for_message_sequence(self, *specs: Any, timeout: str = "30s", since: Any = None) -> list:
         """Waits for messages in this order (others may come in between). Each spec is
         ``Name | Field=Value | ...`` or a filter dict. Returns the matched entries."""
+        exclude = self._wait_exclusions(since)
         filters = [self._spec(s) for s in specs]
+        if exclude:
+            filters = [{**f, "exclude": sorted(set(f.get("exclude", [])) | set(exclude))} for f in filters]
         start = self._since(since)
         try:
             entries = self.client.wait_sequence(filters, timestr_to_secs(timeout), start)
         except ServiceError as err:
             self._fail_with_context(err)
+        self._consume(entries)
         for e in entries:
             e.setdefault("errors", [])
             logger.info(f"#{e['id']} {e['time']} {e['name']}: {json.dumps(e['body'])}")
@@ -224,8 +256,9 @@ class SMMTestbench:
 
     @keyword
     def message_should_not_arrive(self, name: str, duration: str = "3s", since: Any = None, way: str = "rx", match: Any = None, **fields: Any) -> None:
-        """Fails if a matching message is already on the timeline (after the mark) or arrives within ``duration``."""
-        flt = self._filter(name, way, since, match, fields)
+        """Fails if a matching message is already on the timeline (after the mark, not counting the ones
+        earlier waits returned) or arrives within ``duration``."""
+        flt = self._filter(name, way, since, match, fields, self._wait_exclusions(since))
         try:
             self.client.expect_none(flt, timestr_to_secs(duration))
         except ServiceError as err:
@@ -233,8 +266,9 @@ class SMMTestbench:
 
     @keyword
     def messages_should_have_been_received(self, name: str, count: int | None = None, since: Any = None, way: str = "rx", match: Any = None, **fields: Any) -> list:
-        """Returns the matching messages already on the timeline; checks the count if given."""
-        found = self.client.query(self._filter(name, way, since, match, fields))
+        """Returns the matching messages already on the timeline (including the ones waits returned,
+        not the hidden state polls); checks the count if given."""
+        found = self.client.query(self._filter(name, way, since, match, fields, sorted(self._hidden)))
         if count is not None and len(found) != int(count):
             raise AssertionError(f"Expected {count} {name}, got {len(found)}: {[e['body'] for e in found]}")
         return found
@@ -264,52 +298,96 @@ class SMMTestbench:
         """Test precondition: drives appSMM to ``NotInitialized``, ``Idle`` or ``E-Stop`` with the ICD
         (Initialization / Recover / Shutdown requests). Not a verification step: it accepts both a
         Recover that re-initializes on its own and one that stops in NotInitialized, and reaches Idle
-        from any operating state (e.g. NormalOperation) through Shutdown -> E-Stop -> Recover."""
+        from any operating state (e.g. NormalOperation) through Shutdown -> E-Stop -> Recover.
+
+        The current state is taken from what appSMM already reported (SystemStatusNotification /
+        Response); while appSMM is in a transient state it waits for its next notification instead of
+        polling. The confirming SystemStatusRequest polls are hidden from the test's waits and counts.
+        Afterwards waits look at what comes after the precondition."""
         _check_state(target)
         if target not in ("NotInitialized", "Idle", "E-Stop"):
             raise ValueError(f"Bring SMM To State supports NotInitialized, Idle and E-Stop, not {target}")
         budget = timestr_to_secs(timeout)
+        deadline = time.monotonic() + budget
         state = None
-        for _ in range(5):
-            state = self._settled_state(budget)
-            if state == target:
-                return
-            if state == "E-Stop":
-                self.request_and_wait_for_response("RecoverRequest", timeout="60s", Status="OK")
-                self.wait_for_system_state_change("E-Stop", timeout="60s")
-            elif state == "NotInitialized" and target == "Idle":
-                self.request_and_wait_for_response("InitializationRequest", timeout="30s", Status="OK")
-                self._wait_idle_after_clearing(budget)
-            elif state == "NotInitialized":
-                raise AssertionError("Cannot bring appSMM from NotInitialized to E-Stop through the ICD")
-            else:
-                # Idle, NormalOperation, ... -> E-Stop; Recover follows on the next round if needed.
-                self.request_and_wait_for_response("ShutdownRequest", timeout="30s")
-                self.wait_for_system_state("E-Stop", timeout="30s")
-        raise AssertionError(f"appSMM did not reach {target} (last state {state})")
+        try:
+            for _ in range(5):
+                state = self._settled_state(deadline)
+                if state == target:
+                    return
+                if state == "E-Stop":
+                    self.request_and_wait_for_response("RecoverRequest", timeout="60s", Status="OK")
+                    self.wait_for_system_state_change("E-Stop", timeout="60s")
+                elif state == "NotInitialized" and target == "Idle":
+                    self.request_and_wait_for_response("InitializationRequest", timeout="30s", Status="OK")
+                    self._wait_idle_after_clearing(budget)
+                elif state == "NotInitialized":
+                    raise AssertionError("Cannot bring appSMM from NotInitialized to E-Stop through the ICD")
+                else:
+                    # Idle, NormalOperation, ... -> E-Stop; Recover follows on the next round if needed.
+                    self.request_and_wait_for_response("ShutdownRequest", timeout="30s")
+                    self.wait_for_system_state("E-Stop", timeout="30s")
+            raise AssertionError(f"appSMM did not reach {target} (last state {state})")
+        finally:
+            try:
+                self._set_marks()
+            except ServiceError:
+                pass
 
     def wait_for_system_state_change(self, previous: str, timeout: str = "60s") -> dict:
         """Waits for a SystemStatusNotification leaving ``previous`` (any new state)."""
         return self.wait_for_message("SystemStatusNotification", timeout=timeout, PreviousState=previous)
 
-    def _settled_state(self, budget: float) -> str:
-        """Current state, waiting while appSMM is in a transient state (PowerOn, Initializing, Clearing, Configuring)."""
-
-        deadline = time.monotonic() + budget
-        previous = None
+    def _settled_state(self, deadline: float) -> str:
+        """The state appSMM is in once it is not changing: waits (event-driven) while appSMM is in a
+        transient state or still has to clear after initializing, then confirms with one hidden poll."""
         while True:
-            state = self.get_system_state()
-            if time.monotonic() > deadline:
-                return state
-            if state not in ("PowerOn", "Initializing", "Clearing", "Configuring"):
-                # Idle is also briefly passed between Initializing and Clearing: require two equal reads.
-                if state == previous:
-                    return state
-                previous = state
-                time.sleep(0.5)
-                continue
-            previous = None
-            time.sleep(1)
+            anchor = self.client.mark()
+            state = self._observed_state()
+            if time.monotonic() < deadline and (state in TRANSIENT_STATES or self._clearing_due(state)):
+                until = deadline if state in TRANSIENT_STATES else min(deadline, time.monotonic() + CLEARING_GRACE_S)
+                if self._status_notification_after(anchor, until):
+                    continue
+            confirmed = self._poll_state()
+            if confirmed == state and confirmed not in TRANSIENT_STATES:
+                return confirmed
+            if time.monotonic() >= deadline:
+                raise AssertionError(f"appSMM did not settle in time (state {confirmed}, before {state})")
+
+    def _observed_state(self) -> str:
+        """The state the Bridge last saw appSMM report; asks (hidden) if it has not reported one."""
+        state = (self.client.session().get("smm") or {}).get("systemState")
+        return state if state in STATES else self._poll_state()
+
+    def _clearing_due(self, state: str) -> bool:
+        """Idle straight after Initializing: appSMM still goes through Clearing."""
+        if state != "Idle":
+            return False
+        last = self.client.query({"name": "SystemStatusNotification", "way": "rx"}, 1)
+        return bool(last) and (last[-1].get("body") or {}).get("PreviousState") == "Initializing"
+
+    def _status_notification_after(self, anchor: int, until: float) -> bool:
+        remaining = until - time.monotonic()
+        if remaining <= 0:
+            return False
+        try:
+            self.client.wait({"name": "SystemStatusNotification", "way": "rx", "since": anchor}, remaining)
+        except ServiceError as err:
+            if err.kind == "timeout":
+                return False
+            raise
+        return True
+
+    def _poll_state(self) -> str:
+        """SystemStatusRequest that the test's waits and counts do not see."""
+        mark = self.client.mark()
+        self._hidden.add(self.client.send("SystemStatusRequest", {})["id"])
+        try:
+            entry = self.client.wait({"name": "SystemStatusResponse", "way": "rx", "since": mark, "exclude": sorted(self._hidden)}, 5)
+        except ServiceError as err:
+            raise AssertionError(f"appSMM did not answer SystemStatusRequest: {err}") from None
+        self._hidden.add(entry["id"])
+        return str(entry["body"]["CurrentState"])
 
     def _wait_idle_after_clearing(self, budget: float) -> None:
         self.wait_for_message_sequence(
@@ -325,7 +403,7 @@ class SMMTestbench:
         """Operator/hardware action on the hardware twin (offline tier): emergencyStop, loadInputTray,
         removeInputTray, insertOutputTray, removeOutputTray, insertFrontIn, removeFrontIn,
         removeFrontOut, pauseLane, resumeLane, toggleLaneError (area=Input|Output), toggleOutputAvailable."""
-        self._mark = self.client.mark()
+        self._set_marks()
         return self.client.hardware_action(action, {k: _coerce(v) for k, v in args.items()})
 
     @keyword
@@ -365,39 +443,35 @@ class SMMTestbench:
     def wait_for_hardware_command(self, command: str, timeout: str = "30s", since: Any = None) -> dict:
         """Waits until appSMM sends the RTC command ``command`` to the hardware (twin COP trace, offline
         tier), e.g. ``InitializeCmd``, ``DeInitializeCmd`` or ``AppMan.EmergencyStopCmd``. Looks after
-        the last `Send ICD Message` unless ``since`` (a trace id) is given."""
-
-        start = self._trace_mark if since is None else int(since)
-        deadline = time.monotonic() + timestr_to_secs(timeout)
-        while True:
-            trace = self.client.hardware_trace(start)
-            for entry in trace:
-                if entry["way"] == "rx" and _command_matches(entry["name"], command):
-                    logger.info(f"COP #{entry['id']} {entry['name']} {entry.get('text', '')}")
-                    return entry
-            if time.monotonic() > deadline:
-                seen = sorted({e["name"] for e in trace if e["way"] == "rx"})
-                raise AssertionError(f"appSMM did not send {command} to the hardware within {timeout} "
-                                     f"(trace after #{start}: {len(trace)} entries; commands seen: {', '.join(seen) or 'none'})")
-            time.sleep(0.2)
+        the last stimulus (send, hardware action, mark) unless ``since`` is given (a trace id,
+        ``test`` or ``all``)."""
+        start = self._trace_since(since)
+        try:
+            entry = self.client.trace_wait(command, start, timestr_to_secs(timeout))
+        except ServiceError as err:
+            raise AssertionError(str(err)) from None
+        logger.info(f"COP #{entry['id']} {entry['name']} {entry.get('text', '')}")
+        return entry
 
     @keyword
     def hardware_command_should_not_be_sent(self, command: str, duration: str = "3s", since: Any = None) -> None:
-        """Fails if appSMM sends the RTC command ``command`` within ``duration``."""
-
-        start = self._trace_mark if since is None else int(since)
-        time.sleep(timestr_to_secs(duration))
-        sent = [e for e in self.client.hardware_trace(start) if e["way"] == "rx" and _command_matches(e["name"], command)]
-        if sent:
-            raise AssertionError(f"appSMM sent {command}: " + ", ".join(f"#{e['id']} {e['name']}" for e in sent))
-
-    def _remember_trace(self) -> None:
+        """Fails as soon as appSMM sends the RTC command ``command`` to the hardware (after the last
+        stimulus, or ``since``), or if it does not stay away for ``duration``."""
+        start = self._trace_since(since)
         try:
-            trace = self.client.hardware_trace(self._trace_mark)
-            if trace:
-                self._trace_mark = trace[-1]["id"]
-        except ServiceError:
-            pass
+            self.client.trace_expect_none(command, start, timestr_to_secs(duration))
+        except ServiceError as err:
+            e = (err.details or {}).get("entry")
+            raise AssertionError(f"{err}: COP #{e['id']} {e['name']} {e.get('text', '')}" if e else str(err)) from None
+
+    def _trace_since(self, since: Any) -> int:
+        if since is None or since == "":
+            return self._trace_mark
+        if str(since).lower() == "test":
+            return self._test_trace_mark
+        if str(since).lower() in ("all", "none"):
+            return 0
+        return int(since)
 
     # ================================================================== quality checks
 
@@ -425,56 +499,101 @@ class SMMTestbench:
 
     @keyword
     def begin_smm_test(self) -> None:
-        """Test setup: remembers where the test starts on the timeline."""
+        """Test setup: remembers where the test starts on the timeline and the COP trace."""
 
         self._test_started_ms = int(time.time() * 1000)
+        self._in_test = True
+        self._consumed, self._hidden, self._last_match, self._segments = set(), set(), None, []
         try:
-            self._test_mark = self.client.mark()
+            self._test_mark, self._test_trace_mark = self.client.mark_all()
         except ServiceError:
-            self._test_mark = 0
-        self._mark = self._test_mark
+            self._test_mark, self._test_trace_mark = 0, 0
+        self._mark, self._trace_mark = self._test_mark, self._test_trace_mark
 
     @keyword
     def finish_smm_test(self) -> None:
-        """Test teardown: logs the test's timeline (and service logs when the test failed)."""
+        """Test teardown: logs the test's timeline (and service logs when the test failed), and fails
+        the test if the service dropped part of its evidence (timeline or COP trace cap reached)."""
+        self._in_test = False
         try:
             entries = self.client.query({"since": self._test_mark}, 500)
         except ServiceError as err:
             logger.warn(f"Timeline not available: {err}")
             return
         failed = BuiltIn().get_variable_value("${TEST STATUS}") == "FAIL"
-        logger.info(_timeline_html(entries, "Timeline of this test"), html=True)
+        logger.info(_timeline_html(entries, "Timeline of this test", self._segments), html=True)
         if failed:
             try:
                 logs = self.client.environment_logs()[-80:]
                 logger.info("<pre>" + html.escape("\n".join(f"{ln['source']}: {ln['line']}" for ln in logs)) + "</pre>", html=True)
             except ServiceError:
                 pass
+        self._check_evidence_complete()
+
+    def _check_evidence_complete(self) -> None:
+        lost = []
+        try:
+            timeline = self.client.session().get("timeline") or {}
+            trace = self.client.environment().get("trace") or {}
+        except ServiceError:
+            return
+        if int(timeline.get("droppedThrough", 0)) > self._test_mark:
+            lost.append(f"timeline messages up to #{timeline['droppedThrough']} (the test started after #{self._test_mark}; "
+                        f"cap {timeline.get('cap')}: raise --timeline-cap / SMM_TIMELINE_CAP)")
+        if int(trace.get("droppedThrough", 0)) > self._test_trace_mark:
+            lost.append(f"COP trace entries up to #{trace['droppedThrough']} (the test started after #{self._test_trace_mark}; "
+                        f"cap {trace.get('cap')}: raise --trace-cap / SMM_TRACE_CAP)")
+        if lost:
+            raise AssertionError("The automation service dropped evidence of this test: " + "; ".join(lost))
 
     @keyword
     def log_timeline(self, since: Any = "test", limit: int = 500) -> list:
         entries = self.client.query({"since": self._since(since) or 0}, int(limit))
-        logger.info(_timeline_html(entries, "Timeline"), html=True)
+        logger.info(_timeline_html(entries, "Timeline", self._segments), html=True)
         return entries
 
     # ================================================================== helpers
+
+    def _set_marks(self) -> int:
+        """Marks the timeline and the COP trace: the next waits look only at what comes after."""
+        self._mark, self._trace_mark = self.client.mark_all()
+        return self._mark
+
+    def _segment(self, label: str) -> None:
+        if self._in_test and self._mark is not None:
+            self._segments.append((self._mark, label))
+
+    def _consume(self, entries: list[dict]) -> None:
+        ids = [int(e["id"]) for e in entries if "id" in e]
+        if ids:
+            self._consumed.update(ids)
+            self._last_match = max(ids)
+
+    def _wait_exclusions(self, since: Any) -> list[int]:
+        """What a wait skips: earlier matches (in the default window or ``since=last``) and hidden polls."""
+        implicit = since is None or since == "" or str(since).lower() == "last"
+        return sorted(self._hidden | self._consumed if implicit else self._hidden)
 
     def _since(self, since: Any) -> int | None:
         if since is None or since == "":
             return self._mark
         if str(since).lower() == "test":
             return self._test_mark
+        if str(since).lower() == "last":
+            return self._last_match if self._last_match is not None else self._mark
         if str(since).lower() in ("all", "none"):
             return None
         return int(since)
 
-    def _filter(self, name: str, way: str | None, since: Any, match: Any, fields: dict) -> dict:
+    def _filter(self, name: str, way: str | None, since: Any, match: Any, fields: dict, exclude: list[int] | None = None) -> dict:
         flt: dict[str, Any] = {"name": name}
         if way and way != "any":
             flt["way"] = way
         start = self._since(since)
         if start is not None:
             flt["since"] = start
+        if exclude:
+            flt["exclude"] = exclude
         body = {**(_as_obj(match) or {}), **_match_from(fields)}
         if body:
             flt["match"] = body
@@ -590,15 +709,17 @@ def _check_state(state: str) -> None:
         raise ValueError(f"Unknown system state '{state}' (ICD: {', '.join(STATES)})")
 
 
-def _command_matches(trace_name: str, command: str) -> bool:
-    """``AppMan.InitializeCmd`` matches ``InitializeCmd``, ``Initialize`` and ``AppMan.InitializeCmd``."""
-    wanted = command if command.endswith("Cmd") or "." in command else command + "Cmd"
-    return trace_name == wanted or trace_name.endswith("." + wanted)
-
-
-def _timeline_html(entries: list[dict], title: str) -> str:
+def _timeline_html(entries: list[dict], title: str, segments: list[tuple[int, str]] | tuple = ()) -> str:
     rows = []
+    pending = sorted(segments)
+
+    def separators(before_id: float) -> None:
+        while pending and pending[0][0] < before_id:
+            label = pending.pop(0)[1]
+            rows.append(f"<tr style='background:#e8eefc'><td colspan='6'><b>&#9472;&#9472; {html.escape(label)} &#9472;&#9472;</b></td></tr>")
+
     for e in entries:
+        separators(float(e.get("id") or 0))
         style = "" if e.get("valid") is not False else ' style="background:#fde2e2"'
         arrow = "&rarr; appSMM" if e.get("way") == "tx" else "appSMM &rarr;"
         body = html.escape(json.dumps(e.get("body"), ensure_ascii=False))
@@ -608,6 +729,7 @@ def _timeline_html(entries: list[dict], title: str) -> str:
             f"<td>{html.escape(str(e.get('topic')))}</td><td><b>{html.escape(str(e.get('name') or '?'))}</b></td>"
             f"<td style='font-family:monospace'>{body}{errors}</td></tr>"
         )
+    separators(float("inf"))
     return (
         f"<details open><summary><b>{html.escape(title)}</b> ({len(entries)} messages)</summary>"
         "<table border='1' style='border-collapse:collapse;font-size:12px'>"

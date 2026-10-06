@@ -6,6 +6,7 @@ import {
 } from './testbench'
 
 const MAX_PAIR_ISSUES = 300
+export const DEFAULT_TIMELINE_CAP = 20000
 
 export class WaitTimeoutError extends Error {
   constructor(message: string, readonly details: Record<string, unknown>) {
@@ -35,6 +36,15 @@ export class BridgeSession extends EventEmitter<{ entry: [TimelineEntry] }> {
   readonly timeline = new Timeline()
   readonly link = new MqttLink()
   readonly engine: BeaconEngine
+  /**
+   * The entries waits and queries look at. The TestBench Timeline parses and validates each message
+   * but keeps a fixed 20000; this store has the configurable cap and records what overflow dropped.
+   */
+  private entries: TimelineEntry[] = []
+  /** Highest timeline id dropped by the cap (0 = nothing lost). Ids never restart, so tests compare it with their marks. */
+  private droppedThrough = 0
+  /** Id of the newest entry ever recorded (kept across clear(), so marks stay comparable). */
+  private lastId = 0
   private pairs = new PairChecker()
   private pairIssues: PairIssue[] = []
   private readonly ownEchoes = new Map<string, number>()
@@ -43,7 +53,7 @@ export class BridgeSession extends EventEmitter<{ entry: [TimelineEntry] }> {
   private linkError?: string
   private readonly sweeper: NodeJS.Timeout
 
-  constructor(schemaDir: string) {
+  constructor(schemaDir: string, readonly timelineCap = DEFAULT_TIMELINE_CAP) {
     super()
     this.setMaxListeners(100)
     this.registry = new SchemaRegistry(schemaDir)
@@ -158,6 +168,12 @@ export class BridgeSession extends EventEmitter<{ entry: [TimelineEntry] }> {
 
   private record(way: 'rx' | 'tx', topic: string, raw: string): TimelineEntry {
     const entry = this.timeline.add(way, topic, raw, (p) => this.registry.validate(p))
+    this.entries.push(entry)
+    this.lastId = entry.id
+    if (this.entries.length > this.timelineCap) {
+      const lost = this.entries.splice(0, this.entries.length - this.timelineCap)
+      this.droppedThrough = lost[lost.length - 1].id
+    }
     if (entry.name && typeof entry.payload === 'object' && entry.payload !== null) {
       const body = (entry.payload as Record<string, unknown>)[entry.name]
       if (body && typeof body === 'object') {
@@ -180,12 +196,11 @@ export class BridgeSession extends EventEmitter<{ entry: [TimelineEntry] }> {
 
   /** Id of the newest timeline entry: pass it as `since` to look only at what comes next. */
   mark(): number {
-    const all = this.timeline.all()
-    return all.length ? all[all.length - 1].id : 0
+    return this.lastId
   }
 
   query(filter: MessageFilter = {}, limit = 1000): TimelineEntry[] {
-    const found = this.timeline.all().filter((e) => entryMatches(e, filter))
+    const found = this.entries.filter((e) => entryMatches(e, filter))
     return found.slice(-limit)
   }
 
@@ -193,7 +208,7 @@ export class BridgeSession extends EventEmitter<{ entry: [TimelineEntry] }> {
   waitFor(filter: MessageFilter, timeoutMs: number): Promise<TimelineEntry> {
     const problem = checkFilter(filter)
     if (problem) return Promise.reject(new Error(problem))
-    const existing = this.timeline.all().find((e) => entryMatches(e, filter))
+    const existing = this.entries.find((e) => entryMatches(e, filter))
     if (existing) return Promise.resolve(existing)
     return new Promise((resolve, reject) => {
       const onEntry = (entry: TimelineEntry) => {
@@ -241,7 +256,7 @@ export class BridgeSession extends EventEmitter<{ entry: [TimelineEntry] }> {
   expectNone(filter: MessageFilter, durationMs: number): Promise<void> {
     const problem = checkFilter(filter)
     if (problem) return Promise.reject(new Error(problem))
-    const existing = this.timeline.all().find((e) => entryMatches(e, filter))
+    const existing = this.entries.find((e) => entryMatches(e, filter))
     if (existing) return Promise.reject(new ExpectationError(`Unexpected ${describeFilter(filter)}`, { entry: summarize(existing) }))
     return new Promise((resolve, reject) => {
       const onEntry = (entry: TimelineEntry) => {
@@ -260,7 +275,7 @@ export class BridgeSession extends EventEmitter<{ entry: [TimelineEntry] }> {
 
   /** The last messages around a failed wait, to put into the report. */
   private context(filter: MessageFilter): Record<string, unknown> {
-    const recent = this.timeline.all().filter((e) => filter.since === undefined || e.id > filter.since).slice(-25)
+    const recent = this.entries.filter((e) => filter.since === undefined || e.id > filter.since).slice(-25)
     const sameName = filter.name ? this.query({ name: filter.name, since: filter.since }, 10) : []
     return {
       filter,
@@ -279,6 +294,7 @@ export class BridgeSession extends EventEmitter<{ entry: [TimelineEntry] }> {
 
   clear(): void {
     this.timeline.clear()
+    this.entries = []
     this.pairIssues = []
   }
 
@@ -289,6 +305,7 @@ export class BridgeSession extends EventEmitter<{ entry: [TimelineEntry] }> {
       connection: this.connection,
       otherBridge: this.otherBridge,
       lastEntryId: this.mark(),
+      timeline: { size: this.entries.length, cap: this.timelineCap, droppedThrough: this.droppedThrough },
       pairIssueCount: this.pairIssues.length,
       ...this.engine.snapshot(),
     }

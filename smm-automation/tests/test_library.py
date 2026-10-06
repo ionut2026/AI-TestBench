@@ -1,16 +1,9 @@
+from types import SimpleNamespace
+
 import pytest
 
-from smm_automation.SMMTestbench import SMMTestbench
-from smm_automation.SMMTestbench import _command_matches as m
-
-
-def test_command_matches():
-    assert m("AppMan.InitializeCmd", "InitializeCmd")
-    assert m("AppMan.InitializeCmd", "Initialize")
-    assert m("AppMan.InitializeCmd", "AppMan.InitializeCmd")
-    assert not m("AppMan.DeInitializeCmd", "InitializeCmd")
-    assert not m("AppMan.DeInitializeCmd", "Initialize")
-    assert m("AppMan.DeInitializeCmd", "DeInitialize")
+from smm_automation.client import ServiceError
+from smm_automation.SMMTestbench import SMMTestbench, _timeline_html
 
 
 class FakeSmm(SMMTestbench):
@@ -21,8 +14,11 @@ class FakeSmm(SMMTestbench):
         super().__init__(autostart=False)
         self.state, self.auto_init, self.sent = state, auto_init, []
 
-    def get_system_state(self, timeout="5s"):
+    def _settled_state(self, deadline):
         return self.state
+
+    def _set_marks(self):
+        return 0
 
     def request_and_wait_for_response(self, request, response=None, timeout="10s", body=None, analyzer=-1, **match):
         self.sent.append(request)
@@ -86,8 +82,6 @@ def test_pair_issues_are_scoped_to_the_test():
 
 
 def test_clear_hardware_twin_racks():
-    from smm_automation.client import ServiceError
-
     smm = FakeSmm("NormalOperation")
     actions = []
     smm.client.hardware = lambda: {"racks": [{"key": 3, "rackId": "A001"}, {"key": 7, "rackId": "B002"}]}
@@ -100,3 +94,210 @@ def test_clear_hardware_twin_racks():
 
     smm.client.hardware = no_twin
     assert smm.clear_hardware_twin_racks() == []
+
+
+# ---------------------------------------------------------------------- library against a fake service
+
+
+class FakeClient:
+    """Records what the library asks the service; answers from scripted values."""
+
+    def __init__(self):
+        self.calls = []
+        self.next_id = 100
+        self.trace_id = 7
+        self.state = "Idle"
+        self.notifications = []  # bodies the next SystemStatusNotification waits return (empty = timeout)
+        self.last_notification = {"PreviousState": "Clearing", "CurrentState": "Idle"}
+        self.snapshot = {"timeline": {"droppedThrough": 0, "cap": 20000}}
+        self.env = {"trace": {"droppedThrough": 0, "cap": 10000}}
+
+    def _entry(self, name, body=None):
+        self.next_id += 1
+        return {"id": self.next_id, "name": name, "topic": "/is/iw/tx", "time": "", "body": body or {}}
+
+    def mark_all(self):
+        return self.next_id, self.trace_id
+
+    def mark(self):
+        return self.next_id
+
+    def send(self, name, body=None, analyzer=-1, strict=True):
+        self.calls.append(("send", name))
+        return self._entry(name, body)
+
+    def wait(self, flt, timeout_s):
+        self.calls.append(("wait", flt))
+        if flt["name"] == "SystemStatusResponse":
+            return self._entry("SystemStatusResponse", {"CurrentState": self.state})
+        if flt["name"] == "SystemStatusNotification" and "match" not in flt:
+            if not self.notifications:
+                raise ServiceError(408, "no notification", "timeout")
+            body = self.notifications.pop(0)
+            self.state = body["CurrentState"]
+            return self._entry("SystemStatusNotification", body)
+        return self._entry(flt["name"])
+
+    def wait_sequence(self, filters, timeout_s, since=None):
+        self.calls.append(("sequence", filters, since))
+        return [self._entry(f["name"]) for f in filters]
+
+    def expect_none(self, flt, duration_s):
+        self.calls.append(("expect_none", flt))
+
+    def query(self, flt=None, limit=1000):
+        self.calls.append(("query", flt))
+        if flt and flt.get("name") == "SystemStatusNotification" and limit == 1:
+            return [{"id": 1, "body": self.last_notification}]
+        return []
+
+    def session(self):
+        return {"smm": {"systemState": self.state}, **self.snapshot}
+
+    def environment(self):
+        return self.env
+
+    def connect(self, timeout_s=10, clear=True, **settings):
+        self.calls.append(("connect", clear))
+        return {}
+
+    def disconnect(self, abrupt=False):
+        self.calls.append(("disconnect", abrupt))
+
+    def trace_wait(self, command, since, timeout_s):
+        self.calls.append(("trace_wait", command, since))
+        return {"id": since + 1, "name": "AppMan." + command, "text": ""}
+
+    def trace_expect_none(self, command, since, duration_s):
+        self.calls.append(("trace_expect_none", command, since))
+        raise ServiceError(409, f"appSMM sent {command}", "expectation",
+                           {"entry": {"id": since + 2, "name": "AppMan." + command, "text": "args"}})
+
+
+@pytest.fixture
+def smm(monkeypatch):
+    lib = SMMTestbench(autostart=False)
+    lib.client = FakeClient()
+    monkeypatch.setattr("smm_automation.SMMTestbench.BuiltIn", lambda: SimpleNamespace(
+        get_variable_value=lambda *a: "PASS", set_suite_metadata=lambda *a, **k: None))
+    lib.begin_smm_test()
+    return lib
+
+
+def _last(client, kind):
+    return [c for c in client.calls if c[0] == kind][-1]
+
+
+def test_a_message_is_returned_by_one_wait_only(smm):
+    first = smm.wait_for_message_entry("InitializationResponse")
+    smm.wait_for_message_entry("InitializationResponse")
+    assert _last(smm.client, "wait")[1]["exclude"] == [first["id"]]
+    smm.wait_for_message_entry("InitializationResponse", since="test")
+    assert "exclude" not in _last(smm.client, "wait")[1]
+
+
+def test_since_last_looks_after_the_previous_match(smm):
+    entry = smm.wait_for_message_entry("RecoverResponse")
+    smm.wait_for_message_entry("SystemStatusNotification", since="last", CurrentState="Initializing")
+    flt = _last(smm.client, "wait")[1]
+    assert flt["since"] == entry["id"]
+    assert flt["exclude"] == [entry["id"]]
+
+
+def test_sequence_skips_and_consumes_earlier_matches(smm):
+    first = smm.wait_for_message_entry("ShutdownResponse")
+    entries = smm.wait_for_message_sequence("ShutdownResponse", "SystemStatusNotification | CurrentState=E-Stop")
+    _, filters, _ = _last(smm.client, "sequence")
+    assert all(f["exclude"] == [first["id"]] for f in filters)
+    assert smm._consumed == {first["id"], *(e["id"] for e in entries)}
+    assert smm._last_match == entries[-1]["id"]
+
+
+def test_counts_include_earlier_matches_but_not_hidden_polls(smm):
+    smm._hidden.add(5)
+    smm.wait_for_message_entry("SystemStatusResponse")
+    smm.messages_should_have_been_received("SystemStatusResponse", since="test")
+    assert _last(smm.client, "query")[1]["exclude"] == [5]
+    smm.message_should_not_arrive("SystemStatusResponse")
+    assert len(_last(smm.client, "expect_none")[1]["exclude"]) == 2
+
+
+def test_connect_as_bridge_clears_only_outside_a_test(smm):
+    smm.connect_as_bridge(record_version=False)
+    assert _last(smm.client, "connect") == ("connect", False)
+    assert smm._segments[-1][1] == "Bridge connected again"
+    smm.connect_as_bridge(clear=True, record_version=False)
+    assert _last(smm.client, "connect") == ("connect", True)
+    smm._in_test = False
+    smm.connect_as_bridge(record_version=False)
+    assert _last(smm.client, "connect") == ("connect", True)
+
+
+def test_stimuli_mark_the_cop_trace(smm):
+    smm.client.trace_id = 42
+    smm.send_icd_message("RecoverRequest")
+    smm.wait_for_hardware_command("DeInitializeCmd")
+    assert _last(smm.client, "trace_wait") == ("trace_wait", "DeInitializeCmd", 42)
+    smm.wait_for_hardware_command("InitializeCmd", since="test")
+    assert _last(smm.client, "trace_wait")[2] == 7
+    with pytest.raises(AssertionError, match=r"COP #44 AppMan.InitializeCmd args"):
+        smm.hardware_command_should_not_be_sent("InitializeCmd")
+
+
+def test_settled_state_waits_for_notifications_and_hides_its_polls(smm):
+    smm.client.state = "Initializing"
+    smm.client.notifications = [{"PreviousState": "Initializing", "CurrentState": "Idle"},
+                                {"PreviousState": "Idle", "CurrentState": "Clearing"},
+                                {"PreviousState": "Clearing", "CurrentState": "Idle"}]
+
+    def last_notification():
+        # Idle reached from Initializing as long as the Clearing notifications are still to come.
+        return {"PreviousState": "Initializing"} if smm.client.state == "Idle" and smm.client.notifications else {"PreviousState": "Clearing"}
+
+    smm.client.query = lambda flt=None, limit=1000: [{"id": 1, "body": last_notification()}]
+    assert smm._settled_state(float("inf")) == "Idle"
+    assert smm.client.notifications == []
+    polls = [c for c in smm.client.calls if c == ("send", "SystemStatusRequest")]
+    assert len(polls) == 1
+    assert len(smm._hidden) == 2
+
+
+def test_idle_after_initializing_waits_for_clearing_then_settles(smm, monkeypatch):
+    monkeypatch.setattr("smm_automation.SMMTestbench.CLEARING_GRACE_S", 0.01)
+    smm.client.last_notification = {"PreviousState": "Initializing", "CurrentState": "Idle"}
+    assert smm._settled_state(float("inf")) == "Idle"
+    waits = [c[1] for c in smm.client.calls if c[0] == "wait" and c[1]["name"] == "SystemStatusNotification"]
+    assert len(waits) == 1
+
+
+def test_settled_state_gives_up_at_the_deadline(smm):
+    smm.client.state = "Initializing"
+    with pytest.raises(AssertionError, match="did not settle"):
+        smm._settled_state(0)
+
+
+def test_bring_smm_to_state_marks_after_the_precondition(smm):
+    smm.client.next_id = 500
+    smm.bring_smm_to_state("Idle")
+    assert smm._mark >= 500
+
+
+def test_finish_fails_when_the_service_dropped_evidence(smm):
+    smm.finish_smm_test()
+    smm.begin_smm_test()
+    smm.client.snapshot = {"timeline": {"droppedThrough": smm._test_mark + 1, "cap": 100}}
+    with pytest.raises(AssertionError, match="SMM_TIMELINE_CAP"):
+        smm.finish_smm_test()
+    smm.begin_smm_test()
+    smm.client.snapshot = {"timeline": {"droppedThrough": 0, "cap": 100}}
+    smm.client.env = {"trace": {"droppedThrough": smm._test_trace_mark + 1, "cap": 100}}
+    with pytest.raises(AssertionError, match="SMM_TRACE_CAP"):
+        smm.finish_smm_test()
+
+
+def test_timeline_html_shows_reconnections():
+    entries = [{"id": 1, "name": "A", "body": {}}, {"id": 5, "name": "B", "body": {}}]
+    out = _timeline_html(entries, "t", [(3, "Bridge connected again"), (9, "appSMM restarted")])
+    assert out.index("Bridge connected again") < out.index("<b>B</b>")
+    assert out.index("<b>A</b>") < out.index("Bridge connected again")
+    assert out.rindex("appSMM restarted") > out.index("<b>B</b>")

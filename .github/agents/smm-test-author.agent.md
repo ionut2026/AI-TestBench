@@ -152,8 +152,14 @@ Matching rules you must know:
 - Nested fields with dots: `Module.Status=NotInitialized`. Lists/objects as JSON: `EventArgs=[]`.
   Operators via `match=`: `match={"Severity": {"$in": ["Warning", "Error"]}}`.
 - **Windows (`since`):** by default waits only look at messages after the last action (send, hardware action, restart,
-  disconnect, `Mark Timeline`). Use `since=test` for "anywhere in this test", `since=all` when the message may have
-  arrived before your last action (e.g. on reconnection), `since=${mark}` for loops.
+  disconnect, reconnect, `Mark Timeline`, end of `Bring SMM To State`) — the same window for the timeline and the COP
+  trace. Use `since=last` for "then" (after the previous wait's match), `since=test` for "anywhere in this test",
+  `since=all` when the message may have arrived before your last action, `since=${mark}` for loops.
+- **One wait per message:** a wait never re-matches a message an earlier wait in the test already matched (in the
+  default window and with `since=last`), so two `Wait For Message    SystemStatusNotification` need two notifications.
+  Consecutive waits do **not** assert order — use `Wait For Message Sequence` when the spec says "after"/"then".
+  The library's internal polls (GetVersion on connect, SystemStatusRequest in `Bring SMM To State`) are never matched.
+- `Connect As Bridge` inside a test keeps the timeline (no clear) — do not pass `clear=True` in a test.
 - Optional hardware verification on tests that also run without the twin:
 
   ```robotframework

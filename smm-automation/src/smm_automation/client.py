@@ -127,6 +127,19 @@ class ServiceClient:
     def mark(self) -> int:
         return int(self.post("/timeline/mark")["mark"])
 
+    def mark_all(self) -> tuple[int, int]:
+        """(timeline mark, COP trace mark) taken together; the trace mark is 0 without a hardware twin."""
+        data = self.post("/timeline/mark")
+        return int(data["mark"]), int(data.get("traceMark", 0))
+
+    def trace_wait(self, command: str, since: int, timeout_s: float) -> dict:
+        body = {"command": command, "since": since, "timeoutMs": int(timeout_s * 1000)}
+        return self.post("/hardware/trace/wait", body, wait_s=timeout_s)
+
+    def trace_expect_none(self, command: str, since: int, duration_s: float) -> None:
+        body = {"command": command, "since": since, "durationMs": int(duration_s * 1000)}
+        self.post("/hardware/trace/expect-none", body, wait_s=duration_s)
+
     def query(self, filter: dict | None = None, limit: int = 1000) -> list[dict]:
         return self.post("/timeline/query", {"filter": filter or {}, "limit": limit})
 

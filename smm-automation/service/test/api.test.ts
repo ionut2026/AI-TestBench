@@ -1,7 +1,11 @@
 import type { AddressInfo } from 'node:net'
 import type { Server } from 'node:http'
+import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { API_VERSION, AutomationService } from '../src/api/server'
+import { BridgeSession } from '../src/bridgeSession'
+import { CommandSentError, CommandTimeoutError, Environment, commandMatches } from '../src/environment'
+import { testbenchInfo } from '../src/testbench'
 
 // Contract test of the HTTP API (what the Robot library relies on), against the mock tier.
 // The mock appSMM is a framework fixture: these tests check the service, not the product.
@@ -176,5 +180,86 @@ describe('service API v1', () => {
 
   it('has no hardware twin in the mock tier', async () => {
     expect((await call('GET', '/hardware')).status).toBe(409)
+    const wait = await call('POST', '/hardware/trace/wait', { command: 'InitializeCmd', timeoutMs: 100 })
+    expect(wait.status).toBe(409)
+    expect(wait.data.kind).toBe('unavailable')
+    expect((await call('POST', '/hardware/trace/expect-none', { command: 'InitializeCmd', durationMs: 100 })).status).toBe(409)
+  })
+
+  it('returns the timeline and COP trace marks together', async () => {
+    const { data } = await call('POST', '/timeline/mark')
+    expect(data.mark).toBeGreaterThan(0)
+    expect(data.traceMark).toBe(0)
+  })
+
+  it('skips excluded entries in waits (a message is returned once)', async () => {
+    const { data: m } = await call('POST', '/timeline/mark')
+    await call('POST', '/messages', { name: 'SystemStatusRequest', body: {} })
+    const first = await call('POST', '/timeline/wait', { filter: { name: 'SystemStatusResponse', since: m.mark }, timeoutMs: 3000 })
+    expect(first.status).toBe(200)
+    const again = await call('POST', '/timeline/wait', {
+      filter: { name: 'SystemStatusResponse', since: m.mark, exclude: [first.data.id] },
+      timeoutMs: 300,
+    })
+    expect(again.status).toBe(408)
+  })
+
+  it('reports the timeline size, cap and overflow in /session', async () => {
+    const { data } = await call('GET', '/session')
+    expect(data.timeline.cap).toBe(20000)
+    expect(data.timeline.droppedThrough).toBe(0)
+    expect(data.timeline.size).toBeGreaterThan(0)
+  })
+})
+
+describe('timeline cap', () => {
+  it('drops the oldest entries and records the highest dropped id', () => {
+    const session = new BridgeSession(join(testbenchInfo.dir, 'simulator', 'resources', 'schemas'), 3)
+    const record = (session as any).record.bind(session)
+    for (let i = 0; i < 5; i++) record('tx', '/is/iw/rx', JSON.stringify({ Version: 7, SystemStatusRequest: {} }))
+    const snap = session.snapshot()
+    expect(snap.timeline).toEqual({ size: 3, cap: 3, droppedThrough: 2 })
+    expect(session.query().map((e) => e.id)).toEqual([3, 4, 5])
+    session.clear()
+    expect(session.snapshot().timeline.droppedThrough).toBe(2)
+    void session.dispose()
+  })
+})
+
+describe('COP trace waits', () => {
+  const traced = (env: Environment, name: string, way: 'rx' | 'tx' = 'rx') => {
+    const t = env as any
+    const entry = { id: ++t.traceSeq, time: Date.now(), way, hex: '', name, text: '' }
+    t.trace.push(entry)
+    env.emit('trace', entry)
+  }
+
+  it('matches commands with and without module prefix and Cmd suffix', () => {
+    expect(commandMatches('AppMan.InitializeCmd', 'InitializeCmd')).toBe(true)
+    expect(commandMatches('AppMan.InitializeCmd', 'Initialize')).toBe(true)
+    expect(commandMatches('AppMan.InitializeCmd', 'AppMan.InitializeCmd')).toBe(true)
+    expect(commandMatches('AppMan.DeInitializeCmd', 'InitializeCmd')).toBe(false)
+  })
+
+  it('waits for a command sent after the mark, ignoring responses and older commands', async () => {
+    const env = new Environment('unused')
+    traced(env, 'AppMan.InitializeCmd')
+    const since = env.traceMark()
+    const pending = env.waitForCommand('InitializeCmd', since, 1000)
+    traced(env, 'AppMan.InitializeCmd', 'tx')
+    traced(env, 'AppMan.InitializeCmd')
+    expect((await pending).id).toBe(3)
+    await expect(env.waitForCommand('DeInitializeCmd', since, 50)).rejects.toBeInstanceOf(CommandTimeoutError)
+  })
+
+  it('fails a quiet period as soon as the command is sent', async () => {
+    const env = new Environment('unused')
+    await expect(env.expectNoCommand('InitializeCmd', 0, 30)).resolves.toBeUndefined()
+    const started = Date.now()
+    const pending = env.expectNoCommand('InitializeCmd', 0, 5000)
+    setTimeout(() => traced(env, 'AppMan.InitializeCmd'), 20)
+    await expect(pending).rejects.toBeInstanceOf(CommandSentError)
+    expect(Date.now() - started).toBeLessThan(2000)
+    await expect(env.expectNoCommand('InitializeCmd', 0, 10)).rejects.toBeInstanceOf(CommandSentError)
   })
 })

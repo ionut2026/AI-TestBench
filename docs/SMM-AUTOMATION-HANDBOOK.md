@@ -576,6 +576,7 @@ with `$env:NAME = "value"`, or permanently via *Start → "Edit environment vari
 | `SMM_AUTOMATION_URL` | `http://127.0.0.1:8765/api/v1` | Where the Python side finds the service |
 | `SMM_AUTOMATION_PORT` / `SMM_AUTOMATION_HOST` | `8765` / `127.0.0.1` | Where the service listens (service side) |
 | `SMM_AUTOMATION_QUIET` | not set | `1` = the service does not print environment logs |
+| `SMM_TIMELINE_CAP` / `SMM_TRACE_CAP` | `20000` / `10000` | How many timeline / COP trace entries the service keeps (minimum 100). A test whose evidence was dropped fails. |
 | `WINDCHILL_MCP_SERVER` | `windchill-mcp-server\src\server.js` | RV&S access program used by `ingest` |
 | `RVS_HOSTNAME`, `RVS_*` | from `%USERPROFILE%\.copilot\mcp-config.json` | RV&S connection (see `windchill-mcp-server` docs) |
 
@@ -1196,17 +1197,34 @@ a **mark**:
 |---|---|
 | `Begin SMM Test` (test setup) | Mark = start of the test (also remembered as "test start") |
 | `Send ICD Message`, `Send Raw Payload`, `Request And Wait For Response` | Mark = just before sending |
-| `Trigger Hardware Action`, `Restart appSMM`, `Restart MQTT Broker`, `Disconnect Bridge`, `Mark Timeline` | Mark = now |
+| `Trigger Hardware Action`, `Restart appSMM`, `Restart MQTT Broker`, `Disconnect Bridge`, `Connect As Bridge` (inside a test), `Mark Timeline` | Mark = now |
+| `Bring SMM To State` | Mark = when the precondition is reached (its own messages are never evidence) |
+
+Every mark is taken on the message timeline **and** on the COP trace at the same moment, so `Wait For Hardware Command`
+uses the same window as `Wait For Message`.
 
 Waits and checks look only at messages **after the mark** unless you pass:
 
+- `since=last` — after the message matched by the previous wait (use it to say "and then");
 - `since=test` — since the test started;
 - `since=all` (or `none`) — the whole timeline;
 - `since=<number>` — after that timeline id (e.g. a value returned by `Mark Timeline`).
 
+**One wait per message.** In the default window (and with `since=last`) a message that already satisfied an earlier wait
+in the same test cannot satisfy another one: two `Wait For Message    SystemStatusNotification` in a row need **two**
+notifications. The library's own internal polls (the `GetVersionRequest` sent by `Connect As Bridge`, the
+`SystemStatusRequest` polls of `Bring SMM To State`) are never matched by a wait. Order is **not** implied by two
+consecutive waits; assert order with `Wait For Message Sequence` (or `since=last`). With an explicit `since=test`,
+`since=all` or `since=<id>`, earlier matches count again (only the internal polls are skipped).
+
 This is why you don't need to "clear" anything between steps: an answer to an earlier request can never satisfy a later
 wait by accident. If a message might arrive **before** your send (e.g. a notification triggered by the precondition), use
 `since=test`.
+
+**Evidence must be complete.** The service keeps at most `SMM_TIMELINE_CAP` (default 20000) timeline entries and
+`SMM_TRACE_CAP` (default 10000) COP trace entries. If the oldest dropped entry belongs to the running test,
+`Finish SMM Test` **fails** the test ("The automation service dropped evidence of this test") — raise the cap with
+`--timeline-cap` / `--trace-cap` on the service, or the environment variables.
 
 ### 10.3 Environment and service
 
@@ -1224,7 +1242,7 @@ wait by accident. If a message might arrive **before** your send (e.g. a notific
 
 | Keyword | Arguments (default) | What it does |
 |---|---|---|
-| `Connect As Bridge` | `timeout=10s`, `clear=True`, `record_version=True` | Connects to the broker as SMMBridge, announces Bridge/IW/analyzers as Connected, starts the heartbeat. `clear=True` empties the timeline. Records the appSMM version (GetVersionRequest) in the report. |
+| `Connect As Bridge` | `timeout=10s`, `clear=auto`, `record_version=True` | Connects to the broker as SMMBridge, announces Bridge/IW/analyzers as Connected, starts the heartbeat. `clear=auto` empties the timeline only **outside** a test (suite setup); inside a test the timeline is kept and a "Bridge connected again" separator appears in the log. `clear=True`/`False` forces it. Records the appSMM version (GetVersionRequest, hidden from waits) in the report. |
 | `Disconnect Bridge` | `abrupt=False` | Clean disconnect, or `abrupt=True` = cut the connection so the broker publishes the Bridge's last will (like a crash). |
 | `Interrupt Bridge Connection` | `outage=3s`, `timeout=10s`, `abrupt=True` | Lost-Bridge stimulus: disconnects, stays away for `outage` (nothing can be observed meanwhile), reconnects **without** clearing the timeline. Use this instead of `Disconnect Bridge` + `Sleep` + `Connect As Bridge`. |
 | `Bridge Should Be Connected` | — | Fails if the Bridge link is not connected. |
@@ -1242,11 +1260,11 @@ wait by accident. If a message might arrive **before** your send (e.g. a notific
 
 | Keyword | Arguments (default) | Returns / fails |
 |---|---|---|
-| `Wait For Message` | `name`, `timeout=10s`, `since=`, `way=rx`, `match=`, `Field=Value…` | Returns the **body** of the first matching message; fails on timeout with the timeline in the log. |
+| `Wait For Message` | `name`, `timeout=10s`, `since=`, `way=rx`, `match=`, `Field=Value…` | Returns the **body** of the first matching message not yet matched by an earlier wait (section 10.2); fails on timeout with the timeline in the log. |
 | `Wait For Message Entry` | same | Returns the whole entry: `id`, `time`, `topic`, `name`, `body`, `valid`, `errors`. |
 | `Wait For Message Sequence` | `*specs`, `timeout=30s`, `since=` | Waits for the messages **in order**; returns the entries. |
-| `Message Should Not Arrive` | `name`, `duration=3s`, `since=`, `way=rx`, `match=`, `Field=Value…` | Fails if a matching message is already there (after the mark) or arrives within `duration`. |
-| `Messages Should Have Been Received` | `name`, `count=`, `since=`, `way=rx`, `match=`, `Field=Value…` | Returns matching messages already received; checks `count` if given. |
+| `Message Should Not Arrive` | `name`, `duration=3s`, `since=`, `way=rx`, `match=`, `Field=Value…` | Fails if a matching message is already there (after the mark, not yet matched by a wait) or arrives within `duration`. |
+| `Messages Should Have Been Received` | `name`, `count=`, `since=`, `way=rx`, `match=`, `Field=Value…` | Returns matching messages already received (including ones matched by waits; never the library's internal polls); checks `count` if given. |
 
 ### 10.7 System state
 
@@ -1255,7 +1273,7 @@ wait by accident. If a message might arrive **before** your send (e.g. a notific
 | `Get System State` | `timeout=5s` | Sends SystemStatusRequest; returns `CurrentState`. |
 | `System State Should Be` | `expected`, `timeout=5s` | Asks and compares. |
 | `Wait For System State` | `expected`, `timeout=60s`, `since=` | Waits for a SystemStatusNotification with `CurrentState=expected`. |
-| `Bring SMM To State` | `target=Idle`, `timeout=120s` | **Precondition only.** Drives appSMM to `NotInitialized`, `Idle` or `E-Stop` using Initialization/Shutdown/Recover requests, waiting out transient states. Cannot go NotInitialized → E-Stop (use `Bring SMM To E-Stop With Shutdown`) and cannot reach NotInitialized after initialization except via Recover (or use `Restart appSMM And Wait Until NotInitialized`). |
+| `Bring SMM To State` | `target=Idle`, `timeout=120s` | **Precondition only.** Drives appSMM to `NotInitialized`, `Idle` or `E-Stop` using Initialization/Shutdown/Recover requests. It observes the state passively (the last SystemStatusNotification the Bridge saw) and, in a transient state or while `Clearing` is still due after initialization (up to 15 s), waits for the next notification instead of polling; one internal SystemStatusRequest confirms the settled state. Fails with "did not settle" when `timeout` runs out. Sets the mark when it is done. Cannot go NotInitialized → E-Stop (use `Bring SMM To E-Stop With Shutdown`) and cannot reach NotInitialized after initialization except via Recover (or use `Restart appSMM And Wait Until NotInitialized`). |
 
 Valid state names: `PowerOn`, `NotInitialized`, `Initializing`, `Idle`, `Clearing`, `Configuring`, `NormalOperation`, `E-Stop`.
 
@@ -1268,8 +1286,8 @@ Valid state names: `PowerOn`, `NotInitialized`, `Initializing`, `Idle`, `Clearin
 | `Get Hardware Snapshot` | — | Returns the twin's state (state, trays, racks, lanes…). |
 | `Hardware State Should Be` | `expected` | Compares the twin's state (e.g. `Halted`). |
 | `Clear Hardware Twin Racks` | — | Removes every rack from the twin; returns their ids (empty list on tiers without twin). |
-| `Wait For Hardware Command` | `command`, `timeout=30s`, `since=` | Waits until appSMM sends that COP command to the hardware (e.g. `InitializeCmd`, `DeInitializeCmd`, `AppMan.EmergencyStopCmd`). Looks after the last `Send ICD Message`. |
-| `Hardware Command Should Not Be Sent` | `command`, `duration=3s`, `since=` | Fails if appSMM sends that command within `duration`. |
+| `Wait For Hardware Command` | `command`, `timeout=30s`, `since=` | Waits (in the service, event-driven) until appSMM sends that COP command to the hardware (e.g. `InitializeCmd`, `DeInitializeCmd`, `AppMan.EmergencyStopCmd`). Looks after the last mark (section 10.2); `since=test`, `all` or a trace id widen the window. |
+| `Hardware Command Should Not Be Sent` | `command`, `duration=3s`, `since=` | Fails as soon as appSMM sends that command (already after the mark, or within `duration`); the failure names the COP entry. |
 
 ### 10.9 Quality checks
 
@@ -1282,8 +1300,8 @@ Valid state names: `PowerOn`, `NotInitialized`, `Initializing`, `Idle`, `Clearin
 
 | Keyword | What it does |
 |---|---|
-| `Begin SMM Test` | Test setup: remembers the test start on the timeline. |
-| `Finish SMM Test` | Test teardown: logs the test's timeline; on failure also the last environment log lines. |
+| `Begin SMM Test` | Test setup: remembers the test start on the timeline and the COP trace; resets the per-test wait bookkeeping. |
+| `Finish SMM Test` | Test teardown: logs the test's timeline (with separators for reconnections, restarts, hardware actions…); on failure also the last environment log lines. Fails the test if the service dropped evidence of it (cap reached). |
 | `Log Timeline` (`since=test`, `limit=500`) | Logs the timeline as a table at any point. |
 
 ### 10.11 Resource keywords (`smm.resource`)
@@ -1659,17 +1677,19 @@ On mock, only Robot and the service exist; the broker (aedes) and the fake appSM
 2. **Every keyword** translates to one or a few HTTP calls (`ServiceClient` methods). Errors come back as `ServiceError`
    with a `kind`: `timeout` (HTTP 408), `expectation` / `unavailable` (409), `http` (400/404/405), `internal` (500),
    `unreachable` (service down). The library turns them into Robot failures with context (the relevant timeline).
-3. **Marks.** The library stores `_mark` (current window start), `_test_mark` (test start) and `_trace_mark` (hardware
-   trace position) and sends them as `since` with every query.
+3. **Marks.** The library stores `_mark` (current window start), `_test_mark` (test start), `_trace_mark` and
+   `_test_trace_mark` (COP trace positions, taken together with the timeline marks via one `/timeline/mark` call) and
+   sends them as `since` with every query. It also keeps the ids already matched by waits (`_consumed`) and of its own
+   internal polls (`_hidden`) and sends them as the filter's `exclude` list (section 10.2).
 
 ### 14.3 The service API (http://127.0.0.1:8765/api/v1)
 
 | Method & path | Body / query | Purpose |
 |---|---|---|
-| GET `/health` | | `ok`, `apiVersion` (1.0.0), TestBench info, ICD version |
+| GET `/health` | | `ok`, `apiVersion` (1.1.0), TestBench info, ICD version |
 | GET `/icd` | | ICD version, message list, schema names |
 | GET `/schemas/:name` | | JSON schema of one message |
-| GET `/environment` | | Tier, broker, appSMM, hardware status |
+| GET `/environment` | | Tier, broker, appSMM, hardware status; `trace` = `{size, cap, droppedThrough, lastId}` |
 | POST `/environment/start` | `{tier, overrides}` | Start a tier |
 | POST `/environment/stop` | | Disconnect and stop everything |
 | POST `/environment/restart-appsmm` | `{downMs}` | Kill + restart appSMM (mock/offline) |
@@ -1677,8 +1697,10 @@ On mock, only Robot and the service exist; the broker (aedes) and the fake appSM
 | GET `/environment/logs` | `?since=&source=` | Collected logs (Service, Broker, appSMM, Hardware, MockAppSMM…) |
 | GET `/hardware` | | Twin snapshot |
 | GET `/hardware/trace` | `?since=` | COP commands/responses (`way` rx = from appSMM) |
+| POST `/hardware/trace/wait` | `{command, since, timeoutMs}` | Wait for a COP command from appSMM (408 on timeout; 409 `unavailable` without twin) |
+| POST `/hardware/trace/expect-none` | `{command, since, durationMs}` | Fail (409, `details.entry`) if appSMM sends that command |
 | POST `/hardware/actions/:action` | action args | Operate the twin |
-| GET `/session` | | Bridge link status, settings, analyzers |
+| GET `/session` | | Bridge link status, settings, analyzers, `smm.systemState`; `timeline` = `{size, cap, droppedThrough}` |
 | POST `/session/connect` | `{timeoutMs, clear, host, port, mode}` | Connect as Bridge (`mode: listen` = only observe) |
 | POST `/session/disconnect` | `{abrupt}` | Disconnect |
 | POST `/session/clear` | | Empty the timeline |
@@ -1689,7 +1711,7 @@ On mock, only Robot and the service exist; the broker (aedes) and the fake appSM
 | POST `/messages/validate` | `{name, body}` | Validate a body against its schema |
 | GET `/timeline` | `?since=&name=&way=&limit=` | Read the timeline |
 | POST `/timeline/query` | `{filter, limit}` | Filtered read |
-| POST `/timeline/mark` | | Current position |
+| POST `/timeline/mark` | | `{mark, traceMark}`: current timeline and COP trace positions |
 | POST `/timeline/wait` | `{filter, timeoutMs}` | Wait for one match |
 | POST `/timeline/sequence` | `{filters, timeoutMs, since}` | Wait for an ordered sequence |
 | POST `/timeline/expect-none` | `{filter, durationMs}` | Fail if a match exists/arrives |
@@ -1725,11 +1747,15 @@ exactly like the GUI does.
   Bridge is detected on the broker, it is reported (only one Bridge may be connected).
 - **Waits:** `waitFor`, `waitForSequence`, `expectNone` check existing entries after `since` and then listen for new
   ones until the timeout; on timeout they return details (what was seen) which the library prints.
+- **Timeline cap:** the session keeps the newest `SMM_TIMELINE_CAP` entries; `droppedThrough` (in `/session`) is the
+  highest id dropped. Ids keep increasing across `clear`. The environment does the same for the COP trace
+  (`SMM_TRACE_CAP`) and offers event-driven `waitForCommand` / `expectNoCommand` on it.
 - **Pair issues:** checked every second (unanswered requests, duplicates, rack/tube identity problems); max 300 kept.
 
 ### 14.6 Matching (`messageFilter.ts`)
 
-A filter has `name` (one or a list), `way`, `topic`, `analyzer`, `since`, `valid` and `match`. `match` is compared
+A filter has `name` (one or a list), `way`, `topic`, `analyzer`, `since`, `exclude` (timeline ids to skip), `valid`
+and `match`. `match` is compared
 **partially and recursively** with the body: listed object keys must match, arrays must match element-wise, and objects
 whose keys are all operators (`$in`, `$regex`, …) are evaluated as operators. Dotted keys are expanded by the
 Python side before sending.

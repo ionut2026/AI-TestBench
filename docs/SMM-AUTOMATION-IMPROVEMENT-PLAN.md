@@ -71,6 +71,14 @@ user's explicit go and an operator at the instrument (no racks or samples loaded
 | 2.9 | Hash depends on MCP text conversion | Hash a normalised form computed in our code (HTML → text, whitespace/Unicode normalised); one-time re-baseline with a migration note |
 | 2.10 | First-keyword area classification | Area comes from the scope file (`area = …` per spec/search), keyword match only as fallback with a warning |
 
+*2.1–2.6 status:* done (service API 1.1.0). Deviation in 2.2: the default window stays "after the last mark"
+(not "after the previous match"), but every wait in the default window **consumes** its match and skips earlier
+matches and the library's hidden polls (service filter `exclude`); `since=last` is the explicit "after the previous
+match". Reason: an implicit order default would turn legitimate reorderings by appSMM into false failures; order is
+asserted with `Wait For Message Sequence`. 2.4: the state is read passively from the Bridge session (last
+SystemStatusNotification); only one hidden confirming poll per step. 2.6: caps `SMM_TIMELINE_CAP` (20000) and
+`SMM_TRACE_CAP` (10000); `Finish SMM Test` fails a test whose evidence was dropped.
+
 ## Phase 3 — Prove the tests can fail (mutation) — 3 days
 
 | # | Work |

@@ -15,6 +15,8 @@ export interface MessageFilter {
   since?: number
   /** Only schema-valid (true) or schema-invalid (false) entries. */
   valid?: boolean
+  /** Never these timeline ids (messages an earlier wait already returned, precondition polls). */
+  exclude?: number[]
 }
 
 const OPERATORS = new Set(['$eq', '$ne', '$in', '$nin', '$regex', '$exists', '$gt', '$gte', '$lt', '$lte', '$contains', '$size'])
@@ -94,6 +96,7 @@ export function bodyOf(entry: TimelineEntry): unknown {
 
 export function entryMatches(entry: TimelineEntry, filter: MessageFilter): boolean {
   if (filter.since !== undefined && entry.id <= filter.since) return false
+  if (filter.exclude?.includes(entry.id)) return false
   if (filter.way && entry.way !== filter.way) return false
   if (filter.topic && entry.topic !== filter.topic) return false
   if (filter.analyzer !== undefined && entry.analyzer !== filter.analyzer) return false
@@ -114,16 +117,21 @@ export function describeFilter(filter: MessageFilter): string {
   if (filter.analyzer !== undefined) parts.push(`analyzer ${filter.analyzer}`)
   if (filter.match) parts.push(`matching ${JSON.stringify(filter.match)}`)
   if (filter.since !== undefined) parts.push(`after #${filter.since}`)
+  const skipped = (filter.exclude ?? []).filter((id) => filter.since === undefined || id > filter.since)
+  if (skipped.length) parts.push(`skipping ${skipped.length} earlier match(es)/internal poll(s)`)
   return parts.join(' ') || 'any message'
 }
 
 /** Validates a filter coming over HTTP. Returns an error text or undefined. */
 export function checkFilter(raw: unknown): string | undefined {
   if (!isPlainObject(raw)) return 'filter must be an object'
-  const allowed = new Set(['name', 'way', 'topic', 'analyzer', 'match', 'since', 'valid'])
+  const allowed = new Set(['name', 'way', 'topic', 'analyzer', 'match', 'since', 'valid', 'exclude'])
   const unknown = Object.keys(raw).filter((k) => !allowed.has(k))
   if (unknown.length) return `unknown filter field(s): ${unknown.join(', ')}`
   if (raw.way !== undefined && raw.way !== 'rx' && raw.way !== 'tx') return "way must be 'rx' or 'tx'"
   if (raw.match !== undefined && !isPlainObject(raw.match)) return 'match must be an object'
+  if (raw.exclude !== undefined && !(Array.isArray(raw.exclude) && raw.exclude.every((id) => Number.isInteger(id)))) {
+    return 'exclude must be an array of timeline ids'
+  }
   return undefined
 }

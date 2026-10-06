@@ -9,8 +9,11 @@ function arg(name: string): string | undefined {
 const port = Number(arg('port') ?? process.env.SMM_AUTOMATION_PORT ?? 8765)
 const host = arg('host') ?? process.env.SMM_AUTOMATION_HOST ?? '127.0.0.1'
 const testbenchDir = arg('testbench') ?? process.env.SMM_TESTBENCH_DIR ?? testbenchInfo.dir
+const cap = (value: string | undefined) => (value ? Math.max(100, Number(value)) || undefined : undefined)
+const timelineCap = cap(arg('timeline-cap') ?? process.env.SMM_TIMELINE_CAP)
+const traceCap = cap(arg('trace-cap') ?? process.env.SMM_TRACE_CAP)
 
-const service = new AutomationService({ testbenchDir })
+const service = new AutomationService({ testbenchDir, timelineCap, traceCap })
 service.env.on('log', (l) => {
   if (process.env.SMM_AUTOMATION_QUIET !== '1') console.log(`[${new Date(l.time).toISOString()}] ${l.source}: ${l.line}`)
 })

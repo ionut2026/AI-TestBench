@@ -38,6 +38,10 @@ For each specification get the facts **independently of the test**:
 3. **False-pass analysis.** Could the test pass if appSMM did the wrong thing? Typical causes:
    - the wait window includes messages from *before* the trigger (`since=all`/`since=test` where the default window
      was needed), so an old message satisfies it;
+   - an explicit `since=test`/`all`/`<id>` lets one message satisfy two waits (only the default window and
+     `since=last` consume matches), or two consecutive waits are read as an order check (they are not — order needs
+     `Wait For Message Sequence` or `since=last`);
+   - `Connect As Bridge    clear=True` inside a test wipes the evidence from before the reconnection;
    - partial matching too loose (only the message name, no distinguishing field);
    - the negative check runs too briefly or before the trigger had a chance to act;
    - a conditional (`IF … twin`) silently skips the only meaningful assertion on the tier that matters;

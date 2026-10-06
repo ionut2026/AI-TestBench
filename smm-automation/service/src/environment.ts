@@ -63,10 +63,16 @@ export interface LogLine {
 }
 
 const MAX_LOG = 10000
-const MAX_TRACE = 10000
+export const DEFAULT_TRACE_CAP = 10000
+
+/** ``AppMan.InitializeCmd`` matches ``InitializeCmd``, ``Initialize`` and ``AppMan.InitializeCmd``. */
+export function commandMatches(traceName: string, command: string): boolean {
+  const wanted = command.endsWith('Cmd') || command.includes('.') ? command : `${command}Cmd`
+  return traceName === wanted || traceName.endsWith(`.${wanted}`)
+}
 
 /** Brings up and tears down everything around appSMM for one tier, and drives the hardware twin. */
-export class Environment extends EventEmitter<{ log: [LogLine] }> {
+export class Environment extends EventEmitter<{ log: [LogLine]; trace: [CopTraceEntry] }> {
   config?: EnvironmentConfig
   private broker?: { aedes: Aedes; server: Server; sockets: Set<Socket> }
   private runner?: Runner
@@ -77,10 +83,13 @@ export class Environment extends EventEmitter<{ log: [LogLine] }> {
   private trace: CopTraceEntry[] = []
   /** Service-wide trace ids: each environment start creates a new twin whose own ids restart at 1. */
   private traceSeq = 0
+  /** Highest trace id dropped by the cap (0 = nothing lost). */
+  private traceDroppedThrough = 0
   private nextLogId = 1
 
-  constructor(private readonly hwsimDir: string) {
+  constructor(private readonly hwsimDir: string, readonly traceCap = DEFAULT_TRACE_CAP) {
     super()
+    this.setMaxListeners(100)
   }
 
   get running(): boolean {
@@ -233,8 +242,13 @@ export class Environment extends EventEmitter<{ log: [LogLine] }> {
     this.twin = new HardwareTwin(new IcolCodec(catalog), hw)
     this.twin.on('log', (line) => this.log('Hardware', line))
     this.twin.on('trace', (entry) => {
-      this.trace.push({ ...entry, id: ++this.traceSeq })
-      if (this.trace.length > MAX_TRACE) this.trace.splice(0, this.trace.length - MAX_TRACE)
+      const recorded = { ...entry, id: ++this.traceSeq }
+      this.trace.push(recorded)
+      if (this.trace.length > this.traceCap) {
+        const lost = this.trace.splice(0, this.trace.length - this.traceCap)
+        this.traceDroppedThrough = lost[lost.length - 1].id
+      }
+      this.emit('trace', recorded)
     })
     this.cop = new CopServer()
     this.cop.on('connection', (link) => {
@@ -319,6 +333,7 @@ export class Environment extends EventEmitter<{ log: [LogLine] }> {
         process: this.runner?.appSmm.status(),
       },
       hardware: c && { kind: c.hardware, state: this.twin?.snapshot().state, connected: this.twin?.connected },
+      trace: { size: this.trace.length, cap: this.traceCap, droppedThrough: this.traceDroppedThrough, lastId: this.traceSeq },
       processes: this.runner?.statuses() ?? [],
     }
   }
@@ -330,6 +345,73 @@ export class Environment extends EventEmitter<{ log: [LogLine] }> {
   getTrace(since = 0): CopTraceEntry[] {
     return this.trace.filter((t) => t.id > since)
   }
+
+  /** Id of the newest COP trace entry: pass it as `since` to look only at what comes next. */
+  traceMark(): number {
+    return this.traceSeq
+  }
+
+  /** Resolves with the first command `command` appSMM sends to the hardware after `since` (already traced or within timeoutMs). */
+  waitForCommand(command: string, since: number, timeoutMs: number): Promise<CopTraceEntry> {
+    const isIt = (t: CopTraceEntry) => t.id > since && t.way === 'rx' && commandMatches(t.name, command)
+    const existing = this.trace.find(isIt)
+    if (existing) return Promise.resolve(existing)
+    return new Promise((resolve, reject) => {
+      const onTrace = (t: CopTraceEntry) => {
+        if (!isIt(t)) return
+        clearTimeout(timer)
+        this.off('trace', onTrace)
+        resolve(t)
+      }
+      const timer = setTimeout(() => {
+        this.off('trace', onTrace)
+        const after = this.getTrace(since)
+        const seen = [...new Set(after.filter((t) => t.way === 'rx').map((t) => t.name))].sort()
+        reject(new CommandTimeoutError(
+          `appSMM did not send ${command} to the hardware within ${timeoutMs} ms ` +
+            `(trace after #${since}: ${after.length} entries; commands seen: ${seen.join(', ') || 'none'})`,
+          { since, commandsSeen: seen, hardware: this.config?.hardware },
+        ))
+      }, timeoutMs)
+      this.on('trace', onTrace)
+    })
+  }
+
+  /** Resolves if appSMM sends no `command` to the hardware after `since` for durationMs; rejects with the command otherwise. */
+  expectNoCommand(command: string, since: number, durationMs: number): Promise<void> {
+    const isIt = (t: CopTraceEntry) => t.id > since && t.way === 'rx' && commandMatches(t.name, command)
+    const existing = this.trace.find(isIt)
+    if (existing) return Promise.reject(new CommandSentError(`appSMM sent ${command}`, { entry: traceOut(existing) }))
+    return new Promise((resolve, reject) => {
+      const onTrace = (t: CopTraceEntry) => {
+        if (!isIt(t)) return
+        clearTimeout(timer)
+        this.off('trace', onTrace)
+        reject(new CommandSentError(`appSMM sent ${command}`, { entry: traceOut(t) }))
+      }
+      const timer = setTimeout(() => {
+        this.off('trace', onTrace)
+        resolve()
+      }, durationMs)
+      this.on('trace', onTrace)
+    })
+  }
+}
+
+export class CommandTimeoutError extends Error {
+  constructor(message: string, readonly details: Record<string, unknown>) {
+    super(message)
+  }
+}
+
+export class CommandSentError extends Error {
+  constructor(message: string, readonly details: Record<string, unknown>) {
+    super(message)
+  }
+}
+
+function traceOut(t: CopTraceEntry) {
+  return { id: t.id, time: new Date(t.time).toISOString(), way: t.way, name: t.name, text: t.text }
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))

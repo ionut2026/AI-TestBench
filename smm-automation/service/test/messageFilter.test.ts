@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkFilter, entryMatches, matches } from '../src/messageFilter'
+import { checkFilter, describeFilter, entryMatches, matches } from '../src/messageFilter'
 import type { TimelineEntry } from '../src/testbench'
 
 const entry = (name: string, body: unknown, extra: Partial<TimelineEntry> = {}): TimelineEntry => ({
@@ -54,6 +54,8 @@ describe('entryMatches', () => {
     expect(entryMatches(e, { since: 9 })).toBe(true)
     expect(entryMatches(e, { valid: false })).toBe(false)
     expect(entryMatches(e, { match: { CurrentState: 'E-Stop' } })).toBe(true)
+    expect(entryMatches(e, { exclude: [10] })).toBe(false)
+    expect(entryMatches(e, { exclude: [9, 11] })).toBe(true)
   })
 
   it('never matches a body filter on a non-ICD payload', () => {
@@ -67,6 +69,19 @@ describe('checkFilter', () => {
     expect(checkFilter({ nmae: 'X' })).toMatch(/unknown filter field/)
     expect(checkFilter({ way: 'up' })).toMatch(/way/)
     expect(checkFilter({ match: 3 })).toMatch(/match/)
+    expect(checkFilter({ exclude: [1, 2] })).toBeUndefined()
+    expect(checkFilter({ exclude: ['1'] })).toMatch(/exclude/)
     expect(checkFilter([])).toMatch(/object/)
+  })
+})
+
+describe('describeFilter', () => {
+  it('counts only the skipped ids inside the window instead of listing them', () => {
+    const text = describeFilter({ name: 'SystemStatusNotification', since: 5, exclude: [3, 6, 7] })
+    expect(text).toContain('after #5')
+    expect(text).toContain('skipping 2 earlier match(es)')
+    expect(text).not.toContain('#6')
+    expect(describeFilter({ exclude: [1] })).toContain('skipping 1')
+    expect(describeFilter({ since: 9, exclude: [1] })).not.toContain('skipping')
   })
 })
