@@ -135,6 +135,11 @@ troubleshooting) is [`docs/SMM-AUTOMATION-HANDBOOK.md`](SMM-AUTOMATION-HANDBOOK.
     twin, or the instrument.
   - It exposes HTTP API v1, which the Robot library `SMMTestbench.py` drives. Every request except `/health` needs
     the service's API token (`SMM_AUTOMATION_TOKEN`, or the one the service generates into `.service/token-<port>`).
+    The ICD message names (ingest) and schemas (briefs) also come from this API, so only the service reads the
+    TestBench.
+  - `smm-auto run --processes N` runs the mock tier in parallel with pabot; each worker process claims a slot by file
+    lock and gets its own service and embedded broker. Offline and rig runs stay serial (one appSMM installation with
+    fixed ports; one instrument).
 - **Traceability.** Tests only carry `SDS-<id>` and `spechash:`; all other links come from RV&S at report time.
   - `smm-auto drift` flags stale, orphan and uncovered tests, RV&S state/link changes of covered specifications
     (against a baseline accepted with `smm-auto accept`) and retired specifications.
