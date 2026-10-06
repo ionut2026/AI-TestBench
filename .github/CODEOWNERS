@@ -1,0 +1,5 @@
+# SMM test automation: tests and the review ledger need an approval from the test owners.
+# (Enforced when branch protection on main requires code-owner reviews.)
+/smm-automation/robot/suites/        @ionut2026
+/smm-automation/catalog/reviews.toml @ionut2026
+/smm-automation/catalog/*.scope.toml @ionut2026

@@ -13,7 +13,7 @@ SDS-2428419 E-Stop Is Notified After ShutdownResponse
     [Documentation]    After sending the ShutdownResponse, appSMM software publishes a
     ...    SystemStatusNotification message which notifies that system status changed from "Idle"
     ...    (PreviousState) to "E-Stop" (CurrentState)
-    [Tags]    SDS-2428419    spechash:3fab7cb6
+    [Tags]    SDS-2428419    spechash:3fab7cb6    review:pending
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
     Send ICD Message    ShutdownRequest
     Wait For Message Sequence
@@ -29,7 +29,7 @@ SDS-2428417 ShutdownResponse OK Is Published On is/iw/tx And Matches The ICD Sch
     ...    message published by appSMM software matches the structure of the message file attached under
     ...    Properties.
     ...    (The hardware answers immediately; the ICD JSON schema stands in for the attached file.)
-    [Tags]    SDS-2428417    spechash:01efab86
+    [Tags]    SDS-2428417    spechash:01efab86    review:pending
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
     Send ICD Message    ShutdownRequest
     ${entry}=    Wait For Message Entry    ShutdownResponse    timeout=20s    Status=OK

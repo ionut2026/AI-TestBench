@@ -14,7 +14,7 @@ SDS-2955303 SystemStatusResponse Reports NotInitialized Before Initialization St
     [Documentation]    If the SystemStatusRequest message is received over the is/iw/rx topic before the
     ...    initialization starts, appSMM software responds with the SystemStatusResponse having the current
     ...    status: "NotInitialized".
-    [Tags]    SDS-2955303    spechash:f1521b27    requires:restart
+    [Tags]    SDS-2955303    spechash:f1521b27    requires:restart    review:pending
     Restart appSMM And Wait Until NotInitialized
     ${response}=    Request And Wait For Response    SystemStatusRequest    timeout=${RESPONSE_TIMEOUT}
     Should Be Equal    ${response}[CurrentState]    NotInitialized
@@ -25,7 +25,7 @@ SDS-2525423 Initialization Starts On InitializationRequest In NotInitialized
     ...    is received over the is/iw/rx topic and the system state is "NotInitialized".
     ...    Note: When the InitializationRequest message is received over the is/iw/rx topic, appSMM
     ...    transmits the 'InitializeCmd' command to rtc_appl, only when the system state is 'NotInitialized'.
-    [Tags]    SDS-2525423    spechash:9bb164c6    requires:restart
+    [Tags]    SDS-2525423    spechash:9bb164c6    requires:restart    review:pending
     Restart appSMM And Wait Until NotInitialized
     Message Should Not Arrive    SystemStatusNotification    duration=${QUIET_PERIOD}    CurrentState=Initializing
     Send ICD Message    InitializationRequest
@@ -39,7 +39,7 @@ SDS-2525423 Initialization Starts On InitializationRequest In NotInitialized
 SDS-2525423 InitializationRequest Outside NotInitialized Does Not Start Initialization
     [Documentation]    Negative case of 2525423: in "Idle" the InitializationRequest must not start the
     ...    initialization (no Initializing notification, no InitializeCmd to rtc_appl).
-    [Tags]    SDS-2525423    spechash:9bb164c6
+    [Tags]    SDS-2525423    spechash:9bb164c6    review:pending
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
     Send ICD Message    InitializationRequest
     ${response}=    Wait For Message    InitializationResponse    timeout=${RESPONSE_TIMEOUT}
@@ -55,7 +55,7 @@ SDS-2528698 Initializing Is Notified After InitializationResponse OK
     [Documentation]    After publishing the InitializationResponse message with Status "OK", appSMM software
     ...    sends a SystemStatusNotification message over the is/iw/tx topic, which notifies that system
     ...    state changed from "NotInitialized" to "Initializing".
-    [Tags]    SDS-2528698    spechash:c4283482    requires:restart
+    [Tags]    SDS-2528698    spechash:c4283482    requires:restart    review:pending
     Restart appSMM And Wait Until NotInitialized
     Send ICD Message    InitializationRequest
     Wait For Message Sequence
@@ -69,7 +69,7 @@ SDS-2528703 Idle Is Notified When Clearing Is Completed
     [Documentation]    If system clearing is completed (all racks detected during initialization were
     ...    moved to Output), appSMM software publishes a SystemStatusNotification message which notifies
     ...    that the CurrentState of the system changed to "Idle".
-    [Tags]    SDS-2528703    spechash:440acdc2    requires:restart
+    [Tags]    SDS-2528703    spechash:440acdc2    requires:restart    review:pending
     Restart appSMM And Wait Until NotInitialized
     Send ICD Message    InitializationRequest
     Wait For Message Sequence

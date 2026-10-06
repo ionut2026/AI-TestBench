@@ -232,7 +232,8 @@ sequenceDiagram
 | **offline** | The **real** `appSMM.exe` on this PC | The **hardware twin** (simulated) | Mosquitto (127.0.0.1:1883) started by the TestBench runner | Real verdicts about appSMM, without an instrument. ≈17 min for the pilot. | none |
 | **rig** | The real appSMM on the instrument | Real hardware | The instrument's broker (`SMM_RIG_BROKER`) | Final verification on the dedicated automation instrument. | `needs:twin`, `requires:restart` |
 
-In every tier, tests tagged `review:pending` are also left out unless you ask for them (`--include-pending`).
+Tests tagged `review:pending` (no human review yet) **run on every tier**, but the report labels them **UNREVIEWED**
+and their specification can never be **VERIFIED** (Section 8.3). Use `--exclude-pending` to leave them out.
 
 ---
 
@@ -265,7 +266,7 @@ they are and what would break if they were changed.
 | **Three tiers** | Developers need fast feedback without hardware (mock); real verdicts need real appSMM (offline); final evidence needs the instrument (rig). The **same test file** runs on all three; only the environment file changes. | Use tags (`needs:twin`, `requires:restart`) to say what a test needs. |
 | **RV&S is read-only** | Safety: an automation tool must never alter controlled requirements. | Results are attached to RV&S by hand if needed. |
 | **Every test is tagged with the spec ID and a hash of the spec text** | Traceability (which test proves which spec) and change detection (the spec changed → the test must be re-reviewed). | Never invent or edit a `spechash:` tag except after a review (Section 12.5). |
-| **AI drafts, a human approves** (`review:pending`) | AI can misread a specification. Generated tests are excluded from normal runs until a person has reviewed them. | Removing `review:pending` is a deliberate review sign-off. |
+| **AI drafts, a human approves** (`review:pending`) | AI can misread a specification. Generated tests run but are labelled UNREVIEWED, and no specification counts as verified, until a person has reviewed them. | Removing `review:pending` is a deliberate review sign-off. |
 | **Wait for events, never `Sleep`** | Timing on real hardware varies. Fixed pauses make tests slow and flaky. | Use the `Wait For ...` keywords. |
 | **Time windows ("marks")** | Prevents a message from an earlier step from being mistaken for the answer to a later one. | Section 10.2 explains how `since=` works. |
 | **Windows + Python 3.12 + Node.js** | appSMM and the TestBench run on Windows; the TestBench needs Node; Robot needs Python. | Section 6. |
@@ -619,15 +620,16 @@ cd D:\projects\AI-TestBench\smm-automation
 | Run one area (by tag) | `.\.venv\Scripts\smm-auto run --tier offline --include area:shutdown` |
 | Run the tests of one specification | `.\.venv\Scripts\smm-auto run --tier offline --include SDS-2428419` |
 | Run one test by name | `.\.venv\Scripts\smm-auto run --tier mock --test "SDS-2428419 E-Stop Is Notified After ShutdownResponse"` |
-| Include unreviewed tests | add `--include-pending` |
+| Leave unreviewed tests out | add `--exclude-pending` (they run by default, labelled UNREVIEWED) |
+| Fail the run on every failure, also known issues | add `--fail-on any` (default `new`: only failures without `known-issue:` count) |
 | Choose the output folder | add `--outdir results\my-run` |
 | Skip the traceability report | add `--no-report` |
 | Re-run only failed tests of a run | `.\.venv\Scripts\smm-auto run --tier offline --rerunfailed results\offline-…\output.xml` |
 
 Rules for the command line:
 
-- **Options for `smm-auto` itself** (`--scope`, `--catalog`, `--suites`) go **before** the word `run`.
-- **Options for `run`** (`--tier`, `--outdir`, `--include-pending`, `--no-report`) go after `run`.
+- **Options for `smm-auto` itself** (`--scope`, `--catalog`, `--suites`, `--reviews`) go **before** the word `run`.
+- **Options for `run`** (`--tier`, `--outdir`, `--fail-on`, `--exclude-pending`, `--no-report`) go after `run`.
 - **Anything else after `run`** is passed straight to Robot Framework (`--include`, `--exclude`, `--test`,
   `--loglevel DEBUG`, `--rerunfailed`, …). See `.\.venv\Scripts\robot --help`.
 - `--include` can be repeated (tests matching any of them run). Tag patterns accept `*`, e.g. `--include SDS-2525*`.
@@ -635,9 +637,13 @@ Rules for the command line:
 ### 7.3 What `smm-auto run` does for you
 
 1. Picks the variable file `robot\environments\<tier>.py`.
-2. Excludes the tier's tags (`needs:twin` and/or `requires:restart`) and `review:pending`.
+2. Excludes the tier's tags (`needs:twin` and/or `requires:restart`); `review:pending` only with `--exclude-pending`.
 3. Runs Robot on `robot\suites` (or the `--suites` you gave) into `results\<tier>-<date>-<time>\`.
-4. Builds the traceability report from `output.xml` and the catalog.
+4. Builds the traceability report from `output.xml`, the catalog and the review ledger.
+5. Prints the failures by class (NEW FAIL, KNOWN FAIL, FIXED?) and exits with the number of **new** failures
+   (`--fail-on new`, default), of all failures (`--fail-on any`) or 0 (`--fail-on none`). A run where only
+   `known-issue:` tests fail is green. On the mock tier `known-issue:` tags are ignored: the mock follows the
+   specification, so every mock failure is new.
 
 It prints the exact `robot …` command it runs, so you can copy and adapt it.
 
@@ -646,7 +652,7 @@ It prints the exact `robot …` command it runs, so you can copy and adapt it.
 Useful when you want full control:
 
 ```powershell
-.\.venv\Scripts\robot --variablefile robot\environments\mock.py --exclude needs:twin --exclude review:pending --outputdir results\manual robot\suites\pilot\shutdown.robot
+.\.venv\Scripts\robot --variablefile robot\environments\mock.py --exclude needs:twin --outputdir results\manual robot\suites\pilot\shutdown.robot
 .\.venv\Scripts\smm-auto report --output results\manual\output.xml
 ```
 
@@ -706,17 +712,27 @@ One row per specification in scope with a verdict:
 
 | Verdict | Meaning |
 |---|---|
-| **PASS** | All tests of the specification that ran passed |
+| **PASS** | Every test of the specification ran on this tier and passed |
+| **PARTIAL** | Some of its tests passed, the others were not run on this tier or skipped (e.g. `requires:restart` on rig) |
 | **FAIL** | At least one of its tests failed |
 | **SKIP** | Its tests were skipped (e.g. `Require Hardware Twin` on a tier without twin) |
-| **NOT RUN** | Tests exist but were excluded from this run (tier tags, `--include`, `review:pending`) |
+| **NOT RUN** | Tests exist but were excluded from this run (tier tags, `--include`, `--exclude-pending`) |
 | **UNCOVERED** | Testable, not deferred, but no test exists yet |
 | **DEFERRED** | Listed under `[deferred]` in the scope file; the reason is shown |
 | **NOT TESTABLE** | Listed under `[not_testable]`; the reason is shown |
 
 Requirements and user stories get the **worst** verdict of their specifications, in this order:
-FAIL, NOT RUN, UNCOVERED, SKIP, DEFERRED, PASS, NOT TESTABLE. Stale tests (spec text changed) are flagged.
+FAIL, NOT RUN, UNCOVERED, SKIP, PARTIAL, DEFERRED, PASS, NOT TESTABLE. Stale tests (spec text changed) are flagged.
 On the mock tier the report states that the verdicts are **not product evidence**.
+
+The **Review** column shows **VERIFIED** when the specification passed and every one of its tests has had a human
+review, and **UNREVIEWED** when any of its tests is still tagged `review:pending`. A PASS of unreviewed tests is a
+result, not evidence. The coverage line counts *passed* and *verified* specifications separately.
+
+Each test is shown with its outcome: PASS, SKIP, **NEW FAIL** (a failure nobody has explained yet: triage it),
+**KNOWN FAIL** (the test is tagged `known-issue:FINDING-n`, a documented candidate finding in the README) or
+**FIXED?** (a `known-issue:` test passed: check whether the appSMM build fixed the finding, then remove the tag).
+New failures and FIXED? tests are listed at the top of the report.
 
 ### 8.4 What to do with a failure (triage)
 
@@ -732,7 +748,10 @@ flowchart TD
   S -- unsure --> RR[Re-run the single test 2-3 times;<br/>if it flips it is a timing issue:<br/>increase the timeout variable, never add Sleep]
 ```
 
-Record confirmed differences in the README's "Findings" section (and in RV&S/your defect tracker by hand).
+Record confirmed differences in the README's "Findings" section (and in RV&S/your defect tracker by hand). Tag the
+failing test(s) `known-issue:FINDING-<n>` with the README's finding number, so later runs show them as KNOWN FAIL
+and stay green while any **new** failure turns the run red. Remove the tag when the finding is fixed (FIXED?) or
+turns out to be a test error.
 
 ---
 
@@ -794,7 +813,7 @@ flowchart LR
   A[Pick a spec<br/>drift: UNCOVERED] --> B[Read the brief<br/>smm-auto briefs --spec ID]
   B --> C[Write the test<br/>tag review:pending]
   C --> D[drift: no problem<br/>for this spec]
-  D --> E[Run on mock<br/>--include-pending]
+  D --> E[Run on mock]
   E --> F[Review by a 2nd person]
   F --> G[Remove review:pending]
   G --> H[Run on offline / rig]
@@ -896,7 +915,7 @@ Line by line:
 
 ```powershell
 .\.venv\Scripts\smm-auto drift
-.\.venv\Scripts\smm-auto --suites robot\suites\pilot\shutdown.robot run --tier mock --include-pending --include SDS-2428419
+.\.venv\Scripts\smm-auto --suites robot\suites\pilot\shutdown.robot run --tier mock --include SDS-2428419
 ```
 
 - `drift` must show **no** stale/orphan/untagged/nohash problem for your spec (it will list it under PENDING — correct).
@@ -916,7 +935,22 @@ A **second person** checks, against the specification:
 - [ ] No `Sleep`, no hard-coded timeouts unless the spec states the time.
 - [ ] The test passed (or failed for a documented reason) on offline/rig.
 
-Then the reviewer removes `review:pending` and commits (Section 9.10).
+Then the reviewer records the review in `smm-automation\catalog\reviews.toml` and removes `review:pending` in the
+same commit (Section 9.10):
+
+```toml
+[[review]]
+test = "SDS-2428419 E-Stop Is Notified After ShutdownResponse"
+spechash = "3fab7cb6"          # the test's spechash tag value
+reviewer = "Jane Doe"          # a person; agent reviews are recorded as "agent:<model>" and do not count
+date = 2026-10-07
+ref = "PR #12"
+verdict = "approved"
+```
+
+`smm-auto drift --strict` (and CI) fails with **UNRECORDED REVIEW** when a test has no `review:pending` tag but no
+human ledger entry for its current `spechash:`; so a removed tag without a recorded review, and a spec change after a
+review, are both caught. The `.github\CODEOWNERS` file makes the test owners required reviewers of suites and ledger.
 
 ### 9.9 Useful patterns (copy-paste)
 
@@ -1259,7 +1293,8 @@ Valid state names: `PowerOn`, `NotInitialized`, `Initializing`, `Idle`, `Clearin
 |---|---|---|---|
 | `SDS-<id>` | every test | The RV&S specification the test proves. Exactly one per test (more only if one test truly proves several). | Author |
 | `spechash:<8 hex>` | every test | Fingerprint of the spec text the test was written/reviewed against. **Copy from the brief.** | Author / reviewer |
-| `review:pending` | new tests | Not reviewed yet; excluded from normal runs and CI. | Author adds, reviewer removes |
+| `review:pending` | new tests | Not reviewed by a human yet. Runs everywhere, shown as UNREVIEWED; the spec is never VERIFIED. Remove only with a ledger entry in `catalog\reviews.toml`. | Author adds, reviewer removes |
+| `known-issue:FINDING-<n>` | tests failing because of a documented candidate finding | Failure counts as KNOWN FAIL (run stays green); passing shows FIXED?. Ignored on mock. | Triage (Section 8.4) |
 | `needs:twin` | tests that drive the hardware twin | Excluded on mock and rig. | Author |
 | `requires:restart` | tests that restart appSMM or the broker | Excluded on rig. | Author |
 | `area:<name>` | suite (`Test Tags`) | Area/suite name, for selection and statistics. | Suite |
@@ -1381,8 +1416,9 @@ Use `windchill-mcp-server\docs\windchill-without-ai.md` for RV&S queries by hand
 | **UNCOVERED** | Testable, not deferred, no test | Write a test (Section 9) or defer it. |
 | **SUSPECT** | RV&S marks the spec as suspect (an upstream item changed) | Re-review the covering tests. (Informational.) |
 | **PENDING** | Tests tagged `review:pending` | Review them. (Informational.) |
+| **UNRECORDED REVIEW** | A test without `review:pending` has no human entry in `catalog\reviews.toml` for its current `spechash:` | Record the review (Section 9.8), or put `review:pending` back. |
 
-Only STALE, ORPHAN, UNTAGGED, NO HASH and UNCOVERED count as problems.
+Only STALE, ORPHAN, UNTAGGED, NO HASH, UNCOVERED and UNRECORDED REVIEW count as problems.
 
 ### 12.5 When a specification changes in RV&S
 
@@ -1794,7 +1830,7 @@ See checklist 18.3.
 | Drift: ORPHAN | Typo in `SDS-` tag or spec left the scope | Fix tag / remove test |
 | Rig tier: broker not reachable | `SMM_RIG_BROKER` not set (default placeholder 10.0.1.111) | Set it to the real rig broker address |
 | Strange extra messages; `Invoke-RestMethod http://127.0.0.1:8765/api/v1/session` shows `otherBridge` | TestBench GUI or a second test run connected as Bridge | Only one Bridge at a time |
-| Report says UNCOVERED for a spec with a test | Test excluded (pending/tier) or wrong tag | Check tags; use `--include-pending` to run pending tests |
+| Report says UNCOVERED for a spec with a test | Test excluded (pending/tier) or wrong tag | Check tags and the tier's excluded tags |
 
 ### 17.2 Stopping leftover processes safely
 
@@ -1884,7 +1920,7 @@ cd D:\projects\AI-TestBench\smm-automation
 .\.venv\Scripts\smm-auto run --tier offline              # real appSMM + digital twin (~17 min)
 .\.venv\Scripts\smm-auto run --tier rig                  # real lab (SMM_RIG_BROKER)
 .\.venv\Scripts\smm-auto run --tier offline --include SDS-2428419        # one spec
-.\.venv\Scripts\smm-auto run --tier offline --include-pending           # also unreviewed tests
+.\.venv\Scripts\smm-auto run --tier offline --exclude-pending           # without unreviewed tests
 
 # --- RV&S
 .\.venv\Scripts\smm-auto ingest                          # download specs/requirements/stories/ETs

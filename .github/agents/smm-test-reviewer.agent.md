@@ -54,7 +54,7 @@ For each specification get the facts **independently of the test**:
 6. **Evidence (when possible).** Run, from `smm-automation`:
    ```powershell
    .\.venv\Scripts\smm-auto drift
-   .\.venv\Scripts\smm-auto --suites <suite file> run --tier mock --include-pending --include SDS-<id>
+   .\.venv\Scripts\smm-auto --suites <suite file> run --tier mock --include SDS-<id>
    ```
    and `--tier offline` if appSMM and the TestBench are available. In `log.html`, open the test's "Timeline of this
    test" and check that the messages that satisfied each wait were really caused by the trigger (message ids/times after

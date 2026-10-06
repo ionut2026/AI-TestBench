@@ -7,7 +7,12 @@ Documentation       Shared setup for all SMM suites: one test environment per su
 ...                 - ``spechash:<8 hex>``: hash of the specification text the test was written against (drift check)
 ...                 - ``needs:twin``: drives the simulated hardware (offline tier only)
 ...                 - ``requires:restart``: restarts appSMM or the broker (not on the shared rig)
-...                 - ``review:pending``: generated, not yet reviewed by a human (never run by CI)
+...                 - ``review:pending``: generated, not yet reviewed by a human. Runs on every tier; the report
+...                 labels it UNREVIEWED and its specification is never VERIFIED. Remove it only together with an
+...                 entry in ``catalog/reviews.toml`` (``smm-auto drift --strict`` checks this).
+...                 - ``known-issue:<id>``: fails because of a candidate finding (README "Findings"); its
+...                 failure is KNOWN FAIL and does not fail ``smm-auto run`` (``--fail-on new``); if it passes
+...                 the report shows FIXED?
 Library             smm_automation.SMMTestbench
 Library             Collections
 

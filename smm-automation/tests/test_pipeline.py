@@ -1,4 +1,4 @@
-from smm_automation.pipeline.drift import TestRef, check, problems
+from smm_automation.pipeline.drift import TestRef, check, check_reviews, problems
 from smm_automation.pipeline.ingest import (
     build_catalog,
     classify_area,
@@ -9,7 +9,7 @@ from smm_automation.pipeline.ingest import (
     parse_ref,
     spec_hash,
 )
-from smm_automation.pipeline.report import build_report
+from smm_automation.pipeline.report import build_report, classify, outcome, render_html
 
 
 def test_spec_hash_ignores_whitespace_and_unicode_form():
@@ -103,8 +103,12 @@ def test_drift_check():
     assert problems(r) == 5
 
 
-def _result(name, specs, status, hash=None):
-    return {"name": name, "suite": "S", "status": status, "message": "", "elapsed": 1.0, "tags": [], "specs": specs, "hash": hash}
+def _result(name, specs, status, hash=None, tags=()):
+    tags = list(tags)
+    return {
+        "name": name, "suite": "S", "status": status, "message": "", "elapsed": 1.0, "tags": tags, "specs": specs, "hash": hash,
+        "pending": "review:pending" in tags, "knownIssues": [t.split(":", 1)[1] for t in tags if t.startswith("known-issue:")],
+    }
 
 
 def test_report_verdicts_and_roll_up():
@@ -131,3 +135,78 @@ def test_report_pass_and_uncovered():
     assert verdicts[1] == "PASS" and verdicts[2] == "UNCOVERED"
     assert report["requirements"][0]["verdict"] == "UNCOVERED"
     assert report["userStories"][0]["verdict"] == "PASS"
+
+
+def _verdict(cat, run, known):
+    return {s["id"]: s["verdict"] for s in build_report(cat, run, {"Tier": "offline"}, known)["specifications"]}[1]
+
+
+def test_spec_verdict_combinations():
+    cat = _catalog()
+    h1 = cat["specifications"]["1"]["hash"][:8]
+    a, b = _ref("a", [1], h1), _ref("b", [1], h1)
+    assert _verdict(cat, [_result("a", [1], "PASS", h1), _result("b", [1], "PASS", h1)], [a, b]) == "PASS"
+    assert _verdict(cat, [_result("a", [1], "PASS", h1)], [a, b]) == "PARTIAL"  # b not run on this tier
+    assert _verdict(cat, [_result("a", [1], "PASS", h1), _result("b", [1], "SKIP", h1)], [a, b]) == "PARTIAL"
+    assert _verdict(cat, [_result("a", [1], "SKIP", h1), _result("b", [1], "SKIP", h1)], [a, b]) == "SKIP"
+    assert _verdict(cat, [_result("a", [1], "PASS", h1), _result("b", [1], "FAIL", h1)], [a, b]) == "FAIL"
+    assert _verdict(cat, [_result("a", [1], "SKIP", h1), _result("b", [1], "FAIL", h1)], [a, b]) == "FAIL"
+    assert _verdict(cat, [], [a, b]) == "NOT RUN"
+    assert _verdict(cat, [], []) == "UNCOVERED"
+
+
+def test_review_status_and_verified():
+    cat = _catalog()
+    h1 = cat["specifications"]["1"]["hash"][:8]
+    pending = _ref("a", [1], h1, ["review:pending"])
+    report = build_report(cat, [_result("a", [1], "PASS", h1, ["review:pending"])], {"Tier": "offline"}, [pending])
+    s1 = next(s for s in report["specifications"] if s["id"] == 1)
+    assert s1["verdict"] == "PASS" and s1["verified"] is False and s1["unreviewed"] == ["a"]
+    assert report["coverage"]["verified"] == 0 and report["review"] == {"tests": 1, "unreviewed": 1}
+    assert "UNREVIEWED" in render_html(report)
+    reviewed = build_report(cat, [_result("a", [1], "PASS", h1)], {"Tier": "offline"}, [_ref("a", [1], h1)])
+    assert next(s for s in reviewed["specifications"] if s["id"] == 1)["verified"] is True
+    assert reviewed["coverage"]["verified"] == 1
+
+
+def test_known_issue_outcomes():
+    tests = [
+        _result("new", [1], "FAIL"),
+        _result("known", [1], "FAIL", tags=["known-issue:FINDING-1"]),
+        _result("fixed", [2], "PASS", tags=["known-issue:FINDING-2"]),
+        _result("ok", [2], "PASS"),
+        _result("skipped", [2], "SKIP", tags=["known-issue:FINDING-2"]),
+    ]
+    assert [outcome(t) for t in tests] == ["NEW FAIL", "KNOWN FAIL", "FIXED?", "PASS", "SKIP"]
+    assert classify(tests) == {"new": ["new"], "known": ["known"], "fixed": ["fixed"]}
+    # on the mock tier known issues are ignored: the mock follows the specification, any failure is a regression
+    assert classify(tests, product=False) == {"new": ["new", "known"], "known": [], "fixed": []}
+    cat = _catalog()
+    report = build_report(cat, tests[1:3], {"Tier": "offline"}, [])
+    s1 = next(s for s in report["specifications"] if s["id"] == 1)
+    assert s1["verdict"] == "FAIL" and s1["failClass"] == "known"
+    assert build_report(cat, tests[:2], {"Tier": "offline"}, [])["specifications"][0]["failClass"] == "new"
+    html = render_html(report)
+    assert "KNOWN FAIL" in html and "FIXED?" in html
+
+
+def test_review_ledger():
+    tests = [
+        _ref("pending", [1], "aaaa1111", ["review:pending", "spechash:aaaa1111"]),
+        _ref("reviewed", [1], "bbbb2222", ["spechash:bbbb2222"]),
+        _ref("unrecorded", [1], "cccc3333", ["spechash:cccc3333"]),
+        _ref("outdated", [1], "dddd4444", ["spechash:dddd4444"]),
+        _ref("agent only", [1], "eeee5555", ["spechash:eeee5555"]),
+    ]
+    ledger = [
+        {"test": "reviewed", "spechash": "bbbb2222", "reviewer": "Jane Doe"},
+        {"test": "outdated", "spechash": "00000000", "reviewer": "Jane Doe"},
+        {"test": "agent only", "spechash": "eeee5555", "reviewer": "agent:gpt-6-sol"},
+    ]
+    out = check_reviews(tests, ledger)
+    assert [o["test"] for o in out] == ["unrecorded", "outdated", "agent only"]
+    assert "00000000" in out[1]["reason"]
+    cat = _catalog()
+    r = check(cat, tests, ledger)
+    assert len(r["unrecorded"]) == 3
+    assert check(cat, tests)["unrecorded"] == []  # no ledger given: not checked

@@ -1,0 +1,26 @@
+# Review ledger: one [[review]] per human review of a test against its RV&S specification(s).
+#
+# A test may only lose its `review:pending` tag when this file holds a review of it by a person for the
+# test's current `spechash:` value(s); `smm-auto drift --strict` (CI) fails otherwise ("unrecorded").
+# When the specification changes, drift reports the test as stale: re-review, update `spechash:` and add a new entry.
+#
+# Agent reviews (smm-test-reviewer) may be recorded with reviewer = "agent:<model>"; they are kept as
+# information and never count as the human review.
+#
+# Fields:
+#   test      exact Robot test name
+#   spechash  the test's spechash tag value(s) at review time; several are comma separated, sorted
+#   reviewer  name of the reviewer (or agent:<model>)
+#   date      YYYY-MM-DD
+#   ref       PR / commit that removed review:pending
+#   verdict   approved | approved-with-notes
+#   notes     optional
+#
+# Example:
+# [[review]]
+# test = "SDS-2428419 E-Stop Is Notified After ShutdownResponse"
+# spechash = "3fab7cb6"
+# reviewer = "Jane Doe"
+# date = 2026-10-07
+# ref = "PR #12"
+# verdict = "approved"

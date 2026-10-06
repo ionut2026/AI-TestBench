@@ -16,7 +16,7 @@ SDS-2653094 System Restarts With RecoverRequest After Shutdown
     ...    After the RecoverRequest message is received over the is/iw/rx topic, the SMM system follows the
     ...    recovery procedure, as described in 2532492, 2532504, 2532508, 2532510.
     ...    Here the shutdown is requested with ShutdownRequest; see the next test for a hardware fatal error.
-    [Tags]    SDS-2653094    spechash:590de9f9
+    [Tags]    SDS-2653094    spechash:590de9f9    review:pending    known-issue:FINDING-2
     Bring SMM To E-Stop With Shutdown
     Send ICD Message    RecoverRequest
     Wait For Message Sequence
@@ -29,7 +29,7 @@ SDS-2653094 System Restarts With RecoverRequest After Shutdown
 
 SDS-2653094 System Restarts With RecoverRequest After A Hardware Fatal Error
     [Documentation]    Same as above, with the E-Stop caused by a fatal hardware error (twin emergency stop).
-    [Tags]    SDS-2653094    spechash:590de9f9    needs:twin
+    [Tags]    SDS-2653094    spechash:590de9f9    needs:twin    review:pending    known-issue:FINDING-2
     Require Hardware Twin
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
     Trigger Emergency Stop
@@ -45,7 +45,7 @@ SDS-2532492 RecoverRequest In E-Stop Sends DeInitializeCmd To RTC
     [Documentation]    If the RecoverRequest message is received over the is/iw/rx topic, appSMM software
     ...    sends the "DeInitializeCmd" command to RTC, in order to initiate system de-initialization. The
     ...    "DeInitializeCmd" command is sent only if the system status is "E-Stop".
-    [Tags]    SDS-2532492    spechash:69c84bb6    needs:twin
+    [Tags]    SDS-2532492    spechash:69c84bb6    needs:twin    review:pending
     Require Hardware Twin
     Bring SMM To E-Stop With Shutdown
     Send ICD Message    RecoverRequest
@@ -55,7 +55,7 @@ SDS-2532492 RecoverRequest In E-Stop Sends DeInitializeCmd To RTC
 SDS-2532492 RecoverRequest Outside E-Stop Does Not De-Initialize
     [Documentation]    Negative case of 2532492: in "Idle" a RecoverRequest must not de-initialize the
     ...    system (no DeInitializeCmd, the state stays "Idle").
-    [Tags]    SDS-2532492    spechash:69c84bb6
+    [Tags]    SDS-2532492    spechash:69c84bb6    review:pending
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
     Send ICD Message    RecoverRequest
     Message Should Not Arrive    RecoverResponse    duration=${QUIET_PERIOD}    Status=OK
@@ -72,7 +72,7 @@ SDS-2532504 RecoverResponse OK Matches The ICD Schema
     ...    the RecoverResponse message published by appSMM software matches the structure of the message
     ...    file attached under Properties.
     ...    (The hardware answers DeInitialize immediately; the ICD JSON schema stands in for the attached file.)
-    [Tags]    SDS-2532504    spechash:bba306d8
+    [Tags]    SDS-2532504    spechash:bba306d8    review:pending
     Bring SMM To E-Stop With Shutdown
     Send ICD Message    RecoverRequest
     ${entry}=    Wait For Message Entry    RecoverResponse    timeout=20s    Status=OK
@@ -85,7 +85,7 @@ SDS-2532510 Initialization Starts After RecoverResponse
     ...    'InitializeCmd' command to RTC, in order to initiate system initialization.
     ...    At the ICD the initialization shows as the Initializing notification after RecoverResponse;
     ...    with the hardware twin the InitializeCmd itself is checked.
-    [Tags]    SDS-2532510    spechash:f56cd486
+    [Tags]    SDS-2532510    spechash:f56cd486    review:pending    known-issue:FINDING-2
     Bring SMM To E-Stop With Shutdown
     Send ICD Message    RecoverRequest
     Wait For Message Sequence

@@ -18,7 +18,7 @@ SDS-2854109 Bridge Crash Puts The System Into E-Stop
     [Documentation]    If the SMMBridge gets disconnected, the SMM system goes to default E-Stop state
     ...    (i.e. system follows the behaviour described under Default E-Stop chapter).
     ...    The Bridge drops its connection without a goodbye, so the broker publishes its last will.
-    [Tags]    SDS-2854109    spechash:293117f8
+    [Tags]    SDS-2854109    spechash:293117f8    review:pending    known-issue:FINDING-1
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
     Disconnect Bridge    abrupt=True
     Sleep    ${QUIET_PERIOD}
@@ -27,7 +27,7 @@ SDS-2854109 Bridge Crash Puts The System Into E-Stop
 
 SDS-2854109 Broker Outage Puts The System Into E-Stop
     [Documentation]    Variant of 2854109 from ET 2855849: the MQTT broker is killed and started again.
-    [Tags]    SDS-2854109    spechash:293117f8    requires:restart
+    [Tags]    SDS-2854109    spechash:293117f8    requires:restart    review:pending
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
     Restart MQTT Broker    down=3s
     Wait Until Keyword Succeeds    ${STARTUP_TIMEOUT}    2s    Bridge Should Be Connected
@@ -45,7 +45,7 @@ SDS-2854281 Operator Warning When The Bridge Connection Is Re-Established
     ...    Connection is re-established now."
     ...    - "EventArgs": none
     ...    EventId is still open in the specification ("??"): it is logged, not checked.
-    [Tags]    SDS-2854281    spechash:ae9110ff
+    [Tags]    SDS-2854281    spechash:ae9110ff    review:pending    known-issue:FINDING-1
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
     Disconnect Bridge    abrupt=True
     Sleep    ${QUIET_PERIOD}

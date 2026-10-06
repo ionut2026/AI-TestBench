@@ -2,8 +2,9 @@
 
   smm-auto ingest   [--scope catalog/pilot.scope.toml]          RV&S -> catalog/<scope>.json
   smm-auto briefs   [--spec 2528698 ...]                         catalog -> generated/briefs/SDS-<id>.md
-  smm-auto drift    [--strict]                                   suites vs catalog (stale/orphan/uncovered)
-  smm-auto run      [--tier mock|offline|rig] [robot args...]    run suites, then the traceability report
+  smm-auto drift    [--strict]                                   suites vs catalog and review ledger (stale/orphan/uncovered/unrecorded)
+  smm-auto run      [--tier mock|offline|rig] [--fail-on new|any|none] [robot args...]
+                                                                 run suites, then the traceability report
   smm-auto report   --output results/.../output.xml              traceability report for an existing run
   smm-auto service                                               run the automation service in the foreground
 """
@@ -20,6 +21,7 @@ from pathlib import Path
 from smm_automation import FRAMEWORK_ROOT
 
 DEFAULT_SCOPE = FRAMEWORK_ROOT / "catalog" / "pilot.scope.toml"
+REVIEWS = FRAMEWORK_ROOT / "catalog" / "reviews.toml"
 TIER_EXCLUDES = {"mock": ["needs:twin"], "offline": [], "rig": ["needs:twin", "requires:restart"]}
 
 
@@ -63,24 +65,26 @@ def cmd_briefs(args) -> int:
 
 
 def cmd_drift(args) -> int:
-    from smm_automation.pipeline.drift import check, collect_tests, format_text, problems
+    from smm_automation.pipeline.drift import check, collect_tests, format_text, load_reviews, problems
     from smm_automation.pipeline.ingest import load_catalog
 
-    result = check(load_catalog(_catalog_path(args)), collect_tests(_suites(args)))
+    result = check(load_catalog(_catalog_path(args)), collect_tests(_suites(args)), load_reviews(Path(args.reviews)))
     if args.json:
         Path(args.json).write_text(json.dumps(result, indent=1, ensure_ascii=False), encoding="utf-8")
     print(format_text(result))
     return 1 if args.strict and problems(result) else 0
 
 
-def _report(catalog_path: Path, output_xml: Path, out_dir: Path, suites: list[Path]) -> dict:
-    from smm_automation.pipeline.drift import collect_tests
+def _report(catalog_path: Path, output_xml: Path, out_dir: Path, suites: list[Path], reviews: Path = REVIEWS) -> dict:
+    from smm_automation.pipeline.drift import collect_tests, load_reviews
     from smm_automation.pipeline.ingest import load_catalog
     from smm_automation.pipeline.report import write_report
 
-    report = write_report(load_catalog(catalog_path), output_xml, out_dir, collect_tests(suites))
+    report = write_report(load_catalog(catalog_path), output_xml, out_dir, collect_tests(suites), load_reviews(reviews))
     print(f"Traceability report: {out_dir / 'traceability.html'}")
     print("Specifications: " + ", ".join(f"{k} {v}" for k, v in report["summary"].items() if v))
+    print(f"Verified (passed and human-reviewed): {report['coverage']['verified']}; "
+          f"tests without human review: {report['review']['unreviewed']} of {report['review']['tests']}")
     if not report["productEvidence"]:
         print("NOTE: mock tier - the verdicts check the framework, they are not evidence about the product.")
     return report
@@ -88,8 +92,29 @@ def _report(catalog_path: Path, output_xml: Path, out_dir: Path, suites: list[Pa
 
 def cmd_report(args) -> int:
     output = Path(args.output)
-    _report(_catalog_path(args), output, Path(args.outdir) if args.outdir else output.parent, _suites(args))
+    _report(_catalog_path(args), output, Path(args.outdir) if args.outdir else output.parent, _suites(args), Path(args.reviews))
     return 0
+
+
+def _exit_code(rc: int, output: Path, fail_on: str) -> int:
+    """Robot's rc counts every failure; with ``--fail-on new`` only failures without ``known-issue:`` count."""
+    if rc > 250 or not output.exists():
+        return rc
+    from smm_automation.pipeline.report import classify, is_product_tier, read_results
+
+    tests, meta = read_results(output)
+    failures = classify(tests, is_product_tier(meta.get("Tier", "?")))
+    if failures["known"]:
+        print(f"KNOWN FAIL ({len(failures['known'])}): " + "; ".join(failures["known"]))
+    if failures["fixed"]:
+        print(f"FIXED? ({len(failures['fixed'])}) known-issue tests passed, re-check and remove the tag: " + "; ".join(failures["fixed"]))
+    if failures["new"]:
+        print(f"NEW FAIL ({len(failures['new'])}): " + "; ".join(failures["new"]))
+    if fail_on == "none":
+        return 0
+    if fail_on == "new":
+        return min(len(failures["new"]), 250)
+    return rc
 
 
 def cmd_run(args, robot_args: list[str]) -> int:
@@ -98,7 +123,7 @@ def cmd_run(args, robot_args: list[str]) -> int:
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     out_dir = Path(args.outdir) if args.outdir else FRAMEWORK_ROOT / "results" / f"{args.tier}-{stamp}"
     excludes = list(TIER_EXCLUDES[args.tier])
-    if not args.include_pending:
+    if args.exclude_pending:
         excludes.append("review:pending")
     options = {
         "variablefile": [str(FRAMEWORK_ROOT / "robot" / "environments" / f"{args.tier}.py")],
@@ -116,8 +141,8 @@ def cmd_run(args, robot_args: list[str]) -> int:
     rc = robot.run_cli(argv, exit=False)
     output = out_dir / "output.xml"
     if output.exists() and not args.no_report:
-        _report(_catalog_path(args), output, out_dir, _suites(args))
-    return rc
+        _report(_catalog_path(args), output, out_dir, _suites(args), Path(args.reviews))
+    return _exit_code(rc, output, args.fail_on)
 
 
 def cmd_service(args) -> int:
@@ -133,6 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--scope", default=str(DEFAULT_SCOPE), help="scope file (default: catalog/pilot.scope.toml)")
     parser.add_argument("--catalog", help="catalog JSON (default: catalog/<scope name>.json)")
     parser.add_argument("--suites", action="append", help="suite file/directory, repeatable (default: robot/suites)")
+    parser.add_argument("--reviews", default=str(REVIEWS), help="review ledger (default: catalog/reviews.toml)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("ingest", allow_abbrev=False, help="read specifications, requirements, user stories and ETs from RV&S")
@@ -140,12 +166,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--spec", nargs="*", help="only these specification IDs")
     p.add_argument("--out", default=str(FRAMEWORK_ROOT / "generated" / "briefs"))
     p = sub.add_parser("drift", allow_abbrev=False, help="compare suites with the catalog")
-    p.add_argument("--strict", action="store_true", help="exit code 1 on stale/orphan/untagged/uncovered")
+    p.add_argument("--strict", action="store_true", help="exit code 1 on stale/orphan/untagged/uncovered/unrecorded review")
     p.add_argument("--json", help="also write the result as JSON")
     p = sub.add_parser("run", allow_abbrev=False, help="run suites against a tier and write the traceability report (extra args go to robot)")
     p.add_argument("--tier", choices=sorted(TIER_EXCLUDES), default="mock")
     p.add_argument("--outdir")
-    p.add_argument("--include-pending", action="store_true", help="also run tests tagged review:pending")
+    p.add_argument("--fail-on", choices=["new", "any", "none"], default="new",
+                   help="exit code: number of NEW failures (default; known-issue failures do not count), of ANY failures, or 0")
+    p.add_argument("--exclude-pending", action="store_true", help="do not run tests tagged review:pending (they run and are labelled UNREVIEWED by default)")
+    p.add_argument("--include-pending", action="store_true", help=argparse.SUPPRESS)  # pre-1.1 option, now the default
     p.add_argument("--no-report", action="store_true")
     p = sub.add_parser("report", allow_abbrev=False, help="traceability report for an existing output.xml")
     p.add_argument("--output", required=True)

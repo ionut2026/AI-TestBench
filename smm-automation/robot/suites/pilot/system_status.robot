@@ -15,7 +15,7 @@ SDS-2525388 PowerOn Then NotInitialized Are Notified After appSMM Connects To Th
     [Documentation]    Following appSMM connection to MQTT Broker, the appSMM software publishes two
     ...    SystemStatusNotification messages over the is/iw/tx topic, to notify that CurrentState of the
     ...    system changed first to "PowerOn", and then to "NotInitialized".
-    [Tags]    SDS-2525388    spechash:ba57a704    requires:restart
+    [Tags]    SDS-2525388    spechash:ba57a704    requires:restart    review:pending    known-issue:FINDING-3
     Restart appSMM    down=1s
     Wait For Message Sequence
     ...    ConnectionNotification | Source=SMM | Status=Connected
@@ -28,7 +28,7 @@ SDS-2525388 PowerOn Then NotInitialized Are Notified After appSMM Connects To Th
 SDS-2752658 NotInitialized Is Notified After appSMM Restart
     [Documentation]    After restart appSMM software publishes the SystemStatusNotification message over
     ...    the is/iw/tx topic, to notify the Bridge that the current system state is "NotInitialized".
-    [Tags]    SDS-2752658    spechash:e492fe7e    requires:restart
+    [Tags]    SDS-2752658    spechash:e492fe7e    requires:restart    review:pending
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
     Restart appSMM    down=1s
     ${ssn}=    Wait For System State    NotInitialized    timeout=${STARTUP_TIMEOUT}
@@ -40,7 +40,7 @@ SDS-2525392 Every SystemStatusRequest Gets A SystemStatusResponse On is/iw/tx
     ...    publishes a SystemStatusResponse message each time when a SystemStatusRequest message is
     ...    received over the is/iw/rx topic. The SystemStatusResponse message is always published over
     ...    the is/iw/tx topic.
-    [Tags]    SDS-2525392    spechash:5865c681
+    [Tags]    SDS-2525392    spechash:5865c681    review:pending
     ${mark}=    Mark Timeline
     FOR    ${i}    IN RANGE    3
         ${response}=    Request And Wait For Response    SystemStatusRequest    timeout=${RESPONSE_TIMEOUT}
@@ -56,7 +56,7 @@ SDS-2525390 SystemStatusNotification Matches The ICD Schema And Uses is/iw/tx
     ...    matches the structure of the message file attached under Properties.
     ...    The SystemStatusNotification message is always published over the is/iw/tx topic.
     ...    (The ICD JSON schema of the pinned SMM TestBench stands in for the attached message file.)
-    [Tags]    SDS-2525390    spechash:156f1bba    requires:restart
+    [Tags]    SDS-2525390    spechash:156f1bba    requires:restart    review:pending
     Restart appSMM And Wait Until NotInitialized
     Send ICD Message    InitializationRequest
     Wait For Message Sequence
@@ -70,7 +70,7 @@ SDS-2528706 Idle Then Clearing Are Notified When All Lanes Are Initialized
     [Documentation]    If all SMM lanes are successfully initialized, appSMM software publishes two
     ...    SystemStatusNotification messages, which notifiy that the CurrentState of the system changed
     ...    firstly to "Idle" and then to "Clearing".
-    [Tags]    SDS-2528706    spechash:fd1f48cd    requires:restart
+    [Tags]    SDS-2528706    spechash:fd1f48cd    requires:restart    review:pending
     Restart appSMM And Wait Until NotInitialized
     Send ICD Message    InitializationRequest
     Wait For Message Sequence
@@ -85,7 +85,7 @@ SDS-2427781 SetConfigurationRequest In NotInitialized Notifies Configuring
     ...    system state is 'NotInitialized', appSMM software automatically publishes the
     ...    SystemStatusNotification message over the is/iw/tx topic, which notifies that system state
     ...    changed from "NotInitialized" to "Configuring".
-    [Tags]    SDS-2427781    spechash:56b72b64    requires:restart
+    [Tags]    SDS-2427781    spechash:56b72b64    requires:restart    review:pending
     Restart appSMM And Wait Until NotInitialized
     Send ICD Message    SetConfigurationRequest    body={"STI.Barcode.Code128": "Enabled"}
     Wait For Message    SystemStatusNotification    timeout=${RESPONSE_TIMEOUT}
@@ -97,7 +97,7 @@ SDS-2551270 NotInitialized Is Notified After SetConfigurationResponse
     [Documentation]    If the SetConfigurationResponse message was published over the is/iw/tx topic,
     ...    appSMM software automatically publishes the SystemStatusNotification message over the
     ...    is/iw/tx topic, which notifies that system state changed from "Configuring" to "NotInitialized".
-    [Tags]    SDS-2551270    spechash:9f824f08    requires:restart
+    [Tags]    SDS-2551270    spechash:9f824f08    requires:restart    review:pending
     Restart appSMM And Wait Until NotInitialized
     Send ICD Message    SetConfigurationRequest    body={"STI.Barcode.Code128": "Enabled"}
     Wait For Message Sequence
@@ -113,7 +113,7 @@ SDS-2535547 NormalOperation Is Notified When A Loaded Rack Is Picked Up In Idle
     ...    message over the is/iw/tx topic with the following details:
     ...    - "PreviousState":"Idle"
     ...    - "CurrentState":"NormalOperation"
-    [Tags]    SDS-2535547    spechash:1ccfe824    needs:twin
+    [Tags]    SDS-2535547    spechash:1ccfe824    needs:twin    review:pending
     [Teardown]    Finish SMM Test And Empty The Instrument
     Require Hardware Twin
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
@@ -128,7 +128,7 @@ SDS-2653086 E-Stop After A Fatal Error Is Notified From Idle
     ...    a SystemStatusNotification message which notifies that system status changed from "Idle"
     ...    (PreviousState) to "E-Stop" (CurrentState).
     ...    The fatal error is the hardware emergency stop of the twin.
-    [Tags]    SDS-2653086    spechash:068ff31d    needs:twin
+    [Tags]    SDS-2653086    spechash:068ff31d    needs:twin    review:pending
     Require Hardware Twin
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
     Trigger Emergency Stop

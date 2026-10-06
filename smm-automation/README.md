@@ -37,7 +37,9 @@ flowchart LR
 | `offline` | real `appSMM.exe` on this PC | SMM TestBench hardware twin | developer PC, nightly | — |
 | `rig` | real appSMM on the instrument | real | dedicated automation instrument (`SMM_RIG_BROKER=host:port`) | `needs:twin`, `requires:restart` |
 
-`review:pending` is excluded on every tier unless `--include-pending` is given.
+`review:pending` tests run on every tier and are labelled UNREVIEWED in the report (`--exclude-pending` leaves them out).
+`smm-auto run` exits with the number of **new** failures: failures of tests tagged `known-issue:FINDING-<n>` (see
+Findings) are KNOWN FAIL and keep the run green (`--fail-on any` counts them too).
 
 ## Setup (Windows)
 
@@ -76,7 +78,9 @@ override with `WINDCHILL_MCP_SERVER`) with the `RVS_*` settings from the environ
 3. The `smm-test-author` agent (`.github/agents/smm-test-author.agent.md`) writes the test from the brief, tagged
    `review:pending`. Optionally the `smm-test-reviewer` agent (`.github/agents/smm-test-reviewer.agent.md`)
    gives an independent, read-only review (APPROVE / CHANGES REQUESTED / REJECT).
-4. A test engineer reviews it against the specification (and runs it on `offline`/`rig`), then removes `review:pending`.
+4. A test engineer reviews it against the specification (and runs it on `offline`/`rig`), records the review in
+   `catalog/reviews.toml` (test, spechash, reviewer, date, PR) and removes `review:pending` in the same change.
+   `drift --strict` fails on a test without `review:pending` and without a matching human review entry.
 5. When RV&S changes the specification text, `drift` reports the test as **stale**: re-review, then update `spechash:`.
 
 Rules: one behaviour per test, assert what the specification states (message, fields, order, topic, timing), wait for
@@ -85,9 +89,11 @@ required and `requires:restart` if appSMM or the broker must be restarted.
 
 ## Reports
 
-`traceability.html` lists every in-scope specification with its verdict (FAIL, NOT RUN, UNCOVERED, SKIP, DEFERRED,
-PASS, NOT TESTABLE), the tests and their messages, stale/suspect flags, and rolls the verdicts up to requirements and
-user stories (worst verdict wins). Robot's `log.html` holds the full message timeline of every test. On the `mock`
+`traceability.html` lists every in-scope specification with its verdict (FAIL, NOT RUN, UNCOVERED, SKIP, PARTIAL,
+DEFERRED, PASS, NOT TESTABLE), its review status (VERIFIED = passed and every test human-reviewed, UNREVIEWED), the
+tests with their outcome (PASS, NEW FAIL, KNOWN FAIL, FIXED?) and messages, stale/suspect flags, and rolls the verdicts
+up to requirements and user stories (worst verdict wins). PARTIAL means some tests of the specification passed and
+others did not run on this tier. Robot's `log.html` holds the full message timeline of every test. On the `mock`
 tier the report carries a banner: those verdicts test the framework, not appSMM.
 
 ## Pilot status
@@ -108,11 +114,15 @@ The offline tier runs the real appSMM against the hardware twin. With the pilot 
 between the specifications and that build. They are **candidate findings, not confirmed defects**: the build is
 from 2023 and the specifications are newer, so a human has to confirm each one (or correct the test) first.
 
-| Specification | Observed | Consequence |
-|---|---|---|
-| SDS-2854109 (Bridge crash) | After the SMMBridge last will "SMMBridge Disconnected" appSMM stays `Idle`; a broker outage does put it into `E-Stop` | SDS-2854281 (Operator warning on reconnection) fails on its precondition |
-| SDS-2653094, SDS-2532510 (Recover) | Recover goes `E-Stop` -> `NotInitialized` (DeInitializeCmd); no automatic initialization, no InitializeCmd | |
-| SDS-2525388 (PowerOn) | No SystemStatusNotification with `CurrentState=PowerOn` after a start (SystemStatusResponse does report `PowerOn`), only `PowerOn` -> `NotInitialized` | |
+| ID | Specification | Observed | Consequence |
+|---|---|---|---|
+| FINDING-1 | SDS-2854109 (Bridge crash) | After the SMMBridge last will "SMMBridge Disconnected" appSMM stays `Idle`; a broker outage does put it into `E-Stop` | SDS-2854281 (Operator warning on reconnection) fails on its precondition |
+| FINDING-2 | SDS-2653094, SDS-2532510 (Recover) | Recover goes `E-Stop` -> `NotInitialized` (DeInitializeCmd); no automatic initialization, no InitializeCmd | |
+| FINDING-3 | SDS-2525388 (PowerOn) | No SystemStatusNotification with `CurrentState=PowerOn` after a start (SystemStatusResponse does report `PowerOn`), only `PowerOn` -> `NotInitialized` | |
+
+The failing tests are tagged `known-issue:FINDING-<n>`, so an offline run with only these failures is green and any
+other failure is reported as NEW FAIL. When a finding is fixed or rejected, remove the tag (the report shows FIXED?
+when a tagged test passes).
 
 Open interpretation for the reviewer: SDS-2854281 is tested as "warning after reconnection and RecoverRequest"; the
 test accepts the warning from the moment of reconnection on.

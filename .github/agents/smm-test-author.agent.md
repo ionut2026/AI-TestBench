@@ -235,7 +235,7 @@ Run from `smm-automation` (Windows paths):
 
 ```powershell
 .\.venv\Scripts\smm-auto drift                                                    # no STALE/ORPHAN/NO HASH/UNTAGGED for your SDS
-.\.venv\Scripts\smm-auto --suites robot\suites\<scope>\<area>.robot run --tier mock --include-pending --include SDS-<id>
+.\.venv\Scripts\smm-auto --suites robot\suites\<scope>\<area>.robot run --tier mock --include SDS-<id>
 ```
 
 - The mock run must execute the test without syntax/keyword errors. A *failure* on mock is acceptable only when the mock
@@ -246,7 +246,7 @@ Run from `smm-automation` (Windows paths):
   - **fail:** decide whether the *test* is wrong (wrong field name, window, precondition, timeout too short) — fix it —
     or *appSMM* differs from the specification — keep the test unchanged and report it as a **candidate finding** with
     the timeline evidence (message ids/timestamps).
-- Never use `--include-pending` results as evidence; they only prove the test runs.
+- Never use results of `review:pending` tests as evidence (the report shows them UNREVIEWED); they only prove the test runs.
 
 ---
 

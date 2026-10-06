@@ -1,8 +1,13 @@
 """Traceability report: Robot results (output.xml) joined with the RV&S catalog.
 
-Per specification: PASS / FAIL / SKIP / NOT RUN (tests exist but were excluded from this run) /
-UNCOVERED / DEFERRED / NOT TESTABLE, plus stale-hash warnings. Per requirement and user story: the
-worst verdict of their in-scope specifications."""
+Per specification: PASS (every test of the spec ran and passed) / PARTIAL (some passed, others were not run or
+skipped on this tier) / FAIL / SKIP / NOT RUN (tests exist but were excluded from this run) / UNCOVERED /
+DEFERRED / NOT TESTABLE, plus stale-hash warnings. A PASS is only VERIFIED when every test of the spec has had a
+human review (no ``review:pending`` tag). Per requirement and user story: the worst verdict of their in-scope
+specifications.
+
+Per test: failures of tests tagged ``known-issue:<id>`` are KNOWN FAIL, other failures NEW FAIL, and a passing
+known-issue test is FIXED? (the finding may be fixed: re-check and remove the tag)."""
 
 from __future__ import annotations
 
@@ -11,10 +16,40 @@ import html
 import json
 from pathlib import Path
 
-from smm_automation.pipeline.drift import HASH_TAG, SDS_TAG, TestRef, check
+from smm_automation.pipeline.drift import HASH_TAG, KNOWN_ISSUE_TAG, PENDING_TAG, SDS_TAG, TestRef, check
 
-ORDER = ["FAIL", "NOT RUN", "UNCOVERED", "SKIP", "DEFERRED", "PASS", "NOT TESTABLE"]
-COLORS = {"PASS": "#c8f0c8", "FAIL": "#f7c0c0", "SKIP": "#f3f3b0", "NOT RUN": "#e0e0e0", "UNCOVERED": "#f9d9a8", "DEFERRED": "#dde4f7", "NOT TESTABLE": "#eeeeee"}
+ORDER = ["FAIL", "NOT RUN", "UNCOVERED", "SKIP", "PARTIAL", "DEFERRED", "PASS", "NOT TESTABLE"]
+COLORS = {
+    "PASS": "#c8f0c8", "FAIL": "#f7c0c0", "SKIP": "#f3f3b0", "NOT RUN": "#e0e0e0", "UNCOVERED": "#f9d9a8",
+    "DEFERRED": "#dde4f7", "NOT TESTABLE": "#eeeeee", "PARTIAL": "#e3f0b8",
+    "NEW FAIL": "#f7a0a0", "KNOWN FAIL": "#f3d0d0", "FIXED?": "#b8e8f0", "UNREVIEWED": "#ffe08a", "VERIFIED": "#9ad89a",
+}
+
+
+def outcome(test: dict, product: bool = True) -> str:
+    """PASS / SKIP / NEW FAIL / KNOWN FAIL / FIXED? of one executed test. Known issues are findings about appSMM:
+    on the mock tier (not the product) they are ignored, so every mock failure is NEW."""
+    known = product and bool(test.get("knownIssues"))
+    if test["status"] == "FAIL":
+        return "KNOWN FAIL" if known else "NEW FAIL"
+    if test["status"] == "PASS" and known:
+        return "FIXED?"
+    return test["status"]
+
+
+def is_product_tier(tier: str) -> bool:
+    return not tier.startswith("mock")
+
+
+def classify(tests: list[dict], product: bool = True) -> dict:
+    """Test names per failure class, for the exit code of ``smm-auto run`` and the report header."""
+    out: dict[str, list[str]] = {"new": [], "known": [], "fixed": []}
+    for t in tests:
+        o = outcome(t, product)
+        key = {"NEW FAIL": "new", "KNOWN FAIL": "known", "FIXED?": "fixed"}.get(o)
+        if key:
+            out[key].append(t["name"])
+    return out
 
 
 def read_results(output_xml: Path) -> tuple[list[dict], dict]:
@@ -35,6 +70,8 @@ def read_results(output_xml: Path) -> tuple[list[dict], dict]:
                 "tags": tags,
                 "specs": [int(m[1]) for x in tags if (m := SDS_TAG.match(x))],
                 "hash": next((m[1].lower() for x in tags if (m := HASH_TAG.match(x))), None),
+                "pending": any(x.lower() == PENDING_TAG for x in tags),
+                "knownIssues": [m[1] for x in tags if (m := KNOWN_ISSUE_TAG.match(x))],
             })
         for child in suite.suites:
             walk(child)
@@ -55,7 +92,9 @@ def _spec_verdict(spec: dict, run: list[dict], known: list[TestRef]) -> str:
         if "FAIL" in statuses:
             return "FAIL"
         if "PASS" in statuses:
-            return "PASS"
+            ran = {t["name"] for t in run}
+            not_run = [k for k in known if k.name not in ran]
+            return "PARTIAL" if "SKIP" in statuses or not_run else "PASS"
         return "SKIP"
     if known:
         return "NOT RUN"
@@ -69,7 +108,9 @@ def _worst(verdicts: list[str]) -> str:
     return min(relevant, key=ORDER.index) if relevant else "UNCOVERED"
 
 
-def build_report(catalog: dict, tests: list[dict], meta: dict, known: list[TestRef]) -> dict:
+def build_report(catalog: dict, tests: list[dict], meta: dict, known: list[TestRef], reviews: list[dict] | None = None) -> dict:
+    tier = meta.get("Tier", "?")
+    product = is_product_tier(tier)
     specs_out = []
     for key, spec in catalog["specifications"].items():
         sid = int(key)
@@ -77,10 +118,15 @@ def build_report(catalog: dict, tests: list[dict], meta: dict, known: list[TestR
         defined = [k for k in known if sid in k.specs]
         verdict = _spec_verdict(spec, run, defined)
         stale = [t["name"] for t in run if t["hash"] and not spec["hash"].startswith(t["hash"])]
+        unreviewed = sorted({t["name"] for t in run if t.get("pending")} | {k.name for k in defined if k.pending})
+        outcomes = [outcome(t, product) for t in run]
         specs_out.append({
             "id": sid,
             "area": spec["area"],
             "verdict": verdict,
+            "verified": verdict == "PASS" and not unreviewed,
+            "unreviewed": unreviewed,
+            "failClass": ("new" if "NEW FAIL" in outcomes else "known") if verdict == "FAIL" else None,
             "text": spec["text"],
             "state": spec.get("state"),
             "document": spec.get("document"),
@@ -90,7 +136,11 @@ def build_report(catalog: dict, tests: list[dict], meta: dict, known: list[TestR
             "reason": spec.get("deferredReason") or spec.get("notTestableReason"),
             "stale": stale,
             "suspect": (spec.get("suspectCount") or 0) > 0,
-            "tests": [{k: t[k] for k in ("name", "suite", "status", "message", "elapsed")} for t in run],
+            "tests": [
+                {**{k: t[k] for k in ("name", "suite", "status", "message", "elapsed")},
+                 "outcome": outcome(t, product), "pending": bool(t.get("pending")), "knownIssues": t.get("knownIssues", [])}
+                for t in run
+            ],
             "notRun": [k.name for k in defined if k.name not in {t["name"] for t in run}],
         })
 
@@ -107,7 +157,6 @@ def build_report(catalog: dict, tests: list[dict], meta: dict, known: list[TestR
             })
         return out
 
-    tier = meta.get("Tier", "?")
     summary = {v: sum(1 for s in specs_out if s["verdict"] == v) for v in ORDER}
     testable = [s for s in specs_out if s["verdict"] != "NOT TESTABLE"]
     return {
@@ -115,19 +164,25 @@ def build_report(catalog: dict, tests: list[dict], meta: dict, known: list[TestR
         "catalogGeneratedAt": catalog.get("generatedAt"),
         "scope": catalog.get("scope"),
         "tier": tier,
-        "productEvidence": not tier.startswith("mock"),
+        "productEvidence": product,
         "metadata": {k: v for k, v in meta.items() if not k.startswith("_")},
         "totals": meta.get("_totals"),
         "summary": summary,
+        "failures": classify(tests, product),
+        "review": {
+            "tests": len({t["name"] for t in tests} | {k.name for k in known}),
+            "unreviewed": len({t["name"] for t in tests if t.get("pending")} | {k.name for k in known if k.pending}),
+        },
         "coverage": {
             "testable": len(testable),
-            "automated": sum(1 for s in testable if s["verdict"] in ("PASS", "FAIL", "SKIP", "NOT RUN")),
+            "automated": sum(1 for s in testable if s["verdict"] in ("PASS", "PARTIAL", "FAIL", "SKIP", "NOT RUN")),
             "passed": summary["PASS"],
+            "verified": sum(1 for s in specs_out if s["verified"]),
         },
         "specifications": sorted(specs_out, key=lambda s: (ORDER.index(s["verdict"]), s["area"], s["id"])),
         "requirements": roll_up(catalog.get("requirements", {}), "satisfies"),
         "userStories": roll_up(catalog.get("userStories", {}), "userStories"),
-        "drift": check(catalog, known) if known else None,
+        "drift": check(catalog, known, reviews) if known else None,
     }
 
 
@@ -147,7 +202,10 @@ def render_html(report: dict) -> str:
     spec_rows = []
     for s in report["specifications"]:
         tests = "<br>".join(
-            f"{_badge(t['status'])} {e(t['name'])} <small>({t['elapsed']} s)</small>" + (f"<br><small class='msg'>{e(t['message'][:400])}</small>" if t["message"] else "")
+            f"{_badge(t.get('outcome', t['status']))} {e(t['name'])} <small>({t['elapsed']} s)</small>"
+            + (f" {_badge('UNREVIEWED')}" if t.get("pending") else "")
+            + (f" <small>known issue {e(', '.join(t['knownIssues']))}</small>" if t.get("knownIssues") else "")
+            + (f"<br><small class='msg'>{e(t['message'][:400])}</small>" if t["message"] else "")
             for t in s["tests"]
         )
         if s["notRun"]:
@@ -159,11 +217,33 @@ def render_html(report: dict) -> str:
             notes.append("<b>STALE:</b> specification text changed after the test was written")
         if s["suspect"]:
             notes.append("<b>SUSPECT</b> in RV&amp;S")
+        if s.get("failClass") == "known":
+            notes.append("only known issues fail")
         links = " ".join([f"REQ-{r}" for r in s["satisfies"]] + [f"US-{u}" for u in s["userStories"]] + [f"ET-{x}" for x in s["explorativeTests"]])
+        if s.get("verified"):
+            review = _badge("VERIFIED")
+        elif s.get("unreviewed"):
+            review = f"{_badge('UNREVIEWED')}<br><small>{len(s['unreviewed'])} test(s) without human review</small>"
+        else:
+            review = "-"
         spec_rows.append(
-            f"<tr><td>{_badge(s['verdict'])}</td><td><b>SDS-{s['id']}</b><br><small>{e(s['area'])}</small></td>"
+            f"<tr><td>{_badge(s['verdict'])}</td><td>{review}</td><td><b>SDS-{s['id']}</b><br><small>{e(s['area'])}</small></td>"
             f"<td class='text'>{e(s['text'][:600])}</td><td>{tests or '-'}</td><td><small>{e(links)}</small><br>{'<br>'.join(notes)}</td></tr>"
         )
+    failures = report.get("failures") or {"new": [], "known": [], "fixed": []}
+    fail_html = ""
+    if failures["new"]:
+        fail_html += f"<div class='bad'><b>{len(failures['new'])} NEW FAIL:</b> " + ", ".join(e(n) for n in failures["new"]) + "</div>"
+    if failures["fixed"]:
+        fail_html += (f"<div class='warn'><b>{len(failures['fixed'])} FIXED?</b> known-issue tests now pass (re-check, then remove "
+                      "the <code>known-issue:</code> tag): " + ", ".join(e(n) for n in failures["fixed"]) + "</div>")
+    if failures["known"]:
+        fail_html += f"<p>{len(failures['known'])} KNOWN FAIL (tagged <code>known-issue:</code>): " + ", ".join(e(n) for n in failures["known"]) + "</p>"
+    rev = report.get("review") or {}
+    if rev.get("unreviewed"):
+        warn += (f"<div class='warn'><b>{rev['unreviewed']} of {rev['tests']} tests have no human review</b> "
+                 "(<code>review:pending</code>). Their verdicts are shown, but a specification is only VERIFIED when "
+                 "all its tests have been reviewed.</div>")
 
     def roll_table(items: list[dict], prefix: str) -> str:
         rows = "".join(
@@ -175,7 +255,7 @@ def render_html(report: dict) -> str:
 
     drift = report.get("drift") or {}
     drift_html = ""
-    for key in ("stale", "orphan", "untagged", "nohash", "uncovered", "suspect", "pending"):
+    for key in ("stale", "orphan", "untagged", "nohash", "unrecorded", "uncovered", "suspect", "pending"):
         if drift.get(key):
             drift_html += f"<h3>{e(key)} ({len(drift[key])})</h3><ul>" + "".join(f"<li><code>{e(json.dumps(i, ensure_ascii=False))}</code></li>" for i in drift[key]) + "</ul>"
     scope = report.get("scope") or {}
@@ -185,28 +265,30 @@ body{{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#222}} table{{bord
 td,th{{border:1px solid #ccc;padding:4px 6px;vertical-align:top;text-align:left;font-size:13px}} th{{background:#f4f4f4}}
 .v{{display:inline-block;padding:1px 6px;border-radius:3px;font-weight:600;font-size:12px;white-space:nowrap}}
 .warn{{background:#fff3cd;border:1px solid #e0b400;padding:10px;margin:12px 0}} .text{{max-width:520px}} .msg{{color:#900}}
+.bad{{background:#f7c0c0;border:1px solid #c00;padding:10px;margin:12px 0}}
 table.meta{{width:auto}}
 </style></head><body>
 <h1>SMM traceability report</h1>
 <p>{e(str(scope.get('title') or ''))}</p>
 {warn}
+{fail_html}
 <table class="meta"><tr><th>Tier</th><td>{e(report['tier'])}</td></tr>{meta_rows}
 <tr><th>Catalog (RV&amp;S) from</th><td>{e(str(report['catalogGeneratedAt']))}</td></tr>
 <tr><th>Report generated</th><td>{e(report['generatedAt'])}</td></tr>
 <tr><th>Tests</th><td>{e(json.dumps(report['totals']))}</td></tr>
-<tr><th>Coverage</th><td>{cov['automated']} of {cov['testable']} testable specifications automated, {cov['passed']} passed</td></tr></table>
+<tr><th>Coverage</th><td>{cov['automated']} of {cov['testable']} testable specifications automated, {cov['passed']} passed, {cov.get('verified', 0)} verified (passed and reviewed)</td></tr></table>
 <p>{summary}</p>
 <h2>Specifications</h2>
-<table><tr><th>Verdict</th><th>Spec</th><th>Text</th><th>Tests</th><th>Links / notes</th></tr>{''.join(spec_rows)}</table>
+<table><tr><th>Verdict</th><th>Review</th><th>Spec</th><th>Text</th><th>Tests</th><th>Links / notes</th></tr>{''.join(spec_rows)}</table>
 <h2>Requirements</h2>{roll_table(report['requirements'], 'REQ')}
 <h2>User stories</h2>{roll_table(report['userStories'], 'US')}
 <h2>Drift</h2>{drift_html or '<p>No drift problems.</p>'}
 </body></html>"""
 
 
-def write_report(catalog: dict, output_xml: Path, out_dir: Path, known: list[TestRef]) -> dict:
+def write_report(catalog: dict, output_xml: Path, out_dir: Path, known: list[TestRef], reviews: list[dict] | None = None) -> dict:
     tests, meta = read_results(output_xml)
-    report = build_report(catalog, tests, meta, known)
+    report = build_report(catalog, tests, meta, known, reviews)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "traceability.json").write_text(json.dumps(report, indent=1, ensure_ascii=False), encoding="utf-8")
     (out_dir / "traceability.html").write_text(render_html(report), encoding="utf-8")
