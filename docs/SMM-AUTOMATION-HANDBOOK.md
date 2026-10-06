@@ -1018,24 +1018,77 @@ git push
 If you work in a team, create a branch first (`git switch -c add-sds-2428419`) and open a pull request on GitHub so CI
 runs and a colleague reviews.
 
-### 9.11 Writing tests with the AI agent (when available)
+### 9.11 Writing and reviewing tests with the AI agents (when available)
 
-1. `smm-auto briefs --spec <id>`.
-2. In GitHub Copilot (CLI or VS Code), select the agent **smm-test-author** and ask:
-   *"Write the test for SDS-<id> from its brief."*
-3. The agent analyses the specification (precondition, trigger, outcomes, constraints, open values), adds the test with
-   `review:pending`, runs drift and the mock tier, and hands over a table showing which sentence each assertion
-   checks, its assumptions, and any suspected appSMM deviation ("candidate finding").
-4. Optional but recommended: select the agent **smm-test-reviewer** and ask
-   *"Review the review:pending tests for SDS-<id>."* It does not change files; it returns a verdict per test
-   (APPROVE / CHANGES REQUESTED / REJECT) with concrete line-by-line change proposals. Give its change requests back
-   to smm-test-author (or fix them yourself) and repeat.
-5. You review exactly as in 9.8 and decide. No agent ever removes `review:pending` — that is the human's sign-off.
+The repository contains two AI "agents". An agent is a written instruction file that turns GitHub Copilot into a
+specialist. You do not install them: anyone who opens this repository with GitHub Copilot has them automatically.
 
-The agents' instructions are in `.github\agents\smm-test-author.agent.md` and
-`.github\agents\smm-test-reviewer.agent.md`; the binding rules are in `pipeline\briefs.py` (`RULES`). Keep all
-three in sync with Section 11. Even without AI, the author agent file is the most complete written guide to writing a
-good test, and the reviewer file is a ready-made review checklist.
+| Agent | What it does | Changes files? |
+|---|---|---|
+| **smm-test-author** | Writes a new Robot test for one specification, checks it itself and runs it on the mock tier | Yes: adds the test to a suite |
+| **smm-test-reviewer** | Checks existing tests against their specification and gives a verdict per test | No: it only reports |
+
+**What you need once**
+
+- A GitHub Copilot licence and one of these: **Copilot CLI** (`copilot` in a terminal), **VS Code** with the
+  GitHub Copilot Chat extension, or the **GitHub Copilot app**.
+- The framework installed (Section 6), so that `.venv` and `smm-auto` exist.
+- Optional: the **windchill** MCP server configured in Copilot. It lets the agents read RV&S themselves. Without it
+  they work from the brief only, which is usually enough.
+
+**Step 1: prepare the brief** (in a terminal, in `D:\projects\AI-TestBench\smm-automation`):
+
+```powershell
+.\.venv\Scripts\smm-auto ingest            # only if RV&S changed since the last time
+.\.venv\Scripts\smm-auto drift             # lists the uncovered specifications per area
+.\.venv\Scripts\smm-auto briefs --spec 2428419
+```
+
+**Step 2: start Copilot in the project folder and choose the author agent.** Pick one of these:
+
+- *Copilot CLI:* `cd D:\projects\AI-TestBench`, then type `copilot`. Inside it, type `/agent` and choose
+  **smm-test-author**. Or start it directly:
+  `copilot --agent=smm-test-author --prompt "Write the test for SDS-2428419 from its brief."`
+- *VS Code:* open the folder `D:\projects\AI-TestBench`, open the Chat view (Ctrl+Alt+I), choose **smm-test-author**
+  in the agent drop-down below the chat box, and type the request.
+- *Any of them:* you can also just write *"Use the smm-test-author agent to write the test for SDS-2428419."*
+
+If the agent does not appear in the list, restart Copilot (it reads `.github\agents\` at start-up) and make sure you
+opened `D:\projects\AI-TestBench` and not a sub-folder.
+
+**Step 3: ask.** Useful requests:
+
+- *"Write the test for SDS-2428419 from its brief."*
+- *"Write the tests for all uncovered specifications of the area shutdown."*
+- *"SDS-2428419 is STALE in drift. Update its test to the new specification text."*
+
+The agent analyses the specification, adds the test with `review:pending` to the right suite, runs drift and the mock
+tier, and ends with a hand-over: a table showing which specification sentence each check covers, its assumptions,
+open questions, and any suspected appSMM deviation ("candidate finding"). Read the hand-over; it is the input for the
+review.
+
+**Step 4: independent review (recommended).** Start a **new** chat (so the reviewer does not share the author's
+reasoning), choose **smm-test-reviewer** in the same way, and ask:
+
+- *"Review the review:pending tests for SDS-2428419."*
+- *"Review all review:pending tests in shutdown.robot."*
+
+It returns a table with **APPROVE**, **CHANGES REQUESTED** or **REJECT** per test, and the exact changes it proposes.
+If changes are requested, paste them into the author chat (*"Apply these review comments: ..."*) or edit the test
+yourself, then review again.
+
+**Step 5: you decide.** Review as in 9.8 (ideally also run it on the `offline` tier), and only then remove
+`review:pending` and commit (9.10). Neither agent ever removes `review:pending`; that tag is the human sign-off.
+
+**Tips**
+
+- One specification (or one small area) per request gives the best results.
+- If the agent reports a *candidate finding*, the test is probably right and appSMM differs from the specification.
+  Check it on `offline`/`rig` and raise it with the appSMM team; do not "fix" the test to match appSMM.
+- If you change how tests must be written, update the three places together: `pipeline\briefs.py` (`RULES`),
+  `.github\agents\smm-test-author.agent.md` and `.github\agents\smm-test-reviewer.agent.md` (and Section 11).
+- Without AI, the two agent files are still useful: the author file is the most complete written guide to writing a
+  good test, and the reviewer file is a ready-made review checklist. Open them in any text editor.
 
 ### 9.12 Creating a new suite (new area)
 
