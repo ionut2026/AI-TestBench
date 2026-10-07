@@ -1,7 +1,7 @@
 import type { AddressInfo } from 'node:net'
 import type { Server } from 'node:http'
 import { join } from 'node:path'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { API_VERSION, AutomationService } from '../src/api/server'
 import { BridgeSession } from '../src/bridgeSession'
 import { CommandSentError, CommandTimeoutError, Environment, commandMatches, presetFor } from '../src/environment'
@@ -314,6 +314,34 @@ describe('timeline cap', () => {
     session.clear()
     expect(session.snapshot().timeline.droppedThrough).toBe(2)
     void session.dispose()
+  })
+})
+
+describe('own echoes', () => {
+  it('takes each publication\'s echo for its own, even when the same message is sent again 10 s later', () => {
+    vi.useFakeTimers({ now: 1_000_000 })
+    try {
+      const session = new BridgeSession(join(testbenchInfo.dir, 'simulator', 'resources', 'schemas'))
+      const link = session.link as any
+      link.publish = () => undefined
+      Object.defineProperty(link, 'mode', { value: 'bridge' })
+      const raw = JSON.stringify({ Version: 7, SystemStatusRequest: {} })
+      const echo = () => (session as any).onMessage('/is/iw/rx', raw)
+      session.publishRaw('/is/iw/rx', raw)
+      echo()
+      vi.advanceTimersByTime(9_999)
+      session.publishRaw('/is/iw/rx', raw)
+      vi.advanceTimersByTime(2)
+      echo()
+      expect(session.snapshot().otherBridge).toBeUndefined()
+      session.publishRaw('/is/iw/rx', raw)
+      vi.advanceTimersByTime(10_001)
+      echo()
+      expect(session.snapshot().otherBridge?.count).toBe(1)
+      void session.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

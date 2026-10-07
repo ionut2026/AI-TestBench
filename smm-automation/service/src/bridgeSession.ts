@@ -7,6 +7,8 @@ import {
 
 const MAX_PAIR_ISSUES = 300
 export const DEFAULT_TIMELINE_CAP = 20000
+/** How long the broker's echo of a message this session published is expected (and not taken for another Bridge's). */
+const ECHO_WINDOW_MS = 10000
 
 export class WaitTimeoutError extends Error {
   constructor(message: string, readonly details: Record<string, unknown>) {
@@ -47,7 +49,8 @@ export class BridgeSession extends EventEmitter<{ entry: [TimelineEntry] }> {
   private lastId = 0
   private pairs = new PairChecker()
   private pairIssues: PairIssue[] = []
-  private readonly ownEchoes = new Map<string, number>()
+  /** Expected echoes of own publications: `${topic} ${raw}` -> deadlines (ms), oldest first, one per publication. */
+  private readonly ownEchoes = new Map<string, number[]>()
   private otherBridge?: ForeignBridge
   private connection?: ConnectionSettings
   private linkError?: string
@@ -71,8 +74,13 @@ export class BridgeSession extends EventEmitter<{ entry: [TimelineEntry] }> {
       else if (status !== 'connected' && this.engine.active) this.engine.stop()
     })
     this.sweeper = setInterval(() => {
-      const late = this.pairs.sweep(Date.now())
+      const now = Date.now()
+      const late = this.pairs.sweep(now)
       if (late.length) this.addPairIssues(late)
+      for (const [key, deadlines] of this.ownEchoes) {
+        while (deadlines.length && deadlines[0] < now) deadlines.shift()
+        if (!deadlines.length) this.ownEchoes.delete(key)
+      }
     }, 1000)
     this.sweeper.unref()
   }
@@ -136,12 +144,11 @@ export class BridgeSession extends EventEmitter<{ entry: [TimelineEntry] }> {
   publishRaw(topic: string, raw: string): TimelineEntry {
     this.link.publish(topic, raw)
     const key = `${topic} ${raw}`
-    this.ownEchoes.set(key, (this.ownEchoes.get(key) ?? 0) + 1)
-    setTimeout(() => {
-      const left = (this.ownEchoes.get(key) ?? 1) - 1
-      if (left > 0) this.ownEchoes.set(key, left)
-      else this.ownEchoes.delete(key)
-    }, 10000).unref()
+    // Each publication expects its own echo: a counter decremented by a timer would let an old publication's timer
+    // (whose echo already came) cancel a newer identical publication's echo, which then looked like another Bridge.
+    const deadlines = this.ownEchoes.get(key) ?? []
+    deadlines.push(Date.now() + ECHO_WINDOW_MS)
+    this.ownEchoes.set(key, deadlines)
     return this.record('tx', topic, raw)
   }
 
@@ -154,10 +161,12 @@ export class BridgeSession extends EventEmitter<{ entry: [TimelineEntry] }> {
   private onMessage(topic: string, raw: string): void {
     if (this.link.mode === 'bridge' && topic.endsWith('/rx')) {
       const key = `${topic} ${raw}`
-      const echoes = this.ownEchoes.get(key)
-      if (echoes) {
-        if (echoes > 1) this.ownEchoes.set(key, echoes - 1)
-        else this.ownEchoes.delete(key)
+      const deadlines = this.ownEchoes.get(key)
+      const now = Date.now()
+      while (deadlines?.length && deadlines[0] < now) deadlines.shift()
+      if (deadlines?.length) {
+        deadlines.shift()
+        if (!deadlines.length) this.ownEchoes.delete(key)
         return
       }
       this.otherBridge = { count: (this.otherBridge?.count ?? 0) + 1, lastSeen: Date.now(), lastMessage: raw.slice(0, 300) }
