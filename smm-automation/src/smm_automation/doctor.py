@@ -3,7 +3,8 @@
 Without ``--deep`` it does not talk to appSMM: it checks the service, the TestBench pin, the tier's prerequisites
 (mock: starts and stops the mock environment; offline: appSMM.exe, port 1883; rig: broker reachable, rig control,
 operator) and lists the tags the run would exclude. ``--deep`` also starts the environment, connects as Bridge and
-asks appSMM for its state and version. On the rig that announces a Bridge to the real instrument, so it is opt-in.
+asks appSMM for its state and version. On the rig that announces a Bridge to the real instrument, so it is opt-in;
+there it then listens for a few seconds for messages another SMM Bridge (an SMM UI, a real Bridge) sends to appSMM.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import os
 import runpy
 import socket
 import sys
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -57,7 +59,8 @@ def _seconds(value: Any, default: float) -> float:
 class Doctor:
     def __init__(self, tier: str, operator: str = "none", deep: bool = False, client: ServiceClient | None = None,
                  env: Mapping[str, str] | None = None, autostart: bool = True, port_open: Callable[[str, int], bool] = tcp_open,
-                 is_tty: Callable[[], bool] | None = None, environment_file: Callable[[str], dict] = _environment_file):
+                 is_tty: Callable[[], bool] | None = None, environment_file: Callable[[str], dict] = _environment_file,
+                 listen_s: float = 5.0, sleep: Callable[[float], None] = time.sleep):
         self.tier, self.operator, self.deep = tier, operator, deep
         self.client = client or ServiceClient()
         self.env = os.environ if env is None else env
@@ -65,6 +68,7 @@ class Doctor:
         self.port_open = port_open
         self.is_tty = is_tty or (lambda: bool(sys.__stdin__ and sys.__stdin__.isatty()))
         self.environment_file = environment_file
+        self.listen_s, self.sleep = listen_s, sleep
         self.checks: list[Check] = []
 
     def add(self, name: str, status: str, detail: str) -> None:
@@ -224,12 +228,25 @@ class Doctor:
                 i = version.get("Integration", {})
                 self.add("appSMM", "OK", f"state {state.get('CurrentState')}, version "
                          f"{i.get('Major')}.{i.get('Minor')}.{i.get('Build')}.{i.get('Revision')}")
+                if self.tier == "rig":
+                    self._other_bridge()
             finally:
                 self.client.disconnect()
         except ServiceError as err:
             self.add("appSMM", "FAIL", str(err))
         finally:
             self._stop()
+
+    def _other_bridge(self) -> None:
+        """The service counts messages on appSMM's receive topics it did not publish itself. A connected but
+        silent Bridge cannot be seen; the test teardown repeats the check for every test."""
+        self.sleep(self.listen_s)
+        other = self.client.session().get("otherBridge")
+        if other:
+            self.add("other Bridge", "FAIL", f"another SMM Bridge published {other.get('count')} message(s) to appSMM "
+                     f"(last: {str(other.get('lastMessage', ''))[:120]}): disconnect it (SMM UI / real Bridge) before a run")
+        else:
+            self.add("other Bridge", "OK", f"no other Bridge traffic within {self.listen_s:g} s")
 
     def _ask(self, request: str, response: str) -> dict:
         mark = self.client.mark()

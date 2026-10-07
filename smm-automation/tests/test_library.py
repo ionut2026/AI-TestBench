@@ -443,3 +443,17 @@ def test_emergency_stop_goes_to_the_twin_or_the_operator(smm, monkeypatch):
     assert asked == [("console", 300.0)]
     with pytest.raises(AssertionError, match="needs the hardware twin"):
         smm.trigger_hardware_action("insertFrontIn")
+
+
+def test_finish_fails_when_another_bridge_published_during_the_test(smm):
+    smm.client.snapshot = {"timeline": {"droppedThrough": 0, "cap": 100}, "otherBridge": {"count": 2, "lastMessage": "x"}}
+    smm.begin_smm_test()
+    smm.finish_smm_test()  # traffic from before the test does not count
+    smm.begin_smm_test()
+    smm.client.snapshot = {"timeline": {"droppedThrough": 0, "cap": 100}, "otherBridge": {"count": 5, "lastMessage": "ShutdownRequest"}}
+    with pytest.raises(AssertionError, match=r"Another SMM Bridge published 3 message\(s\).*ShutdownRequest"):
+        smm.finish_smm_test()
+    smm.begin_smm_test()
+    smm.client.snapshot = {"timeline": {"droppedThrough": 0, "cap": 100}, "otherBridge": {"count": 1, "lastMessage": "y"}}
+    with pytest.raises(AssertionError, match="published 1 message"):
+        smm.finish_smm_test()  # count reset by a reconnection during the test

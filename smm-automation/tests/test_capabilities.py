@@ -94,6 +94,7 @@ class FakeService:
         self.error = error
         self.calls = []
         self.next_id = 0
+        self.session_body = {}
 
     def health(self):
         if self.error:
@@ -124,6 +125,9 @@ class FakeService:
     def mark(self):
         return self.next_id
 
+    def session(self):
+        return self.session_body
+
     def send(self, name, body=None):
         self.calls.append(("send", name))
 
@@ -138,7 +142,7 @@ ENV_FILE = {"OVERRIDES": {"broker": {"host": "rig", "port": 1883}}, "STARTUP_TIM
 
 def _doctor(tier, service, operator="none", deep=False, env=None, port_open=lambda h, p: False, tty=True):
     checks = run_doctor(tier, operator, deep, client=service, env=env or {}, autostart=False, port_open=port_open,
-                        is_tty=lambda: tty, environment_file=lambda t: ENV_FILE)
+                        is_tty=lambda: tty, environment_file=lambda t: ENV_FILE, sleep=lambda s: None)
     return {c.name: (c.status, c.detail) for c in checks}
 
 
@@ -204,3 +208,14 @@ def test_doctor_deep_asks_appsmm():
     assert checks["appSMM"] == ("OK", "state Idle, version 0.7.2305.25001")
     assert ("connect", 120.0) in service.calls and service.calls[-1] == ("stop",)
     assert "OK" in format_checks(run_doctor("mock", client=FakeService(), env={}, autostart=False, environment_file=lambda t: ENV_FILE))
+
+
+def test_doctor_deep_rig_detects_another_bridge():
+    service = FakeService()
+    checks = _doctor("rig", service, deep=True, port_open=lambda h, p: True)
+    assert checks["appSMM"][0] == "OK" and checks["other Bridge"] == ("OK", "no other Bridge traffic within 5 s")
+    service.session_body = {"otherBridge": {"count": 3, "lastMessage": '{"ShutdownRequest": {}}'}}
+    checks = _doctor("rig", service, deep=True, port_open=lambda h, p: True)
+    assert checks["other Bridge"][0] == "FAIL" and "3 message(s)" in checks["other Bridge"][1]
+    assert service.calls[-1] == ("stop",)
+    assert "other Bridge" not in _doctor("offline", FakeService(), deep=True, env={"SMM_APPSMM_EXE": sys.executable})

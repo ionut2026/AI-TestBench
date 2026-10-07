@@ -77,6 +77,7 @@ class SMMTestbench:
         self._trace_mark = 0
         self._test_trace_mark = 0
         self._test_started_ms = 0
+        self._other_bridge_start = 0
         self._in_test = False
         # Timeline ids already returned by a wait in this test, and the hidden state polls.
         self._consumed: set[int] = set()
@@ -883,12 +884,17 @@ class SMMTestbench:
             self._test_mark, self._test_trace_mark = self.client.mark_all()
         except ServiceError:
             self._test_mark, self._test_trace_mark = 0, 0
+        try:
+            self._other_bridge_start = int((self.client.session().get("otherBridge") or {}).get("count", 0))
+        except ServiceError:
+            self._other_bridge_start = 0
         self._mark, self._trace_mark = self._test_mark, self._test_trace_mark
 
     @keyword
     def finish_smm_test(self) -> None:
         """Test teardown: logs the test's timeline (and service logs when the test failed), and fails
-        the test if the service dropped part of its evidence (timeline or COP trace cap reached)."""
+        the test if the service dropped part of its evidence (timeline or COP trace cap reached) or another
+        SMM Bridge published to appSMM during the test (shared rig broker)."""
         self._in_test = False
         if self._hardware_faults_set:
             self._hardware_faults_set = False
@@ -914,18 +920,30 @@ class SMMTestbench:
     def _check_evidence_complete(self) -> None:
         lost = []
         try:
-            timeline = self.client.session().get("timeline") or {}
+            session = self.client.session()
             trace = self.client.environment().get("trace") or {}
         except ServiceError:
             return
+        timeline = session.get("timeline") or {}
         if int(timeline.get("droppedThrough", 0)) > self._test_mark:
             lost.append(f"timeline messages up to #{timeline['droppedThrough']} (the test started after #{self._test_mark}; "
                         f"cap {timeline.get('cap')}: raise --timeline-cap / SMM_TIMELINE_CAP)")
         if int(trace.get("droppedThrough", 0)) > self._test_trace_mark:
             lost.append(f"COP trace entries up to #{trace['droppedThrough']} (the test started after #{self._test_trace_mark}; "
                         f"cap {trace.get('cap')}: raise --trace-cap / SMM_TRACE_CAP)")
+        problems = []
         if lost:
-            raise AssertionError("The automation service dropped evidence of this test: " + "; ".join(lost))
+            problems.append("The automation service dropped evidence of this test: " + "; ".join(lost))
+        other = session.get("otherBridge") or {}
+        count = int(other.get("count", 0))
+        # the service resets the count when the Bridge connects again during the test
+        new = count - self._other_bridge_start if count >= self._other_bridge_start else count
+        if new > 0:
+            problems.append(f"Another SMM Bridge published {new} message(s) to appSMM during this test "
+                            f"(last: {str(other.get('lastMessage', ''))[:200]}): the result is not trustworthy; "
+                            "disconnect the other Bridge or SMM UI from the broker")
+        if problems:
+            raise AssertionError("\n".join(problems))
 
     @keyword
     def log_timeline(self, since: Any = "test", limit: int = 500) -> list:

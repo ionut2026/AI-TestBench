@@ -90,7 +90,7 @@ def smm_with_log(tmp_path, monkeypatch):
     lib = SMMTestbench(autostart=False)
     timeline: list[dict] = []
     lib.client = SimpleNamespace(query=lambda flt, limit=1000: [e for e in timeline if e["id"] > flt.get("since", 0)],
-                                 mark_all=lambda: (0, 0), environment=lambda: {})
+                                 mark_all=lambda: (0, 0), environment=lambda: {}, session=lambda: {})
     lib.begin_smm_test()
     return lib, timeline, tmp_path / "appSMM-2026-10-06-13-08-22.sil"
 

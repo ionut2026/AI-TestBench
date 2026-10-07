@@ -643,7 +643,10 @@ cd D:\projects\AI-TestBench\smm-automation
 Before a long run, `smm-auto doctor --tier <tier>` checks that the tier can run: service and API version, the pinned
 TestBench, `appSMM.exe` and port 1883 (offline), the broker, rig control and operator (rig), and lists the tags the run
 would exclude. `--deep` also starts the environment and asks appSMM for its state and version; on the rig this
-connects a Bridge to the instrument, so use it only when the instrument's owner agrees.
+connects a Bridge to the instrument, so use it only when the instrument's owner agrees. On the rig `--deep` then
+listens 5 s and **fails** ("other Bridge") if anything else (an SMM UI, a real Bridge) publishes to appSMM's receive
+topics: the framework must be the only Bridge on the instrument's broker. A connected Bridge that stays silent cannot
+be detected, so `Finish SMM Test` repeats the check for every test.
 
 ### 7.2 Most common commands
 
@@ -1369,6 +1372,11 @@ wait by accident. If a message might arrive **before** your send (e.g. a notific
 `Finish SMM Test` **fails** the test ("The automation service dropped evidence of this test") — raise the cap with
 `--timeline-cap` / `--trace-cap` on the service, or the environment variables.
 
+**The framework must be the only Bridge.** The service counts messages on appSMM's receive topics (`/is/…/rx`) that
+it did not publish itself (`otherBridge` in `/session`). If any arrive during a test, `Finish SMM Test` **fails** it
+("Another SMM Bridge published N message(s) to appSMM during this test"): on the rig another SMM UI or Bridge is
+connected to the instrument's broker and may have sent requests the test did not expect. Disconnect it and rerun.
+
 ### 10.3 Environment and service
 
 | Keyword | Arguments (default) | What it does |
@@ -1495,7 +1503,7 @@ directly (`smm_automation\sil.py`); ICD traffic appears in the `BridgeInterface`
 | Keyword | What it does |
 |---|---|
 | `Begin SMM Test` | Test setup: remembers the test start on the timeline and the COP trace; resets the per-test wait bookkeeping. |
-| `Finish SMM Test` | Test teardown: logs the test's timeline (with separators for reconnections, restarts, hardware actions…); on failure also the last environment log lines. Fails the test if the service dropped evidence of it (cap reached). |
+| `Finish SMM Test` | Test teardown: logs the test's timeline (with separators for reconnections, restarts, hardware actions…); on failure also the last environment log lines. Fails the test if the service dropped evidence of it (cap reached) or another SMM Bridge published to appSMM during it. |
 | `Log Timeline` (`since=test`, `limit=500`) | Logs the timeline as a table at any point. |
 
 ### 10.11 Resource keywords (`smm.resource`)
@@ -2208,6 +2216,7 @@ See checklist 18.3.
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | `--processes 3: parallel runs are only possible on the mock tier` | `--processes` above 1 on offline or rig | Run offline and rig without `--processes` (7.3) |
+| `Another SMM Bridge published N message(s) to appSMM during this test` / doctor `other Bridge FAIL` | An SMM UI or a real Bridge is connected to the rig's broker | Disconnect it, rerun; the framework must be the only Bridge (10.2) |
 | `No free parallel worker slot` | 32 parallel robot processes already hold `.service\worker-<n>.lock` (or a stuck run) | Stop the other runs (by PID); the locks are released when their processes end |
 | `Port 1883 is already in use: stop the other broker first` | Mosquitto from an earlier run, or the TestBench GUI is running | Close the TestBench GUI; stop leftover processes (17.2) |
 | `…smm-automation-service.mjs is missing: run 'npm install' and 'npm run build'` | Service not built | `cd service; npm run build` |

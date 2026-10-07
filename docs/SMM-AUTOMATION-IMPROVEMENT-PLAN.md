@@ -39,6 +39,11 @@ user's explicit go and an operator at the instrument (no racks or samples loaded
 | 0.2 | Baseline run: `smm-auto run --tier rig --outdir results\rig-baseline` (10 tests) | `output.xml` + `traceability.html` in `results\rig-baseline` |
 | 0.3 | Compare the 5 rig-runnable findings with offline: confirmed on real hardware, or twin artefact | README "Findings" updated with rig evidence |
 
+*0.1 status:* done. `doctor --tier rig --deep` on 2026-10-07 against 10.0.1.111:1883: appSMM Idle, version
+0.7.2305.5001 (offline uses 0.7.2305.25001), no other Bridge traffic within 5 s. The "no other Bridge" check uses the
+service's count of foreign messages on appSMM's receive topics; `Finish SMM Test` fails a test during which any arrive.
+0.2–0.3 wait for the operator's safety confirmation (instrument free of racks, covers closed, no SMM UI connected).
+
 ## Phase 1 — Trustworthy results (repo only) — 3–4 days
 
 | # | Finding | Work | Done when |
