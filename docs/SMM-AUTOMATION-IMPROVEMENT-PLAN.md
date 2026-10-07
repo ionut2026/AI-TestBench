@@ -42,7 +42,11 @@ user's explicit go and an operator at the instrument (no racks or samples loaded
 *0.1 status:* done. `doctor --tier rig --deep` on 2026-10-07 against 10.0.1.111:1883: appSMM Idle, version
 0.7.2305.5001 (offline uses 0.7.2305.25001), no other Bridge traffic within 5 s. The "no other Bridge" check uses the
 service's count of foreign messages on appSMM's receive topics; `Finish SMM Test` fails a test during which any arrive.
-0.2–0.3 wait for the operator's safety confirmation (instrument free of racks, covers closed, no SMM UI connected).
+*0.2–0.3 status:* done on 2026-10-07 after the user confirmed the instrument is free of racks; run without the operator
+(the 2 operator E-Stop tests excluded). 28 tests: 17 passed, 9 failed, 2 skipped, ~75 min. FINDING-1 reproduces on the
+rig; the rig adds candidate FINDING-4 (E-Stop after Shutdown does not hold, appSMM goes on to NotInitialized), which
+explains the Recover failures there. Two failures were framework issues and are fixed (Bridge handshake answers counted
+by SDS-2525392; initialization ending in E-Stop waited out the full budget). Details in the README "Findings".
 
 ## Phase 1 — Trustworthy results (repo only) — 3–4 days
 
@@ -168,6 +172,10 @@ ports, so `smm_automation\rig_ssh.py` implements the rig control over ssh/scp fr
 (`robot\environments\rig_ssh.example.toml`). Verified up to the login: `doctor` reports
 `Permission denied (publickey,password)` for this PC's key. Missing from the site: a login with key authentication and
 the board's commands to kill/start/check appSMM and the broker, and appSMM's log folder.
+The site uses PuTTY with a password login instead of a key, so `rig_ssh.py` also drives plink/pscp
+(`client = "plink"`, `password_file` naming a file the site creates; the framework never reads it). The board runs
+appSMM and the broker as docker containers (`docker stop|start appsmm`, `docker stop|start mosquitto`), logs in
+`/home/root/log/logs`; the site config lives outside the repo (`D:\rig\rig_ssh.toml`). Waiting for the password file.
 
 *6.1–6.4 and 0.1 (the command) status:* done in the repo; nothing has run against the real instrument yet (Phase 0
 and the site's rig control script are still open). Deviation in 6.1: the rig control lives on the Python side
@@ -266,6 +274,7 @@ each), full offline runs (~17 min each) and human review of every new or changed
 
 ## Open inputs needed from the user
 
-1. Go for Phase 0 rig runs, and who is the operator at the instrument.
-2. How the RTC board can be controlled remotely (OS, SSH or service manager, where credentials are kept) → Phase 6.
-3. Who confirms the 6 candidate findings with the appSMM team → README "Findings".
+1. ~~Go for Phase 0 rig runs, and who is the operator at the instrument.~~ Given (the user is the operator).
+2. ~~How the RTC board can be controlled remotely~~ PuTTY/password, docker containers (6.1). Still needed: the
+   password file `D:\rig\rtc.pw` and the login user.
+3. ~~Who confirms the candidate findings~~ The user, including the rig's FINDING-4.

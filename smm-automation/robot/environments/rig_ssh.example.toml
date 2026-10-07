@@ -2,12 +2,20 @@
 # fill in the site's values and set
 #   $env:SMM_RIG_CONTROL = '"D:\projects\AI-TestBench\smm-automation\.venv\Scripts\python.exe" -m smm_automation.rig_ssh --config D:\rig\rig_ssh.toml'
 # Then `smm-auto doctor --tier rig` shows which capabilities the rig gained. Leave a section out to keep its tests
-# excluded. Commands run through `ssh <user>@<host> "<command>"` with key authentication only (no password prompt);
-# no secrets belong in this file.
+# excluded. Nothing ever prompts, and no secrets belong in this file.
+#
+# client = "openssh" (default): `ssh <user>@<host> "<command>"` and scp, key authentication only.
+# client = "plink": PuTTY's plink and pscp (C:\Program Files\PuTTY on PATH) with -batch; for a board reached with a
+#   password in PuTTY, password_file names a file outside the repository holding only that password (the operator
+#   writes it; restrict it to your Windows account). The board's host key must already be in PuTTY's cache (connect
+#   once with PuTTY) or be given as hostkey.
 
 host = "10.0.1.111"
 user = "<login on the RTC board>"
-# identity = 'C:\Users\<you>\.ssh\id_ed25519'     # optional: private key to use
+# client = "plink"
+# password_file = 'D:\rig\rtc.pw'                 # plink only
+# hostkey = "<SHA256:... fingerprint>"            # plink only, if the key is not in PuTTY's cache
+# identity = 'C:\Users\<you>\.ssh\id_ed25519'     # optional: private key to use (.ppk for plink)
 # port = 22
 # ready_timeout_s = 180                           # how long to wait for appSMM / the broker after a start
 

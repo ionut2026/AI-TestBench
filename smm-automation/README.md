@@ -166,6 +166,28 @@ The failing tests are tagged `known-issue:FINDING-<n>`, so an offline run with o
 other failure is reported as NEW FAIL. When a finding is fixed or rejected, remove the tag (the report shows FIXED?
 when a tagged test passes).
 
+### Findings on appSMM 0.7.2305.5001 (rig, real instrument)
+
+First rig baseline (2026-10-07, `results\rig-baseline`, no operator, instrument free of racks): 28 tests, 17 passed,
+9 failed, 2 skipped. FINDING-1 (SDS-2854109, SDS-2854281) reproduces on the real instrument. FINDING-2 shows differently:
+
+| ID | Specification | Observed | Consequence |
+|---|---|---|---|
+| FINDING-4 (candidate) | SDS-2428419 (E-Stop after ShutdownResponse), SDS-2653094 (Recover) | After `ShutdownResponse OK` and `Idle` -> `E-Stop`, appSMM goes on to `NotInitialized` about 50 ms later without any RecoverRequest. A RecoverRequest sent in those 50 ms gets four EventNotifications `FatalError` "Command terminated abnormally", `RecoverResponse Error`, then `E-Stop` -> `NotInitialized`. Offline (0.7.2305.25001 + twin) appSMM stays in `E-Stop` | SDS-2428419, SDS-2532504 (RecoverResponse OK schema), SDS-2532510, the state matrix cell "SetConfigurationRequest in E-Stop" and the Recover part of FINDING-2 fail on the rig because `E-Stop` does not hold |
+
+Also seen, not counted as findings yet:
+
+- `OutputLaneResponse` reports `Front: Partial` the whole run although no rack was on the instrument (sensor, or an
+  object left in the output lane?).
+- Once (state matrix "SystemStatusRequest in Idle", after the failed Recovers) an InitializationRequest was
+  answered `OK` and appSMM went `Initializing` -> `E-Stop` within 100 ms; later initializations succeeded.
+
+The rig failures are not tagged `known-issue` yet: FINDING-4 is rig-only (the same tests pass offline) and waits for
+confirmation. Two failures of that run were framework issues and are fixed: SDS-2525392 counted the answers to the
+status requests the Bridge sends when appSMM reports itself connected (`Connect As Bridge` now waits for them and
+hides them from the tests), and an initialization that ends in `E-Stop` now fails at once instead of after the
+10-minute budget.
+
 Open interpretation for the reviewer: SDS-2854281 is tested as "warning after reconnection and RecoverRequest"; the
 test accepts the warning from the moment of reconnection on.
 

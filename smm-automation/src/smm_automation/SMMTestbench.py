@@ -55,6 +55,12 @@ TRANSIENT_STATES = ("PowerOn", "Initializing", "Clearing", "Configuring")
 FILTER_FIELDS = {"way", "topic", "analyzer", "valid", "since"}
 # After Initializing -> Idle appSMM goes on to Clearing; how long to wait for it before taking Idle as settled.
 CLEARING_GRACE_S = 15.0
+# Status requests the Bridge engine sends when appSMM reports itself connected (the TestBench's handshake), and how
+# long Connect As Bridge waits for that report and for appSMM's answers, so they do not land inside the first test.
+HANDSHAKE_REQUESTS = ("GetVersionRequest", "SystemStatusRequest", "TubeIdStatusRequest", "InputLaneRequest",
+                      "OutputLaneRequest", "FrontLoadInRequest", "FrontLoadOutRequest", "TrackStatusRequest")
+HANDSHAKE_TRIGGER_S = 2.0
+HANDSHAKE_SETTLE_S = 5.0
 # appSMM's log lines may be stamped slightly before the service saw the message (same PC, different clocks).
 LOG_CLOCK_SLACK_MS = 2000
 # How often a log check re-fetches the appSMM log from the rig while it waits.
@@ -82,6 +88,8 @@ class SMMTestbench:
         # Timeline ids already returned by a wait in this test, and the hidden state polls.
         self._consumed: set[int] = set()
         self._hidden: set[int] = set()
+        # The Bridge's connection handshake and appSMM's answers to it: hidden from every test's waits and counts.
+        self._handshake: set[int] = set()
         self._last_match: int | None = None
         # (mark, label) of reconnections and restarts inside the test, shown in the test's timeline.
         self._segments: list[tuple[int, str]] = []
@@ -222,10 +230,16 @@ class SMMTestbench:
 
         ``clear`` empties the timeline first. By default (``None``) it clears only outside a test
         (suite setup); inside a test the timeline is kept, so the evidence from before a
-        reconnection stays in the test's log."""
+        reconnection stays in the test's log.
+
+        After a fresh connection (timeline cleared) it waits for the status requests the Bridge sends when
+        appSMM reports itself connected and for appSMM's answers (up to a few seconds), and hides them from
+        the tests: on the rig they can otherwise arrive inside the first test and count as answers to it."""
         do_clear = not self._in_test if clear is None or str(clear).strip().lower() in ("", "none", "auto") else _truthy(clear)
+        start = self.client.mark()
         if do_clear:
             self._mark = None
+            self._handshake = set()
         else:
             self._set_marks()
             self._segment("Bridge connected again")
@@ -234,6 +248,8 @@ class SMMTestbench:
             self._test_mark = 0
         if _truthy(record_version):
             self._record_appsmm_version()
+        if do_clear:
+            self._handshake = self._settle_handshake(start) | self._hidden
         return snapshot
 
     @keyword
@@ -259,6 +275,33 @@ class SMMTestbench:
         self.disconnect_bridge(abrupt)
         time.sleep(timestr_to_secs(outage))
         return self.connect_as_bridge(timeout, clear=False, record_version=False)
+
+    def _settle_handshake(self, since: int) -> set[int]:
+        """Timeline ids of the Bridge's handshake requests (sent after appSMM's ConnectionNotification SMM
+        Connected) and of appSMM's answers, once these arrived; empty when appSMM did not report itself."""
+        try:
+            self.client.wait({"name": "ConnectionNotification", "way": "rx", "since": since,
+                              "match": {"Source": "SMM", "Status": "Connected"}}, HANDSHAKE_TRIGGER_S)
+        except ServiceError as err:
+            if err.kind == "timeout":
+                return set()
+            raise
+        deadline = time.monotonic() + HANDSHAKE_SETTLE_S
+        hidden: set[int] = set()
+        for request in self.client.query({"name": list(HANDSHAKE_REQUESTS), "way": "tx", "since": since}):
+            if int(request["id"]) in self._hidden:
+                continue  # the version request of Connect As Bridge itself
+            hidden.add(int(request["id"]))
+            answer = {"name": str(request["name"]).replace("Request", "Response"), "way": "rx", "since": int(request["id"]),
+                      "exclude": sorted(hidden | self._hidden)}
+            try:
+                hidden.add(int(self.client.wait(answer, max(deadline - time.monotonic(), 0.1))["id"]))
+            except ServiceError as err:
+                if err.kind != "timeout":
+                    raise
+                logger.info(f"appSMM did not answer the Bridge's {request['name']} (#{request['id']}) within "
+                            f"{HANDSHAKE_SETTLE_S:g} s")
+        return hidden
 
     def _record_appsmm_version(self) -> None:
         try:
@@ -397,6 +440,7 @@ class SMMTestbench:
         budget = timestr_to_secs(timeout)
         deadline = time.monotonic() + budget
         state = None
+        shutdown_sent = False
         try:
             for _ in range(5):
                 state = self._settled_state(deadline)
@@ -408,11 +452,15 @@ class SMMTestbench:
                 elif state == "NotInitialized" and target == "Idle":
                     self.request_and_wait_for_response("InitializationRequest", timeout="30s", Status="OK")
                     self._wait_idle_after_clearing(budget)
+                elif state == "NotInitialized" and shutdown_sent:
+                    raise AssertionError("appSMM does not stay in E-Stop: it went on to NotInitialized right after "
+                                         "the ShutdownRequest, so E-Stop cannot be reached through the ICD")
                 elif state == "NotInitialized":
                     raise AssertionError("Cannot bring appSMM from NotInitialized to E-Stop through the ICD")
                 else:
                     # Idle, NormalOperation, ... -> E-Stop; Recover follows on the next round if needed.
                     self.request_and_wait_for_response("ShutdownRequest", timeout="30s")
+                    shutdown_sent = True
                     self.wait_for_system_state("E-Stop", timeout="30s")
             raise AssertionError(f"appSMM did not reach {target} (last state {state})")
         finally:
@@ -477,11 +525,27 @@ class SMMTestbench:
         return str(entry["body"]["CurrentState"])
 
     def _wait_idle_after_clearing(self, budget: float) -> None:
-        self.wait_for_message_sequence(
-            "SystemStatusNotification | CurrentState=Clearing",
-            "SystemStatusNotification | PreviousState=Clearing | CurrentState=Idle",
-            timeout=f"{budget}s",
-        )
+        """After InitializationResponse OK: waits for Clearing -> Idle, and fails at once when the
+        initialization ends in E-Stop or NotInitialized instead (e.g. a hardware fault on the rig)."""
+        deadline = time.monotonic() + budget
+        since = self._mark
+        while True:
+            flt = {"name": "SystemStatusNotification", "way": "rx", "since": since, "exclude": self._wait_exclusions(None)}
+            try:
+                entry = self.client.wait(flt, max(deadline - time.monotonic(), 0.1))
+            except ServiceError as err:
+                self._fail_with_context(err)
+                raise
+            self._consume([entry])
+            since = int(entry["id"])
+            body = entry.get("body") or {}
+            logger.info(f"#{entry['id']} {entry['time']} SystemStatusNotification: {json.dumps(body)}")
+            current = body.get("CurrentState")
+            if current == "Idle" and body.get("PreviousState") == "Clearing":
+                return
+            if current in ("E-Stop", "NotInitialized"):
+                raise AssertionError(f"Initialization failed: appSMM went {body.get('PreviousState')} -> {current} "
+                                     f"(#{entry['id']}) instead of reaching Idle through Clearing")
 
     # ================================================================== state x request matrix
 
@@ -879,7 +943,7 @@ class SMMTestbench:
 
         self._test_started_ms = int(time.time() * 1000)
         self._in_test = True
-        self._consumed, self._hidden, self._last_match, self._segments = set(), set(), None, []
+        self._consumed, self._hidden, self._last_match, self._segments = set(), set(self._handshake), None, []
         try:
             self._test_mark, self._test_trace_mark = self.client.mark_all()
         except ServiceError:

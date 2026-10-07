@@ -93,6 +93,29 @@ def test_fetch_log_uses_scp(tmp_path):
     assert (tmp_path / "logs").is_dir()
 
 
+def test_plink_client_uses_putty_tools_with_a_password_file(tmp_path):
+    secret = tmp_path / "rtc.pw"
+    secret.write_text("x", encoding="utf-8")
+    board = Board()
+    rig = board.rig({**CONFIG, "client": "plink", "user": "root", "port": 22, "identity": None,
+                     "password_file": str(secret)})
+    rig.check()
+    rig.fetch_log(tmp_path / "logs")
+    ssh, scp = board.calls
+    assert ssh[0] == "plink" and ssh[-3:] == ["-ssh", "rig", "true"]
+    assert ssh[ssh.index("-pwfile") + 1] == str(secret) and "-batch" in ssh and ssh[ssh.index("-l") + 1] == "root"
+    assert ssh[ssh.index("-P") + 1] == "22" and "-i" not in ssh and "x" not in ssh
+    assert scp[0] == "pscp" and scp[-2:] == ["rig:/var/log/app/appSMM*.sil", str(tmp_path / "logs")]
+    assert "-pwfile" in scp and "-ssh" not in scp
+
+
+def test_plink_client_checks_its_settings(tmp_path):
+    with pytest.raises(RigSshError, match="password_file"):
+        RigSsh({"host": "rig", "client": "plink", "password_file": str(tmp_path / "missing")})
+    with pytest.raises(RigSshError, match="client must be"):
+        RigSsh({"host": "rig", "client": "telnet"})
+
+
 def test_main_refuses_unconfigured_subcommands(capsys):
     board = Board()
     rig = board.rig({"host": "rig"})

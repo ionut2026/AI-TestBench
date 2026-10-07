@@ -3,7 +3,9 @@
 The site describes the board in a TOML file (``--config <file>`` or ``SMM_RIG_SSH_CONFIG``; example in
 ``robot\\environments\\rig_ssh.example.toml``): host, user, and the shell commands that stop, start and check appSMM and the
 broker on the board, and where appSMM writes its ``.sil`` logs. Only the parts present in the file are offered as
-capabilities. ssh and scp run with ``BatchMode=yes`` (key authentication; never a password prompt)::
+capabilities. Two clients: OpenSSH (``client = "openssh"``, the default; ssh and scp with ``BatchMode=yes``, key
+authentication only) and PuTTY (``client = "plink"``; plink and pscp with ``-batch``, a key or a password read from
+``password_file``, a file outside the repository that only the site's operator writes). Neither ever prompts::
 
     $env:SMM_RIG_CONTROL = '"D:\\projects\\AI-TestBench\\smm-automation\\.venv\\Scripts\\python.exe" -m smm_automation.rig_ssh --config D:\\rig\\rig_ssh.toml'
 """
@@ -50,14 +52,36 @@ class RigSsh:
         if not self.host:
             raise RigSshError("the rig ssh config needs 'host'")
         user = str(config.get("user") or "")
-        self.target = f"{user}@{self.host}" if user else self.host
-        self.options = ["-o", "BatchMode=yes", "-o", f"ConnectTimeout={int(config.get('connect_timeout_s', 10))}"]
-        if config.get("port"):
-            self.options += ["-o", f"Port={int(config['port'])}"]
-        if config.get("identity"):
-            self.options += ["-i", str(config["identity"])]
-        self.ssh = str(config.get("ssh", "ssh"))
-        self.scp = str(config.get("scp", "scp"))
+        self.client = str(config.get("client", "openssh"))
+        if self.client == "openssh":
+            self.target = f"{user}@{self.host}" if user else self.host
+            self.options = ["-o", "BatchMode=yes", "-o", f"ConnectTimeout={int(config.get('connect_timeout_s', 10))}"]
+            if config.get("port"):
+                self.options += ["-o", f"Port={int(config['port'])}"]
+            if config.get("identity"):
+                self.options += ["-i", str(config["identity"])]
+            self.ssh = str(config.get("ssh", "ssh"))
+            self.scp = str(config.get("scp", "scp"))
+        elif self.client == "plink":
+            self.target = self.host
+            self.options = ["-batch"]
+            if user:
+                self.options += ["-l", user]
+            if config.get("port"):
+                self.options += ["-P", str(int(config["port"]))]
+            if config.get("identity"):
+                self.options += ["-i", str(config["identity"])]
+            if config.get("hostkey"):
+                self.options += ["-hostkey", str(config["hostkey"])]
+            if config.get("password_file"):
+                password_file = Path(str(config["password_file"]))
+                if not password_file.is_file():
+                    raise RigSshError(f"password_file {password_file} does not exist")
+                self.options += ["-pwfile", str(password_file)]
+            self.ssh = str(config.get("ssh", "plink"))
+            self.scp = str(config.get("scp", "pscp"))
+        else:
+            raise RigSshError(f"client must be 'openssh' or 'plink', not {self.client!r}")
         self.ready_timeout_s = float(config.get("ready_timeout_s", 180))
         self.run, self.sleep, self.port_open, self.clock = run, sleep, port_open, clock
 
@@ -96,10 +120,11 @@ class RigSsh:
         section = self._section("log")
         dest.mkdir(parents=True, exist_ok=True)
         source = f"{self.target}:{str(section['dir']).rstrip('/')}/{section.get('pattern', 'appSMM*.sil')}"
-        self._call([self.scp, *self.options, "-q", source, str(dest)], f"scp {source}")
+        self._call([self.scp, *self.options, "-q", source, str(dest)], f"{self.scp} {source}")
 
     def remote(self, command: str, check: bool = True, timeout_s: float = 120) -> subprocess.CompletedProcess[str]:
-        return self._call([self.ssh, *self.options, self.target, command], f"ssh {self.target} {command!r}", check, timeout_s)
+        ssh = [self.ssh, *self.options, *(["-ssh"] if self.client == "plink" else []), self.target, command]
+        return self._call(ssh, f"{self.ssh} {self.target} {command!r}", check, timeout_s)
 
     def _call(self, argv: list[str], what: str, check: bool = True, timeout_s: float = 120) -> subprocess.CompletedProcess[str]:
         try:

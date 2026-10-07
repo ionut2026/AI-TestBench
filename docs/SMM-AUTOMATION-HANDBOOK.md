@@ -752,6 +752,11 @@ site settings switch those tests on:
   and the log folder (a section left out keeps its tests excluded), and set
   `SMM_RIG_CONTROL='"<repo>\smm-automation\.venv\Scripts\python.exe" -m smm_automation.rig_ssh --config D:\rig\rig_ssh.toml'`.
   Its `capabilities` first tries a login (`ssh … true`), so `doctor` reports a refused key as `rig control FAIL`.
+  A board reached with a password in PuTTY uses `client = "plink"`: PuTTY's plink and pscp with `-batch`, the host
+  key from PuTTY's cache, and `password_file` naming a file outside the repository that holds only the password (the
+  operator writes it; the framework passes its path with `-pwfile` and never reads or logs it). On the SMM RTC board
+  appSMM and Mosquitto are docker containers: `docker stop|start appsmm`, `docker stop|start mosquitto`, logs in
+  `/home/root/log/logs`.
 - **Operator** — `smm-auto run --tier rig --operator console` prints each manual step (e.g. "Press the EMERGENCY STOP
   button… then release it") and waits until the operator types `done` (or `fail <reason>`); `--operator dialog`
   shows a PASS/FAIL dialog instead. Each step waits `${OPERATOR_TIMEOUT}` (300 s). This enables
@@ -1365,7 +1370,9 @@ Waits and checks look only at messages **after the mark** unless you pass:
 **One wait per message.** In the default window (and with `since=last`) a message that already satisfied an earlier wait
 in the same test cannot satisfy another one: two `Wait For Message    SystemStatusNotification` in a row need **two**
 notifications. The library's own internal polls (the `GetVersionRequest` sent by `Connect As Bridge`, the
-`SystemStatusRequest` polls of `Bring SMM To State`) are never matched by a wait. Order is **not** implied by two
+`SystemStatusRequest` polls of `Bring SMM To State`) and the Bridge's connection handshake (the status requests the
+Bridge engine sends when appSMM reports itself connected, and appSMM's answers) are never matched by a wait or
+counted. Order is **not** implied by two
 consecutive waits; assert order with `Wait For Message Sequence` (or `since=last`). With an explicit `since=test`,
 `since=all` or `since=<id>`, earlier matches count again (only the internal polls are skipped).
 
@@ -1399,7 +1406,7 @@ connected to the instrument's broker and may have sent requests the test did not
 
 | Keyword | Arguments (default) | What it does |
 |---|---|---|
-| `Connect As Bridge` | `timeout=10s`, `clear=auto`, `record_version=True` | Connects to the broker as SMMBridge, announces Bridge/IW/analyzers as Connected, starts the heartbeat. `clear=auto` empties the timeline only **outside** a test (suite setup); inside a test the timeline is kept and a "Bridge connected again" separator appears in the log. `clear=True`/`False` forces it. Records the appSMM version (GetVersionRequest, hidden from waits) in the report. |
+| `Connect As Bridge` | `timeout=10s`, `clear=auto`, `record_version=True` | Connects to the broker as SMMBridge, announces Bridge/IW/analyzers as Connected, starts the heartbeat. `clear=auto` empties the timeline only **outside** a test (suite setup); inside a test the timeline is kept and a "Bridge connected again" separator appears in the log. `clear=True`/`False` forces it. Records the appSMM version (GetVersionRequest, hidden from waits) in the report. After a fresh connection it waits up to ~7 s for the Bridge's handshake (status requests sent on appSMM's ConnectionNotification "SMM Connected") and appSMM's answers, and hides them from every test of the suite; on the rig they otherwise arrived inside the first test. |
 | `Disconnect Bridge` | `abrupt=False` | Clean disconnect, or `abrupt=True` = cut the connection so the broker publishes the Bridge's last will (like a crash). |
 | `Interrupt Bridge Connection` | `outage=3s`, `timeout=10s`, `abrupt=True` | Lost-Bridge stimulus: disconnects, stays away for `outage` (nothing can be observed meanwhile), reconnects **without** clearing the timeline. Use this instead of `Disconnect Bridge` + `Sleep` + `Connect As Bridge`. |
 | `Bridge Should Be Connected` | — | Fails if the Bridge link is not connected. |

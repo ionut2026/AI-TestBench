@@ -255,6 +255,90 @@ def test_connect_as_bridge_clears_only_outside_a_test(smm):
     assert _last(smm.client, "connect") == ("connect", True)
 
 
+
+class HandshakeClient(FakeClient):
+    """appSMM reports itself connected; the Bridge has sent two handshake requests, one is answered."""
+
+    def __init__(self, connected=True, answered=("SystemStatusResponse",)):
+        super().__init__()
+        self.connected, self.answered = connected, answered
+
+    def wait(self, flt, timeout_s):
+        if flt["name"] == "ConnectionNotification" and not self.connected:
+            self.calls.append(("wait", flt))
+            raise ServiceError(408, "no ConnectionNotification", "timeout")
+        if flt["name"].endswith("Response") and flt["name"] not in self.answered:
+            self.calls.append(("wait", flt))
+            raise ServiceError(408, "no answer", "timeout")
+        return super().wait(flt, timeout_s)
+
+    def query(self, flt=None, limit=1000):
+        if flt and flt.get("way") == "tx":
+            self.calls.append(("query", flt))
+            return [{"id": 51, "name": "SystemStatusRequest"}, {"id": 52, "name": "TubeIdStatusRequest"}]
+        return super().query(flt, limit)
+
+
+def test_connect_hides_the_bridge_handshake_from_the_tests(smm):
+    smm.client = HandshakeClient()
+    smm._in_test = False
+    smm.connect_as_bridge(record_version=False)
+    answer = [c[1] for c in smm.client.calls if c[0] == "wait" and c[1]["name"] == "SystemStatusResponse"][0]
+    assert answer["since"] == 51 and answer["way"] == "rx"
+    answer_id = smm.client.next_id
+    assert smm._handshake == {51, 52, answer_id}
+    smm.begin_smm_test()
+    assert smm._hidden == {51, 52, answer_id}
+    smm.wait_for_message_entry("SystemStatusResponse")
+    assert _last(smm.client, "wait")[1]["exclude"] == [51, 52, answer_id]
+
+
+def test_connect_skips_the_handshake_when_appsmm_does_not_report_itself(smm):
+    smm.client = HandshakeClient(connected=False)
+    smm._in_test = False
+    smm.connect_as_bridge(record_version=False)
+    assert smm._handshake == set()
+    assert not [c for c in smm.client.calls if c[0] == "query"]
+
+
+def test_reconnecting_in_a_test_keeps_the_handshake(smm):
+    smm._handshake = {9}
+    smm.connect_as_bridge(record_version=False)
+    assert smm._handshake == {9}
+
+
+def test_initialization_ending_in_e_stop_fails_at_once(smm):
+    smm.client.notifications = [{"PreviousState": "NotInitialized", "CurrentState": "Initializing"},
+                                {"PreviousState": "Initializing", "CurrentState": "E-Stop"}]
+    with pytest.raises(AssertionError, match="Initializing -> E-Stop"):
+        smm._wait_idle_after_clearing(600)
+    assert smm.client.notifications == []
+
+
+def test_initialization_waits_for_idle_through_clearing(smm):
+    smm.client.notifications = [{"PreviousState": "Initializing", "CurrentState": "Idle"},
+                                {"PreviousState": "Idle", "CurrentState": "Clearing"},
+                                {"PreviousState": "Clearing", "CurrentState": "Idle"}]
+    smm._wait_idle_after_clearing(600)
+    waits = [c[1] for c in smm.client.calls if c[0] == "wait" and c[1]["name"] == "SystemStatusNotification"]
+    assert [w["since"] for w in waits[1:]] == sorted(smm._consumed)[:2]
+    assert len(smm._consumed) == 3
+
+
+def test_e_stop_that_does_not_hold_is_reported(monkeypatch):
+    smm = FakeSmm("Idle")
+    original = smm.request_and_wait_for_response
+
+    def shutdown_then_not_initialized(request, *a, **k):
+        result = original(request, *a, **k)
+        if request == "ShutdownRequest":
+            smm.state = "NotInitialized"
+        return result
+
+    smm.request_and_wait_for_response = shutdown_then_not_initialized
+    with pytest.raises(AssertionError, match="does not stay in E-Stop"):
+        smm.bring_smm_to_state("E-Stop")
+
 def test_stimuli_mark_the_cop_trace(smm):
     smm.client.trace_id = 42
     smm.send_icd_message("RecoverRequest")
