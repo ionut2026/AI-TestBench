@@ -163,6 +163,12 @@ E-Stop → per-key `Error`, state unchanged. The mock appSMM crashed on a `null`
 | 6.3 | 4 `needs:twin` tests never run on rig | `Operator Action` keyword (prompt + confirm, tag `needs:operator`) for rack pick-up/fatal error, or real actuation where a safe command exists |
 | 6.4 | CI hardware job assumes runner setup | Job checks out / verifies the TestBench pin and runs `doctor --tier rig` first |
 
+*6.1 ssh rig control (2026-10-07):* the instrument PC 10.0.1.111 offers only ssh (OpenSSH 8.0) of the usual remote
+ports, so `smm_automation\rig_ssh.py` implements the rig control over ssh/scp from a site TOML file
+(`robot\environments\rig_ssh.example.toml`). Verified up to the login: `doctor` reports
+`Permission denied (publickey,password)` for this PC's key. Missing from the site: a login with key authentication and
+the board's commands to kill/start/check appSMM and the broker, and appSMM's log folder.
+
 *6.1–6.4 and 0.1 (the command) status:* done in the repo; nothing has run against the real instrument yet (Phase 0
 and the site's rig control script are still open). Deviation in 6.1: the rig control lives on the Python side
 (`smm_automation\rigcontrol.py`, a site program named by `SMM_RIG_CONTROL` with the subcommands `capabilities`,

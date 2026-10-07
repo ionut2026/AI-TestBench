@@ -1,0 +1,29 @@
+# Rig control over ssh (smm_automation.rig_ssh). Copy this file outside the repository (e.g. D:\rig\rig_ssh.toml),
+# fill in the site's values and set
+#   $env:SMM_RIG_CONTROL = '"D:\projects\AI-TestBench\smm-automation\.venv\Scripts\python.exe" -m smm_automation.rig_ssh --config D:\rig\rig_ssh.toml'
+# Then `smm-auto doctor --tier rig` shows which capabilities the rig gained. Leave a section out to keep its tests
+# excluded. Commands run through `ssh <user>@<host> "<command>"` with key authentication only (no password prompt);
+# no secrets belong in this file.
+
+host = "10.0.1.111"
+user = "<login on the RTC board>"
+# identity = 'C:\Users\<you>\.ssh\id_ed25519'     # optional: private key to use
+# port = 22
+# ready_timeout_s = 180                           # how long to wait for appSMM / the broker after a start
+
+# restart-appsmm (enables tests tagged requires:restart): stop must kill appSMM without a goodbye
+# [appsmm]
+# stop = "<command that kills appSMM, e.g. sudo systemctl kill -s KILL appsmm>"
+# start = "<command that starts it, e.g. sudo systemctl start appsmm>"
+# running = "<command that exits 0 once it runs, e.g. systemctl is-active --quiet appsmm>"
+
+# restart-broker (enables tests tagged requires:broker-restart); readiness = the port accepts connections
+# [broker]
+# stop = "<e.g. sudo systemctl stop mosquitto>"
+# start = "<e.g. sudo systemctl start mosquitto>"
+# port = 1883
+
+# fetch-log (enables tests tagged needs:applog): copies <dir>/<pattern> with scp
+# [log]
+# dir = "<folder of appSMM's SmartInspect logs on the board>"
+# pattern = "appSMM*.sil"

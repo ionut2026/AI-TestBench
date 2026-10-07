@@ -746,6 +746,12 @@ site settings switch those tests on:
   `restart-broker` enables `requires:broker-restart`, `fetch-log` enables `needs:applog`. `SMM_RIG_CONTROL_TIMEOUT`
   (seconds, default 300) bounds each call. The log check compares appSMM's timestamps (rig clock) with this PC's
   clock (2 s slack), so keep both NTP-synchronised.
+  **Ready-made ssh version:** `smm_automation.rig_ssh` implements the contract over ssh/scp (key authentication,
+  `BatchMode=yes`, never a password prompt). Copy `robot\environments\rig_ssh.example.toml` outside the repository
+  (e.g. `D:\rig\rig_ssh.toml`), fill in the login and the board's stop/start/check commands for appSMM and the broker
+  and the log folder (a section left out keeps its tests excluded), and set
+  `SMM_RIG_CONTROL='"<repo>\smm-automation\.venv\Scripts\python.exe" -m smm_automation.rig_ssh --config D:\rig\rig_ssh.toml'`.
+  Its `capabilities` first tries a login (`ssh … true`), so `doctor` reports a refused key as `rig control FAIL`.
 - **Operator** — `smm-auto run --tier rig --operator console` prints each manual step (e.g. "Press the EMERGENCY STOP
   button… then release it") and waits until the operator types `done` (or `fail <reason>`); `--operator dialog`
   shows a PASS/FAIL dialog instead. Each step waits `${OPERATOR_TIMEOUT}` (300 s). This enables
