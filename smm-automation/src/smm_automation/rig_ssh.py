@@ -2,8 +2,9 @@
 
 The site describes the board in a TOML file (``--config <file>`` or ``SMM_RIG_SSH_CONFIG``; example in
 ``robot\\environments\\rig_ssh.example.toml``): host, user, and the shell commands that stop, start and check appSMM and the
-broker on the board, and where appSMM writes its ``.sil`` logs. Only the parts present in the file are offered as
-capabilities. Two clients: OpenSSH (``client = "openssh"``, the default; ssh and scp with ``BatchMode=yes``, key
+broker on the board, and where appSMM writes its ``.sil`` logs (with an optional board command that first stages them,
+e.g. out of a container). Only the parts present in the file are offered as capabilities; ``clock`` (the board's log
+clock against this PC's) is always offered and reads the board's time with ``[clock] command``. Two clients: OpenSSH (``client = "openssh"``, the default; ssh and scp with ``BatchMode=yes``, key
 authentication only) and PuTTY (``client = "plink"``; plink and pscp with ``-batch``, a key or a password read from
 ``password_file``, a file outside the repository that only the site's operator writes). Neither ever prompts::
 
@@ -13,6 +14,7 @@ authentication only) and PuTTY (``client = "plink"``; plink and pscp with ``-bat
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import os
 import socket
 import subprocess
@@ -24,6 +26,8 @@ from pathlib import Path
 from typing import Any
 
 CONFIG_ENV = "SMM_RIG_SSH_CONFIG"
+# Prints the board's local wall-clock time (what appSMM stamps its log lines with); 1 s resolution.
+DEFAULT_CLOCK_COMMAND = "date +%Y-%m-%dT%H:%M:%S"
 
 Runner = Callable[[list[str], float], "subprocess.CompletedProcess[str]"]
 
@@ -46,7 +50,8 @@ def _port_open(host: str, port: int) -> bool:
 
 class RigSsh:
     def __init__(self, config: dict[str, Any], run: Runner = _run, sleep: Callable[[float], None] = time.sleep,
-                 port_open: Callable[[str, int], bool] = _port_open, clock: Callable[[], float] = time.monotonic):
+                 port_open: Callable[[str, int], bool] = _port_open, clock: Callable[[], float] = time.monotonic,
+                 wall_ms: Callable[[], float] = lambda: time.time() * 1000):
         self.config = config
         self.host = str(config.get("host") or "")
         if not self.host:
@@ -83,7 +88,7 @@ class RigSsh:
         else:
             raise RigSshError(f"client must be 'openssh' or 'plink', not {self.client!r}")
         self.ready_timeout_s = float(config.get("ready_timeout_s", 180))
-        self.run, self.sleep, self.port_open, self.clock = run, sleep, port_open, clock
+        self.run, self.sleep, self.port_open, self.clock, self.wall_ms = run, sleep, port_open, clock, wall_ms
 
     def capabilities(self) -> list[str]:
         caps = []
@@ -94,6 +99,7 @@ class RigSsh:
             caps.append("restart-broker")
         if log.get("dir"):
             caps.append("fetch-log")
+        caps.append("clock")
         return caps
 
     def check(self) -> None:
@@ -119,8 +125,30 @@ class RigSsh:
     def fetch_log(self, dest: Path) -> None:
         section = self._section("log")
         dest.mkdir(parents=True, exist_ok=True)
+        if section.get("prepare"):
+            self.remote(section["prepare"])
         source = f"{self.target}:{str(section['dir']).rstrip('/')}/{section.get('pattern', 'appSMM*.sil')}"
         self._call([self.scp, *self.options, "-q", source, str(dest)], f"{self.scp} {source}")
+
+    def clock_offset(self, samples: int = 3) -> tuple[float, float]:
+        """(offset, uncertainty) in ms of the board's wall clock, read as this PC's local time (as the log reader
+        does), against this PC's clock. Each sample bounds the offset by the time before and after the remote call."""
+        command = str(self._section("clock").get("command") or DEFAULT_CLOCK_COMMAND)
+        low, high = -float("inf"), float("inf")
+        for _ in range(max(samples, 1)):
+            before = self.wall_ms()
+            text = self.remote(command, timeout_s=30).stdout.strip()
+            after = self.wall_ms()
+            try:
+                stamp = dt.datetime.fromisoformat(text.replace(",", "."))
+            except ValueError:
+                raise RigSshError(f"the clock command {command!r} printed {text!r}, not an ISO time") from None
+            board = stamp.replace(tzinfo=None).timestamp() * 1000
+            resolution = 1 if "." in text or "," in text else 1000
+            low, high = max(low, board - after), min(high, board + resolution - before)
+        if low > high:
+            low, high = high, low
+        return (low + high) / 2, (high - low) / 2
 
     def remote(self, command: str, check: bool = True, timeout_s: float = 120) -> subprocess.CompletedProcess[str]:
         ssh = [self.ssh, *self.options, *(["-ssh"] if self.client == "plink" else []), self.target, command]
@@ -168,6 +196,7 @@ def main(argv: Sequence[str] | None = None, rig: RigSsh | None = None) -> int:
     parser.add_argument("--config", help=f"site TOML file (default: ${CONFIG_ENV})")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("capabilities")
+    sub.add_parser("clock")
     for name in ("restart-appsmm", "restart-broker"):
         sub.add_parser(name).add_argument("--down-ms", type=int, default=0)
     sub.add_parser("fetch-log").add_argument("dir", type=Path)
@@ -177,6 +206,9 @@ def main(argv: Sequence[str] | None = None, rig: RigSsh | None = None) -> int:
         if args.command == "capabilities":
             rig.check()
             print(" ".join(rig.capabilities()))
+        elif args.command == "clock":
+            offset, uncertainty = rig.clock_offset()
+            print(f"{offset:.0f} {uncertainty:.0f}")
         else:
             if args.command not in rig.capabilities():
                 raise RigSshError(f"{args.command} is not configured in the rig ssh config")

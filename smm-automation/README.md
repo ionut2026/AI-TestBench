@@ -43,7 +43,8 @@ A tag excludes a test when the tier lacks the capability (`smm-auto run` prints 
 the emergency stop and other `Operator Action` steps. `smm-auto doctor --tier <tier>` checks a tier before a long run
 (service, pinned TestBench, appSMM.exe/broker port, rig broker, rig control, operator; `--deep` also asks appSMM its
 state; on the rig only with the instrument's owner's agreement, it connects a Bridge). The rig's log check compares
-appSMM's timestamps with this PC's clock: keep both NTP-synchronised.
+appSMM's timestamps with this PC's clock, corrected by the rig clock's offset when the rig control offers `clock`
+(the ssh rig control does); otherwise keep both NTP-synchronised.
 
 `review:pending` tests run on every tier and are labelled UNREVIEWED in the report (`--exclude-pending` leaves them out).
 `smm-auto run` exits with the number of **new** failures: failures of tests tagged `known-issue:FINDING-<n>` (see

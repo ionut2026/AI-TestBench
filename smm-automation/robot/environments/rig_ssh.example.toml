@@ -31,7 +31,17 @@ user = "<login on the RTC board>"
 # start = "<e.g. sudo systemctl start mosquitto>"
 # port = 1883
 
-# fetch-log (enables tests tagged needs:applog): copies <dir>/<pattern> with scp
+# fetch-log (enables tests tagged needs:applog): runs prepare (if set), then copies <dir>/<pattern> with scp
 # [log]
+# prepare = "<optional command that stages the logs in dir first>"
 # dir = "<folder of appSMM's SmartInspect logs on the board>"
 # pattern = "appSMM*.sil"
+# On the SMM RTC board appSMM logs inside its container (/var/log/appSMM*.sil, no host folder), so stage them:
+# prepare = "rm -rf /tmp/smm-applog && mkdir -p /tmp/smm-applog && for f in $(docker exec appsmm sh -c 'ls -t /var/log/appSMM*.sil | head -n 2'); do docker cp appsmm:$f /tmp/smm-applog/; done"
+# dir = "/tmp/smm-applog"
+
+# clock (always offered): prints the board clock's offset to this PC's, which the library takes off the times in the
+# fetched log. command prints the board's local time as ISO 8601; the default `date +%Y-%m-%dT%H:%M:%S` has 1 s
+# resolution, so give a millisecond one if the board has it:
+# [clock]
+# command = "python3 -c 'import datetime; print(datetime.datetime.now().isoformat())'"

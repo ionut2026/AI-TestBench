@@ -65,6 +65,8 @@ HANDSHAKE_SETTLE_S = 5.0
 LOG_CLOCK_SLACK_MS = 2000
 # How often a log check re-fetches the appSMM log from the rig while it waits.
 LOG_FETCH_INTERVAL_S = 2.0
+# How long a measured offset of the rig's log clock is used before it is measured again.
+LOG_CLOCK_REMEASURE_S = 600.0
 # What the operator does at the instrument for a hardware action when there is no hardware twin (rig tier).
 OPERATOR_INSTRUCTIONS = {
     "emergencyStop": "Press the EMERGENCY STOP button of the SMM, then release (unlock) it again so the system can be "
@@ -100,6 +102,8 @@ class SMMTestbench:
         self._rig_control_loaded = False
         self._log_fetches = 0
         self._log_fetched = False
+        # (offset ms, uncertainty ms, when measured) of the rig's log clock against this PC's (rig control 'clock').
+        self._log_clock: tuple[float, float, float] | None = None
         self._slot: int | None = None
         self._slot_handle: Any = None
 
@@ -853,7 +857,8 @@ class SMMTestbench:
         """ICD messages appSMM wrote to its SmartInspect log (``.sil``) since ``since`` (``test``, ``all``, an
         entry or a time). Each is ``{time, way (RX/TX from appSMM's side), topic, name, body, line}``."""
         target = self._log_target()
-        found = [m.as_dict() for m in sil.logged_messages(target, self._log_since_ms(since)) if not name or m.name == name]
+        offset, _ = self._log_clock_offset()
+        found = [m.as_dict() for m in sil.logged_messages(target, self._log_since_ms(since), offset) if not name or m.name == name]
         logger.info(f"{len(found)} ICD message(s){' ' + name if name else ''} in the appSMM log {target}")
         return found
 
@@ -867,6 +872,8 @@ class SMMTestbench:
             raise ValueError("Name at least one ICD message")
         target = self._log_target()
         fetching = self._log_fetched
+        offset, uncertainty = self._log_clock_offset()
+        slack = LOG_CLOCK_SLACK_MS + uncertainty
         since_ms = self._log_since_ms(since)
         start = int(since["id"]) - 1 if isinstance(since, dict) else (0 if str(since).lower() in ("all", "none") else self._test_mark)
         exchanged = [e for e in self.client.query({"since": start}, 2000) if e.get("name") in names]
@@ -875,8 +882,8 @@ class SMMTestbench:
         deadline = time.monotonic() + timestr_to_secs(timeout)
         while True:
             # the log stamps lines with appSMM's clock; allow for the time between receiving and logging
-            logged = sil.logged_messages(target, since_ms - LOG_CLOCK_SLACK_MS)
-            matched, missing = _match_logged(exchanged, logged)
+            logged = sil.logged_messages(target, since_ms - slack, offset)
+            matched, missing = _match_logged(exchanged, logged, slack)
             if not missing or time.monotonic() >= deadline:
                 break
             if fetching:
@@ -896,6 +903,25 @@ class SMMTestbench:
             raise AssertionError("The appSMM log location is unknown in this tier (set ${APPSMM_LOG}, or on the rig a rig control "
                                  "with fetch-log in SMM_RIG_CONTROL)")
         return Path(location)
+
+    def _log_clock_offset(self) -> tuple[float, float]:
+        """(offset, uncertainty) in ms of the fetched rig log's clock against this PC's; (0, 0) for a local log or a
+        rig control without ``clock``. Measured once and again after LOG_CLOCK_REMEASURE_S."""
+        if not self._log_fetched:
+            return 0.0, 0.0
+        if self._log_clock and time.monotonic() - self._log_clock[2] < LOG_CLOCK_REMEASURE_S:
+            return self._log_clock[0], self._log_clock[1]
+        control = self._control()
+        try:
+            if not (control and control.has("clock")):
+                return 0.0, 0.0
+            offset, uncertainty = control.log_clock_offset()
+        except RigControlError as err:
+            logger.warn(f"Rig control: cannot read the rig's clock, log times are taken as is: {err}")
+            return 0.0, 0.0
+        self._log_clock = (offset, uncertainty, time.monotonic())
+        logger.info(f"The rig's log clock is {offset / 1000:+.1f} s (+/- {uncertainty / 1000:.1f} s) off this PC's clock")
+        return offset, uncertainty
 
     def _log_since_ms(self, since: Any) -> float:
         if since is None or str(since).lower() == "test":
@@ -1209,9 +1235,10 @@ def _fault_rule(rule: Any) -> dict:
     return out
 
 
-def _match_logged(exchanged: list[dict], logged: list[sil.LoggedMessage]) -> tuple[list[dict], list[dict]]:
+def _match_logged(exchanged: list[dict], logged: list[sil.LoggedMessage],
+                  slack_ms: float = LOG_CLOCK_SLACK_MS) -> tuple[list[dict], list[dict]]:
     """Pairs each timeline entry with its own log line (same direction, topic, name and content, logged within
-    LOG_CLOCK_SLACK_MS). The timeline's ``tx`` (sent by the test) is appSMM's ``RX``."""
+    ``slack_ms``). The timeline's ``tx`` (sent by the test) is appSMM's ``RX``."""
     used: set[int] = set()
     matched, missing = [], []
     for e in sorted(exchanged, key=lambda x: _epoch_ms(x)):
@@ -1219,7 +1246,7 @@ def _match_logged(exchanged: list[dict], logged: list[sil.LoggedMessage]) -> tup
         when = _epoch_ms(e)
         body = _canonical(e.get("body"))
         hit = next((i for i, m in enumerate(logged) if i not in used and m.way == way and m.topic == e["topic"]
-                    and m.name == e["name"] and abs(m.time_ms - when) <= LOG_CLOCK_SLACK_MS and _canonical(m.body) == body), None)
+                    and m.name == e["name"] and abs(m.time_ms - when) <= slack_ms and _canonical(m.body) == body), None)
         if hit is None:
             missing.append(e)
         else:

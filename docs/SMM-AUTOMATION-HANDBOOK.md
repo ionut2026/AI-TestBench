@@ -745,18 +745,24 @@ site settings switch those tests on:
   subcommands it lists under `capabilities` are used: `restart-appsmm` enables `requires:restart`,
   `restart-broker` enables `requires:broker-restart`, `fetch-log` enables `needs:applog`. `SMM_RIG_CONTROL_TIMEOUT`
   (seconds, default 300) bounds each call. The log check compares appSMM's timestamps (rig clock) with this PC's
-  clock (2 s slack), so keep both NTP-synchronised.
+  clock (2 s slack). A rig control that also offers `clock` (prints `<offset_ms> <uncertainty_ms>`, the board clock
+  against this PC's) lets the library take the offset off the log times and widen the slack by the uncertainty;
+  without it keep both clocks NTP-synchronised. `doctor` shows the measured offset as `rig clock`.
   **Ready-made ssh version:** `smm_automation.rig_ssh` implements the contract over ssh/scp (key authentication,
   `BatchMode=yes`, never a password prompt). Copy `robot\environments\rig_ssh.example.toml` outside the repository
   (e.g. `D:\rig\rig_ssh.toml`), fill in the login and the board's stop/start/check commands for appSMM and the broker
-  and the log folder (a section left out keeps its tests excluded), and set
+  and the log folder (a section left out keeps its tests excluded; `[log] prepare` runs before the copy), and set
   `SMM_RIG_CONTROL='"<repo>\smm-automation\.venv\Scripts\python.exe" -m smm_automation.rig_ssh --config D:\rig\rig_ssh.toml'`.
   Its `capabilities` first tries a login (`ssh … true`), so `doctor` reports a refused key as `rig control FAIL`.
   A board reached with a password in PuTTY uses `client = "plink"`: PuTTY's plink and pscp with `-batch`, the host
   key from PuTTY's cache, and `password_file` naming a file outside the repository that holds only the password (the
   operator writes it; the framework passes its path with `-pwfile` and never reads or logs it). On the SMM RTC board
-  appSMM and Mosquitto are docker containers: `docker stop|start appsmm`, `docker stop|start mosquitto`, logs in
-  `/home/root/log/logs`.
+  appSMM and Mosquitto are docker containers: `docker stop|start appsmm`, `docker stop|start mosquitto`. appSMM
+  writes its log inside its container (`/var/log/appSMM-<date>.sil`, no host folder), so `[log] prepare` copies the
+  two newest files out with `docker cp` into `/tmp/smm-applog` first (the example TOML has the command). The board's
+  clock is not synchronised (about 3 h 14 min ahead of UTC on 2026-10-07): `rig_ssh` always offers `clock`, reading
+  the board's time over ssh (`[clock] command`, with ms resolution via `python3` on that board) and bounding the
+  offset by the time before and after each call (±0.3 s typical over plink).
 - **Operator** — `smm-auto run --tier rig --operator console` prints each manual step (e.g. "Press the EMERGENCY STOP
   button… then release it") and waits until the operator types `done` (or `fail <reason>`); `--operator dialog`
   shows a PASS/FAIL dialog instead. Each step waits `${OPERATOR_TIMEOUT}` (300 s). This enables
@@ -1492,8 +1498,9 @@ Hardware Fault Should Have Been Applied    InitializeCmd
 #### 10.8.3 appSMM log files (offline; rig with `fetch-log`; tag `needs:applog`)
 
 On the rig the library first copies the
-log files to the PC with the rig control's `fetch-log` (section 7.7); the rig clock must be NTP-synchronised with the
-PC, since the window is computed from the PC clock. appSMM logs to SmartInspect `.sil` files configured in `trace.config` next to `appSMM.exe`
+log files to the PC with the rig control's `fetch-log` (section 7.7) and corrects their times by the rig clock's offset
+(`clock`, measured once and again every 10 min); without `clock` the rig clock must be NTP-synchronised with the PC,
+since the window is computed from the PC clock. appSMM logs to SmartInspect `.sil` files configured in `trace.config` next to `appSMM.exe`
 (`file(filename=D:\smm\logs\appSMM.sil, rotate=daily, …)`, files `appSMM-<UTC time>.sil`). The library reads them
 directly (`smm_automation\sil.py`); ICD traffic appears in the `BridgeInterface` session as
 `RX(/is/iw/rx): {…}` (received by appSMM) and `TX(/is/iw/tx): {…}` (published).

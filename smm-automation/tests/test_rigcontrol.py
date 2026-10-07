@@ -21,6 +21,8 @@ elif args[0] == "restart-appsmm":
         sys.exit(3)
 elif args[0] == "restart-broker":
     time.sleep(float(args[2]) / 1000)
+elif args[0] == "clock":
+    print(pathlib.Path(__file__).with_name("clock.txt").read_text())
 elif args[0] == "fetch-log":
     dest = pathlib.Path(args[1])
     if pathlib.Path(__file__).with_name("nolog").exists():
@@ -67,6 +69,17 @@ def test_capabilities_are_asked_once_and_filtered(script):
     assert control.test_capabilities() == {"restart", "broker-restart", "applog"}
     assert control.has("fetch-log")
     assert _calls(script) == ["capabilities"]
+
+
+def test_clock_is_a_rig_control_feature_not_a_test_capability(script):
+    script.with_name("caps.txt").write_text("fetch-log clock")
+    control = RigControl([sys.executable, str(script)])
+    assert control.test_capabilities() == {"applog"}
+    script.with_name("clock.txt").write_text("830123 -412.5")
+    assert control.log_clock_offset() == (830123.0, 412.5)
+    script.with_name("clock.txt").write_text("soon")
+    with pytest.raises(RigControlError, match="not '<offset_ms> <uncertainty_ms>'"):
+        control.log_clock_offset()
 
 
 def test_restart_and_failure(script):

@@ -1,5 +1,6 @@
 import subprocess
 import sys
+from datetime import datetime
 
 import pytest
 
@@ -18,9 +19,10 @@ CONFIG = {
 class Board:
     """Fake ssh/scp: records the commands, answers from a script of return codes."""
 
-    def __init__(self, codes=None):
+    def __init__(self, codes=None, outputs=None):
         self.calls: list[list[str]] = []
         self.codes = codes or {}
+        self.outputs = outputs or {}
         self.sleeps: list[float] = []
         self.now = 0.0
         self.port_checks = 0
@@ -30,23 +32,27 @@ class Board:
         code = self.codes.get(argv[-1], 0)
         if isinstance(code, list):
             code = code.pop(0) if code else 0
-        return subprocess.CompletedProcess(argv, code, "", "boom" if code else "")
+        out = self.outputs.get(argv[-1], "")
+        if isinstance(out, list):
+            out = out.pop(0)
+        return subprocess.CompletedProcess(argv, code, out, "boom" if code else "")
 
     def sleep(self, s):
         self.sleeps.append(s)
         self.now += s
 
-    def rig(self, config=CONFIG, port_ready_after=0):
+    def rig(self, config=CONFIG, port_ready_after=0, wall=None):
         def port_open(host, port):
             self.port_checks += 1
             return self.port_checks > port_ready_after
-        return RigSsh(config, run=self.run, sleep=self.sleep, port_open=port_open, clock=lambda: self.now)
+        return RigSsh(config, run=self.run, sleep=self.sleep, port_open=port_open, clock=lambda: self.now,
+                      **({"wall_ms": wall} if wall else {}))
 
 
 def test_capabilities_follow_the_config():
     board = Board()
-    assert board.rig().capabilities() == ["restart-appsmm", "restart-broker", "fetch-log"]
-    assert board.rig({"host": "rig", "appsmm": {"stop": "x"}}).capabilities() == []
+    assert board.rig().capabilities() == ["restart-appsmm", "restart-broker", "fetch-log", "clock"]
+    assert board.rig({"host": "rig", "appsmm": {"stop": "x"}}).capabilities() == ["clock"]
     with pytest.raises(RigSshError, match="host"):
         RigSsh({})
 
@@ -91,6 +97,47 @@ def test_fetch_log_uses_scp(tmp_path):
     argv = board.calls[0]
     assert argv[0] == "scp" and argv[-2:] == ["op@rig:/var/log/app/appSMM*.sil", str(tmp_path / "logs")]
     assert (tmp_path / "logs").is_dir()
+
+
+def test_fetch_log_stages_the_files_on_the_board_first(tmp_path):
+    board = Board()
+    board.rig({**CONFIG, "log": {"dir": "/tmp/l", "prepare": "docker cp app:/var/log/. /tmp/l"}}).fetch_log(tmp_path)
+    assert board.calls[0][-1] == "docker cp app:/var/log/. /tmp/l" and board.calls[1][0] == "scp"
+
+
+def _local_ms(text):
+    return datetime.fromisoformat(text).timestamp() * 1000
+
+
+def test_clock_offset_is_bounded_by_the_time_around_each_call():
+    stamps = ["2026-10-07T12:00:10.500", "2026-10-07T12:00:11.000", "2026-10-07T12:00:11.400"]
+    board = Board(outputs={"python3 now": list(stamps)})
+    pc = _local_ms("2026-10-07T12:00:00")
+    walls = iter([pc, pc + 600, pc + 600, pc + 1000, pc + 1000, pc + 1200])
+    rig = board.rig({"host": "rig", "clock": {"command": "python3 now"}}, wall=lambda: next(walls))
+    offset, uncertainty = rig.clock_offset()
+    # bounds: 10.5-0.6=9.9 .. 10.5, 11.0-1.0=10.0 .. 10.4, 11.4-1.2=10.2 .. 10.4 -> [10.2, 10.4]
+    assert offset == pytest.approx(10300, abs=1) and uncertainty == pytest.approx(100, abs=1)
+
+
+def test_clock_offset_with_whole_seconds_and_a_bad_answer():
+    board = Board(outputs={"date +%Y-%m-%dT%H:%M:%S": ["2026-10-07T12:00:05", "noon"]})
+    pc = _local_ms("2026-10-07T12:00:00")
+    walls = iter([pc, pc + 400, pc, pc])
+    rig = board.rig({"host": "rig"}, wall=lambda: next(walls))
+    offset, uncertainty = rig.clock_offset(samples=1)
+    assert offset == pytest.approx(5300) and uncertainty == pytest.approx(700)
+    with pytest.raises(RigSshError, match="not an ISO time"):
+        rig.clock_offset(samples=1)
+
+
+def test_main_prints_the_clock_offset(capsys):
+    class Rig:
+        def clock_offset(self):
+            return 11630012.4, 250.2
+
+    assert main(["clock"], rig=Rig()) == 0
+    assert capsys.readouterr().out.strip() == "11630012 250"
 
 
 def test_plink_client_uses_putty_tools_with_a_password_file(tmp_path):
@@ -146,7 +193,7 @@ def test_load_config(tmp_path, monkeypatch):
 def test_example_config_offers_nothing_until_filled_in():
     config = load_config(str(FRAMEWORK_ROOT / "robot" / "environments" / "rig_ssh.example.toml"))
     assert config["host"] == "10.0.1.111"
-    assert RigSsh(config).capabilities() == []
+    assert RigSsh(config).capabilities() == ["clock"]
 
 
 def test_works_as_the_rig_control_command(tmp_path):

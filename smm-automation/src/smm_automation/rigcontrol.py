@@ -10,6 +10,9 @@ implements these subcommands:
     restart-appsmm --down-ms <ms>    kill appSMM (no goodbye), wait <ms>, start it again; return once it runs
     restart-broker --down-ms <ms>    stop the MQTT broker, wait <ms>, start it again; return once it listens
     fetch-log <dir>                  copy appSMM's SmartInspect log files (appSMM*.sil) into <dir>
+    clock                            print "<offset_ms> <uncertainty_ms>": how far the time appSMM stamps its log
+                                     lines with (the board's wall-clock time, read as this PC's local time) is
+                                     ahead of this PC's clock (optional; without it log times are taken as is)
 
 Exit code 0 means done; anything else is a failure whose stderr is reported. ``SMM_RIG_CONTROL_TIMEOUT``
 (seconds, default 300) bounds every call. Only the subcommands listed by ``capabilities`` are used: the rig
@@ -28,7 +31,7 @@ from pathlib import Path
 
 ENV = "SMM_RIG_CONTROL"
 TIMEOUT_ENV = "SMM_RIG_CONTROL_TIMEOUT"
-SUBCOMMANDS = ("restart-appsmm", "restart-broker", "fetch-log")
+SUBCOMMANDS = ("restart-appsmm", "restart-broker", "fetch-log", "clock")
 # rig control subcommand -> test capability (see capabilities.TAG_CAPABILITY)
 CAPABILITY_OF = {"restart-appsmm": "restart", "restart-broker": "broker-restart", "fetch-log": "applog"}
 
@@ -88,7 +91,7 @@ class RigControl:
 
     def test_capabilities(self) -> set[str]:
         """The test capabilities (tag side) the rig gets from this script."""
-        return {CAPABILITY_OF[c] for c in self.capabilities()}
+        return {CAPABILITY_OF[c] for c in self.capabilities() if c in CAPABILITY_OF}
 
     def restart_appsmm(self, down_ms: int) -> None:
         self._require("restart-appsmm")
@@ -107,6 +110,16 @@ class RigControl:
         if not files:
             raise RigControlError(f"'{self} fetch-log' copied no .sil file into {dest}")
         return files
+
+    def log_clock_offset(self) -> tuple[float, float]:
+        """(offset, uncertainty) in ms of the rig's log clock against this PC's clock (``clock``)."""
+        self._require("clock")
+        words = self._run("clock", timeout_s=min(self.timeout_s, 60)).split()
+        try:
+            offset, uncertainty = float(words[0]), float(words[1]) if len(words) > 1 else 0.0
+        except (IndexError, ValueError):
+            raise RigControlError(f"'{self} clock' printed {' '.join(words)!r}, not '<offset_ms> <uncertainty_ms>'") from None
+        return offset, abs(uncertainty)
 
     def _require(self, subcommand: str) -> None:
         if not self.has(subcommand):

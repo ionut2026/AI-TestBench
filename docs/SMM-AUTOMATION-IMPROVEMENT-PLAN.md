@@ -174,8 +174,12 @@ ports, so `smm_automation\rig_ssh.py` implements the rig control over ssh/scp fr
 the board's commands to kill/start/check appSMM and the broker, and appSMM's log folder.
 The site uses PuTTY with a password login instead of a key, so `rig_ssh.py` also drives plink/pscp
 (`client = "plink"`, `password_file` naming a file the site creates; the framework never reads it). The board runs
-appSMM and the broker as docker containers (`docker stop|start appsmm`, `docker stop|start mosquitto`), logs in
-`/home/root/log/logs`; the site config lives outside the repo (`D:\rig\rig_ssh.toml`). Waiting for the password file.
+appSMM and the broker as docker containers (`docker stop|start appsmm`, `docker stop|start mosquitto`); the site
+config lives outside the repo (`D:\rig\rig_ssh.toml`, password in `D:\rig\rtc.pw` restricted to the user's account).
+Login verified. Found on the board: appSMM logs only inside its container (`/var/log/appSMM-<date>.sil`; the
+`/home/root/log/logs` folder named by the site does not exist), so `[log] prepare` stages them with `docker cp`; the
+board clock runs ~3 h 14 min ahead of UTC, so the rig control gained a `clock` subcommand and the library takes the
+measured offset off the fetched log's times (doctor: `rig clock`). A `smmbridge` container also runs on the board.
 
 *6.1–6.4 and 0.1 (the command) status:* done in the repo; nothing has run against the real instrument yet (Phase 0
 and the site's rig control script are still open). Deviation in 6.1: the rig control lives on the Python side
@@ -276,5 +280,5 @@ each), full offline runs (~17 min each) and human review of every new or changed
 
 1. ~~Go for Phase 0 rig runs, and who is the operator at the instrument.~~ Given (the user is the operator).
 2. ~~How the RTC board can be controlled remotely~~ PuTTY/password, docker containers (6.1). Still needed: the
-   password file `D:\rig\rtc.pw` and the login user.
+   ~~password file and login user~~ Given (root; `D:\rig\rtc.pw`).
 3. ~~Who confirms the candidate findings~~ The user, including the rig's FINDING-4.

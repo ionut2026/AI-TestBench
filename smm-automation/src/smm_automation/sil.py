@@ -15,7 +15,7 @@ import json
 import re
 import struct
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -115,9 +115,12 @@ def log_files(target: Path, since_ms: float = 0) -> list[Path]:
     return sorted(files, key=lambda p: p.stat().st_mtime)
 
 
-def logged_messages(target: Path, since_ms: float = 0) -> list[LoggedMessage]:
-    """ICD messages appSMM logged at or after ``since_ms``, in log order."""
+def logged_messages(target: Path, since_ms: float = 0, offset_ms: float = 0) -> list[LoggedMessage]:
+    """ICD messages appSMM logged at or after ``since_ms``, in log order. ``offset_ms``: how far the log's clock is
+    ahead of this PC's (a rig board); the returned times are on this PC's clock."""
     out: list[LoggedMessage] = []
     for path in log_files(target, since_ms):
-        out += [m for e in read_entries(path) if e.time_ms >= since_ms and (m := icd_message(e))]
+        for e in read_entries(path):
+            if e.time_ms - offset_ms >= since_ms and (m := icd_message(e)):
+                out.append(replace(m, time_ms=m.time_ms - offset_ms) if offset_ms else m)
     return out

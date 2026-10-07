@@ -191,6 +191,17 @@ def test_doctor_rig(tmp_path):
     assert checks["rig control"][0] == "OK" and "fetch-log restart-appsmm" in checks["rig control"][1]
     assert checks["operator"][0] == "WARN"
     assert checks["capabilities"][1].endswith("excluded tags: needs:twin, requires:broker-restart")
+    assert "rig clock" not in checks
+
+
+def test_doctor_rig_reports_the_clock_offset(tmp_path):
+    script = tmp_path / "rig.py"
+    script.write_text("import sys\nprint('fetch-log clock' if sys.argv[1] == 'capabilities' else '830250 300')", encoding="utf-8")
+    env = {"SMM_RIG_CONTROL": f'"{sys.executable}" "{script}"'}
+    checks = _doctor("rig", FakeService(), env=env, port_open=lambda h, p: True)
+    assert checks["rig clock"] == ("OK", "+830.2 s (+/- 0.3 s) against this PC, applied to the fetched appSMM log")
+    script.write_text("import sys\nprint('clock' if sys.argv[1] == 'capabilities' else 'noon')", encoding="utf-8")
+    assert _doctor("rig", FakeService(), env=env, port_open=lambda h, p: True)["rig clock"][0] == "WARN"
 
 
 def test_doctor_rig_without_control_or_operator():

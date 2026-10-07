@@ -77,6 +77,10 @@ def test_log_location_from_trace_config_and_rotated_files(tmp_path):
     os.utime(old, (NOW / 1000 - 3600, NOW / 1000 - 3600))
     assert sil.log_files(target) == [old, new]
     assert [m.name for m in sil.logged_messages(target, NOW - 1000)] == ["SystemStatusRequest", "SystemStatusResponse"]
+    # a log written by a clock 60 s ahead: the offset brings its entries onto this PC's time line
+    shifted = sil.logged_messages(target, NOW - 61_000, offset_ms=60_000)
+    assert [m.name for m in shifted] == ["SystemStatusRequest", "SystemStatusResponse"]
+    assert abs(shifted[1].time_ms - (NOW - 60_000)) < 1
     assert sil.log_target(tmp_path / "missing") is None
 
 
@@ -132,6 +136,43 @@ def test_a_message_logged_with_other_content_or_twice_exchanged_once_logged_fail
         lib.icd_messages_should_be_logged_by_appsmm("InitializationRequest", timeout="0s")
     with pytest.raises(ValueError):
         lib.icd_messages_should_be_logged_by_appsmm()
+
+
+def test_a_rig_log_is_fetched_and_its_clock_offset_applied(tmp_path, monkeypatch):
+    offset = 830_000.0
+    variables = {"${OUTPUT DIR}": str(tmp_path)}
+    monkeypatch.setattr("smm_automation.SMMTestbench.BuiltIn", lambda: SimpleNamespace(
+        get_variable_value=lambda name, default=None: variables.get(name, default)))
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    lib = SMMTestbench(autostart=False)
+    timeline: list[dict] = []
+    lib.client = SimpleNamespace(query=lambda flt, limit=1000: [e for e in timeline if e["id"] > flt.get("since", 0)],
+                                 mark_all=lambda: (0, 0), environment=lambda: {}, session=lambda: {})
+    lib.begin_smm_test()
+    t = lib._test_started_ms + 100
+    timeline.append({"id": 1, "time": _iso(t), "way": "tx", "topic": "/is/iw/rx", "name": "SystemStatusRequest", "body": {}})
+    clock_reads: list[int] = []
+
+    class Control:
+        def has(self, what):
+            return what in ("fetch-log", "clock")
+
+        def fetch_log(self, dest):
+            dest.mkdir(parents=True)
+            f = dest / "appSMM-2026-10-06-13-08-22.sil"
+            _write(f, _log_entry('RX(/is/iw/rx): {"Version":7,"SystemStatusRequest":{}}', t + offset + 30))
+            return [f]
+
+        def log_clock_offset(self):
+            clock_reads.append(1)
+            return offset, 400.0
+
+    lib._kinds = {"appSmm": "external"}
+    lib._rig_control, lib._rig_control_loaded = Control(), True
+    matched = lib.icd_messages_should_be_logged_by_appsmm("SystemStatusRequest", timeout="0s")
+    assert len(matched) == 1 and abs(matched[0]["time"] - (t + 30)) < 1
+    assert [m["name"] for m in lib.get_appsmm_log_messages()] == ["SystemStatusRequest"]
+    assert len(clock_reads) == 1 and (tmp_path / "appsmm-log" / "2").is_dir()
 
 
 def test_log_location_from_the_environment_or_unknown(tmp_path, monkeypatch):

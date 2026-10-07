@@ -187,6 +187,14 @@ class Doctor:
             self.add("rig control", "FAIL", str(err))
             return None
         self.add("rig control", "OK", f"'{control}': {' '.join(sorted(caps)) or 'no subcommands'}")
+        if "clock" in caps:
+            try:
+                offset, uncertainty = control.log_clock_offset()
+            except RigControlError as err:
+                self.add("rig clock", "WARN", f"{err}: appSMM log times will be taken as they are")
+            else:
+                self.add("rig clock", "OK", f"{offset / 1000:+.1f} s (+/- {uncertainty / 1000:.1f} s) against this PC, "
+                         "applied to the fetched appSMM log")
         return control
 
     def _operator(self) -> None:
