@@ -29,6 +29,8 @@ SDS-2854109 Broker Outage Puts The System Into E-Stop
     Bring SMM To State    Idle    timeout=${INIT_TIMEOUT}
     Restart MQTT Broker    down=3s
     Wait Until Keyword Succeeds    ${STARTUP_TIMEOUT}    2s    Bridge Should Be Connected
+    # appSMM reconnects on its own schedule (every 5 s on the rig): ask only once it is back.
+    Wait For Message    ConnectionNotification    timeout=${STARTUP_TIMEOUT}    Source=SMM    Status=Connected
     System State Should Be    E-Stop    timeout=${RESPONSE_TIMEOUT}
 
 SDS-2854281 Operator Warning When The Bridge Connection Is Re-Established

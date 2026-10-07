@@ -1405,7 +1405,7 @@ connected to the instrument's broker and may have sent requests the test did not
 | `Stop Test Environment` | — | Stops everything the service started. |
 | `Get Environment Status` | — | Returns a dictionary: `tier`, `broker`, `appsmm`, `hardware` (with `kind`: `none`/`twin`/`external`). |
 | `Current Tier Should Be` | `*tiers` | Fails unless the tier is one of those given. |
-| `Restart appSMM` | `down=1s` | Kills appSMM (no goodbye) and starts it again after `down`. On the rig through the rig control script (`restart-appsmm`) → tag `requires:restart`. |
+| `Restart appSMM` | `down=1s` | Kills appSMM (no goodbye) and starts it again after `down`. On the rig through the rig control script (`restart-appsmm`) → tag `requires:restart`; whether that is a kill depends on the site's command (`docker stop` is graceful: appSMM notifies E-Stop first). |
 | `Restart MQTT Broker` | `down=2s` | Takes the broker down; appSMM and Bridge lose the connection. On the rig through `restart-broker` → tag `requires:broker-restart`. |
 
 ### 10.4 Bridge session
@@ -1532,7 +1532,7 @@ directly (`smm_automation\sil.py`); ICD traffic appears in the `BridgeInterface`
 |---|---|
 | `Open SMM Test Environment` | Suite setup: `Start Test Environment ${TIER} ${OVERRIDES}` + `Connect As Bridge`. |
 | `Close SMM Test Environment` | Suite teardown: disconnect, stop. |
-| `Restart appSMM And Wait Until NotInitialized` | Fresh appSMM in NotInitialized (tag `requires:restart`). |
+| `Restart appSMM And Wait Until NotInitialized` | Fresh appSMM in NotInitialized (tag `requires:restart`): restarts appSMM, waits for its `ConnectionNotification SMM Connected`, then `Bring SMM To State NotInitialized`. It does not rely on a SystemStatusNotification (on the rig appSMM reaches NotInitialized before it connects to the broker). |
 | `Require Hardware Twin` | **Skips** the test if the tier has no twin. |
 | `Bring SMM To E-Stop With Shutdown` | Idle, then ShutdownRequest → E-Stop. |
 | `Finish SMM Test And Empty The Instrument` | Teardown for tests that load racks: removes racks, restarts appSMM and initializes to Idle if any were removed. |
@@ -2220,8 +2220,11 @@ changed). In case (b): ingest → drift shows STALE → update the test (Section
 - Topics: appSMM publishes on `/is/iw/tx` and `/is/hcaN/tx`; the Bridge publishes on `/is/iw/rx` and `/is/hcaN/rx`.
 - A full offline run takes about **17 minutes** (state transitions in real appSMM take seconds) and cannot run in
   parallel (one appSMM installation, fixed ports; 7.3).
-- appSMM keeps working after a broker restart but reconnects with a delay — use the longer timeouts from the
-  environment files.
+- appSMM keeps working after a broker restart but reconnects with a delay (every 5 s on the rig) — use the longer
+  timeouts from the environment files, and wait for its `ConnectionNotification SMM Connected` before asking it
+  anything: a request sent before it is back is lost.
+- On the rig appSMM connects to the broker only after it reached NotInitialized, so after a restart there is no
+  SystemStatusNotification to wait for (candidate FINDING-6 in the README); ask for the state instead.
 
 ### 16.3 When a new appSMM version arrives
 

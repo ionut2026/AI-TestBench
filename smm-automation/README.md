@@ -175,6 +175,8 @@ First rig baseline (2026-10-07, `results\rig-baseline`, no operator, instrument 
 | ID | Specification | Observed | Consequence |
 |---|---|---|---|
 | FINDING-4 (candidate) | SDS-2428419 (E-Stop after ShutdownResponse), SDS-2653094 (Recover) | After `ShutdownResponse OK` and `Idle` -> `E-Stop`, appSMM goes on to `NotInitialized` about 50 ms later without any RecoverRequest. A RecoverRequest sent in those 50 ms gets four EventNotifications `FatalError` "Command terminated abnormally", `RecoverResponse Error`, then `E-Stop` -> `NotInitialized`. Offline (0.7.2305.25001 + twin) appSMM stays in `E-Stop` | SDS-2428419, SDS-2532504 (RecoverResponse OK schema), SDS-2532510, the state matrix cell "SetConfigurationRequest in E-Stop" and the Recover part of FINDING-2 fail on the rig because `E-Stop` does not hold |
+| FINDING-5 (candidate) | SDS-2854109 (broker outage variant) | After the MQTT broker was down for 3 s (`docker stop/start mosquitto`) appSMM goes `Idle` -> `NotInitialized` (InstrumentControl Ready -> Halted, its log) instead of `E-Stop`, and publishes no SystemStatusNotification about it; once reconnected it answers `NotInitialized`. Offline the broker outage does give `E-Stop` (FINDING-1) | SDS-2854109 "Broker Outage Puts The System Into E-Stop" fails on the rig |
+| FINDING-6 (candidate) | SDS-2752658, SDS-2525388 (notifications after a start) | After a start appSMM reaches `NotInitialized` (about 16 s, after the instrument control connected) before it connects to the broker, so neither the `PowerOn` nor the `NotInitialized` SystemStatusNotification is ever published; it announces `ConnectionNotification SMM Connected` and answers `NotInitialized`. Offline appSMM connects first and notifies `NotInitialized` | SDS-2752658 and SDS-2525388 (also FINDING-3) fail on the rig |
 
 Also seen, not counted as findings yet:
 
@@ -183,8 +185,19 @@ Also seen, not counted as findings yet:
 - Once (state matrix "SystemStatusRequest in Idle", after the failed Recovers) an InitializationRequest was
   answered `OK` and appSMM went `Initializing` -> `E-Stop` within 100 ms; later initializations succeeded.
 
-The rig failures are not tagged `known-issue` yet: FINDING-4 is rig-only (the same tests pass offline) and waits for
-confirmation. Two failures of that run were framework issues and are fixed: SDS-2525392 counted the answers to the
+Run of the rig-control tests (ssh rig control, `requires:restart`, `requires:broker-restart`, `needs:applog`;
+`results\rig-control2`): 16 tests, 10 passed, 4 failed, 2 skipped (the state matrix's unspecified cells). FINDING-5 and
+FINDING-6 are the product failures; the log checks (SDS-2528708, SDS-2528710) pass with the rig clock's offset. The
+fourth failure (SDS-2528698) was a framework race, fixed and verified on the rig (Initialization restart tests 5/5): a
+hidden state poll overlapped the status request the Bridge sends when appSMM reconnects, and the pairing check took
+appSMM's second answer for a duplicate; hidden polls now wait for an open SystemStatusRequest first. Also fixed: on
+the rig `Restart appSMM And Wait Until NotInitialized` cannot wait for a notification (FINDING-6), so it waits for the
+new appSMM's `ConnectionNotification SMM Connected` and then for its settled state; the broker outage test asks for
+the state only after appSMM reconnected (it retries every 5 s and missed the first request). The site's rig control
+stops appSMM with `docker stop`, which is graceful (an `E-Stop` notification and a clean disconnect before it exits).
+
+The rig failures are not tagged `known-issue` yet: FINDING-4 to FINDING-6 are rig-only (the same tests pass offline)
+and wait for confirmation. Two failures of that run were framework issues and are fixed: SDS-2525392 counted the answers to the
 status requests the Bridge sends when appSMM reports itself connected (`Connect As Bridge` now waits for them and
 hides them from the tests), and an initialization that ends in `E-Stop` now fails at once instead of after the
 10-minute budget.

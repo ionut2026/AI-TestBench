@@ -180,9 +180,11 @@ Login verified. Found on the board: appSMM logs only inside its container (`/var
 `/home/root/log/logs` folder named by the site does not exist), so `[log] prepare` stages them with `docker cp`; the
 board clock runs ~3 h 14 min ahead of UTC, so the rig control gained a `clock` subcommand and the library takes the
 measured offset off the fetched log's times (doctor: `rig clock`). A `smmbridge` container also runs on the board.
+First run of the rig-control tests on the instrument (`results\rig-control2`): 16 tests, 10 passed, 4 failed,
+2 skipped; one failure was a framework race (fixed, rerun 5/5), the others are candidate FINDING-5/6 (README).
 
-*6.1–6.4 and 0.1 (the command) status:* done in the repo; nothing has run against the real instrument yet (Phase 0
-and the site's rig control script are still open). Deviation in 6.1: the rig control lives on the Python side
+*6.1–6.4 and 0.1 (the command) status:* done in the repo and run against the real instrument (rig baseline and the
+rig-control tests above, 2026-10-07). Deviation in 6.1: the rig control lives on the Python side
 (`smm_automation\rigcontrol.py`, a site program named by `SMM_RIG_CONTROL` with the subcommands `capabilities`,
 `restart-appsmm`, `restart-broker`, `fetch-log`) instead of behind the service's restart endpoints, so the service
 and its API (1.3.0) are unchanged and a long-running service does not need the variable; the library picks the rig

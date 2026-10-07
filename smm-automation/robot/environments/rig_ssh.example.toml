@@ -24,6 +24,12 @@ user = "<login on the RTC board>"
 # stop = "<command that kills appSMM, e.g. sudo systemctl kill -s KILL appsmm>"
 # start = "<command that starts it, e.g. sudo systemctl start appsmm>"
 # running = "<command that exits 0 once it runs, e.g. systemctl is-active --quiet appsmm>"
+# On the SMM RTC board appSMM and the broker are docker containers. `docker kill appsmm` kills without a goodbye;
+# `docker stop appsmm` (SIGTERM) is a graceful stop: appSMM first publishes SystemStatusNotification -> E-Stop and
+# disconnects cleanly. The tests work with both (the precondition waits for the new appSMM), but only kill is a crash.
+# stop = "docker kill appsmm"
+# start = "docker start appsmm"
+# running = "docker ps -q -f name=^appsmm$ -f status=running | grep -q ."
 
 # restart-broker (enables tests tagged requires:broker-restart); readiness = the port accepts connections
 # [broker]

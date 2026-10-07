@@ -61,6 +61,10 @@ HANDSHAKE_REQUESTS = ("GetVersionRequest", "SystemStatusRequest", "TubeIdStatusR
                       "OutputLaneRequest", "FrontLoadInRequest", "FrontLoadOutRequest", "TrackStatusRequest")
 HANDSHAKE_TRIGGER_S = 2.0
 HANDSHAKE_SETTLE_S = 5.0
+# A hidden state poll first waits up to this long (from when it was sent) for the answer to a SystemStatusRequest
+# that is still open, e.g. the Bridge's handshake after appSMM reconnected: overlapping requests get one answer each,
+# but the pairing check takes the second answer for a duplicate.
+OPEN_REQUEST_WAIT_S = 5.0
 # appSMM's log lines may be stamped slightly before the service saw the message (same PC, different clocks).
 LOG_CLOCK_SLACK_MS = 2000
 # How often a log check re-fetches the appSMM log from the rig while it waits.
@@ -519,6 +523,7 @@ class SMMTestbench:
 
     def _poll_state(self) -> str:
         """SystemStatusRequest that the test's waits and counts do not see."""
+        self._await_open_status_request()
         mark = self.client.mark()
         self._hidden.add(self.client.send("SystemStatusRequest", {})["id"])
         try:
@@ -527,6 +532,23 @@ class SMMTestbench:
             raise AssertionError(f"appSMM did not answer SystemStatusRequest: {err}") from None
         self._hidden.add(entry["id"])
         return str(entry["body"]["CurrentState"])
+
+    def _await_open_status_request(self) -> None:
+        """Waits for the answer to the last SystemStatusRequest if it was sent recently and is still open."""
+        last = self.client.query({"name": "SystemStatusRequest", "way": "tx"}, 1)
+        if not last:
+            return
+        try:
+            remaining = OPEN_REQUEST_WAIT_S - (time.time() - _epoch_ms(last[-1]) / 1000)
+        except ValueError:
+            return
+        if remaining <= 0:
+            return
+        try:
+            self.client.wait({"name": "SystemStatusResponse", "way": "rx", "since": int(last[-1]["id"])}, remaining)
+        except ServiceError as err:
+            if err.kind != "timeout":
+                raise
 
     def _wait_idle_after_clearing(self, budget: float) -> None:
         """After InitializationResponse OK: waits for Clearing -> Idle, and fails at once when the

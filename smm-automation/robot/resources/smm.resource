@@ -53,9 +53,12 @@ Close SMM Test Environment
 
 Restart appSMM And Wait Until NotInitialized
     [Documentation]    Precondition: a freshly started appSMM in NotInitialized (the only way to get
-    ...    there once the system has been initialized).
+    ...    there once the system has been initialized). Waits until the new appSMM has announced itself on
+    ...    the broker, then for its settled state: on the rig appSMM reaches NotInitialized before it connects
+    ...    to the broker, so no SystemStatusNotification can be relied on here (SDS-2752658 checks that).
     Restart appSMM    down=1s
-    Wait For System State    NotInitialized    timeout=${STARTUP_TIMEOUT}
+    Wait For Message    ConnectionNotification    timeout=${STARTUP_TIMEOUT}    Source=SMM    Status=Connected
+    Bring SMM To State    NotInitialized    timeout=${STARTUP_TIMEOUT}
 
 Require Hardware Twin
     [Documentation]    Skips the test when the tier cannot drive the hardware (only offline has the twin).

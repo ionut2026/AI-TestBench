@@ -1,3 +1,4 @@
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -305,6 +306,40 @@ def test_reconnecting_in_a_test_keeps_the_handshake(smm):
     smm._handshake = {9}
     smm.connect_as_bridge(record_version=False)
     assert smm._handshake == {9}
+
+
+class OpenRequestClient(FakeClient):
+    """The Bridge's handshake SystemStatusRequest (#60) was sent ``age_s`` ago; its answer is ``answered``."""
+
+    def __init__(self, age_s, answered=True):
+        super().__init__()
+        self.age_s, self.answered = age_s, answered
+
+    def query(self, flt=None, limit=1000):
+        if flt and flt.get("name") == "SystemStatusRequest":
+            self.calls.append(("query", flt))
+            return [{"id": 60, "name": "SystemStatusRequest", "time": (time.time() - self.age_s) * 1000}]
+        return super().query(flt, limit)
+
+    def wait(self, flt, timeout_s):
+        if flt.get("since") == 60 and not self.answered:
+            self.calls.append(("wait", flt))
+            raise ServiceError(408, "no answer", "timeout")
+        return super().wait(flt, timeout_s)
+
+
+@pytest.mark.parametrize("answered", [True, False])
+def test_a_poll_waits_for_an_open_status_request_first(smm, answered):
+    smm.client = OpenRequestClient(age_s=1, answered=answered)
+    assert smm._poll_state() == "Idle"
+    kinds = [(c[0], c[1]["since"] if c[0] == "wait" else c[1]) for c in smm.client.calls if c[0] in ("wait", "send")]
+    assert kinds[0] == ("wait", 60) and kinds[1] == ("send", "SystemStatusRequest")
+
+
+def test_a_poll_ignores_an_old_open_status_request(smm):
+    smm.client = OpenRequestClient(age_s=30, answered=False)
+    smm._poll_state()
+    assert [c[0] for c in smm.client.calls if c[0] in ("wait", "send")] == ["send", "wait"]
 
 
 def test_initialization_ending_in_e_stop_fails_at_once(smm):
