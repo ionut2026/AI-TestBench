@@ -22,6 +22,8 @@ Commands:
   states [type]             List workflow states (optionally for a type)
   queries [filter]           List saved queries
   query <name>              Run a saved query
+  export                    Search, then export every match with full details as Markdown
+                            (same filters as search; --out <file>, --field, --limit up to 1000, --json)
   help                      Show this help
 
 Search and count filters:
@@ -61,6 +63,7 @@ Examples:
   rvs search --type "user story" --state Tested --text PRA --text-field Summary
   rvs count --type "user story" --text PRA --group-by State
   rvs get 3309926
+  rvs export --type "user story" --state Tested --text PRA --text-field Summary --out pra-tested.md
   rvs query "All PRA User Stories" --limit 100
 `;
 
@@ -262,6 +265,9 @@ function commandArguments(command, positional, options) {
     states: ["json"],
     queries: ["json"],
     query: ["field", "limit", "offset", "json"],
+    export: ["type", "project", "state", "text", "text-field", "text-match", "assignee", "created-by",
+      "date-field", "from-date", "to-date", "last-days", "where", "no-subprojects", "case-sensitive",
+      "field", "sort", "ascending", "limit", "out", "json"],
   };
   const allowed = commandOptions[command];
   if (!allowed) throw new Error(`Unknown command '${command}'.`);
@@ -349,9 +355,91 @@ function commandArguments(command, positional, options) {
           offset: numberOption(options, "offset", 0, 0),
         },
       };
+    case "export":
+      if (positional.length) throw new Error("export takes options, not positional arguments.");
+      filterArguments(options);
+      return { name: "export", arguments: {} };
     default:
       throw new Error(`Unknown command '${command}'.`);
   }
+}
+
+const EXPORT_DEFAULT_FIELDS = [
+  "Summary", "Type", "State", "Project", "Product", "ASD-Story Owner", "ASD-Team", "ASD - Target Version",
+  "Description", "Text", "Described From", "Relevant Explorative Test", "ASD - Complaints for User Story",
+];
+const EXPORT_LONG_TEXT = new Set(["Description", "Text"]);
+
+function parseToolResult(result) {
+  const text = (result.content || []).filter((block) => block.type === "text").map((block) => block.text).join("\n");
+  if (result.isError) throw new Error(text || "MCP tool call failed.");
+  return JSON.parse(text);
+}
+
+function exportMarkdown(items, { filters, total }) {
+  const lines = [
+    "# Windchill RV&S export",
+    "",
+    `Exported ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC. Items: ${items.length}${total > items.length ? ` of ${total}` : ""}.`,
+    `Filters: ${JSON.stringify(filters)}`,
+    "",
+    "| # | ID | Summary | State |",
+    "|---|---|---|---|",
+    ...items.map((item, n) =>
+      `| ${n + 1} | [${item.ID}](#item-${item.ID}) | ${flatten(item.Summary).replace(/\|/g, "\\|")} | ${flatten(item.State)} |`),
+  ];
+  items.forEach((item, n) => {
+    lines.push("", "---", "", `<a id="item-${item.ID}"></a>`, `## ${n + 1}. ${item.ID} — ${flatten(item.Summary)}`, "");
+    const long = [];
+    for (const [field, value] of Object.entries(item)) {
+      if (["ID", "Summary"].includes(field) || value === null || value === undefined || value === "") continue;
+      if (EXPORT_LONG_TEXT.has(field)) long.push([field, value]);
+      else if (Array.isArray(value)) lines.push(`- **${field}:**`, ...value.map((entry) => `  - ${flatten(entry)}`));
+      else lines.push(`- **${field}:** ${flatten(value)}`);
+    }
+    for (const [field, value] of long) lines.push("", `### ${field}`, "", "```text", String(value).trim(), "```");
+  });
+  return `${lines.join("\n")}\n`;
+}
+
+async function runExport(client, options) {
+  const filters = filterArguments(options);
+  const limit = numberOption(options, "limit", 1000, 1, 1000);
+  const timeout = Number(process.env.RVS_TIMEOUT_MS) || 600000;
+  const call = async (name, args) =>
+    parseToolResult(await client.callTool({ name, arguments: args }, undefined, { timeout, resetTimeoutOnProgress: true }));
+
+  const found = await call("rvs_search_items", {
+    ...filters,
+    fields: ["ID"],
+    sortField: scalar(options, "sort"),
+    sortAscending: options.has("ascending") ? true : undefined,
+    limit,
+  });
+  const ids = found.items.map((item) => item.ID);
+  const fields = ["ID", ...(values(options, "field") || EXPORT_DEFAULT_FIELDS)];
+  const items = [];
+  for (let i = 0; i < ids.length; i += 25) {
+    const batch = await call("rvs_get_items", { ids: ids.slice(i, i + 25), fields, maxFieldLength: 1000000 });
+    items.push(...(Array.isArray(batch) ? batch : batch.items ?? [batch]));
+    if (scalar(options, "out")) process.stderr.write(`\rFetched ${items.length}/${ids.length}`);
+  }
+  if (scalar(options, "out")) process.stderr.write("\n");
+
+  const total = found.hasMore ? Math.max(ids.length + 1, found.total ?? 0) : ids.length;
+  const content = options.has("json")
+    ? `${JSON.stringify({ resolved: found.resolved, count: items.length, hasMore: !!found.hasMore, items }, null, 2)}\n`
+    : exportMarkdown(items, { filters, total });
+  const out = scalar(options, "out");
+  if (out) {
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(out, content, "utf8");
+    console.error(`Wrote ${items.length} item(s) to ${out}`);
+  } else {
+    process.stdout.write(content);
+  }
+  if (found.resolved?.length) console.error(`Resolved: ${found.resolved.join("; ")}`);
+  if (found.hasMore) console.error(`Warning: more than ${limit} items match; only the first ${limit} were exported.`);
 }
 
 async function main() {
@@ -373,6 +461,10 @@ async function main() {
 
   try {
     await client.connect(transport);
+    if (request.name === "export") {
+      await runExport(client, options);
+      return;
+    }
     const result = await client.callTool(request);
     output(result, {
       json: options.has("json"),

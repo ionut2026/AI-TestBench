@@ -159,6 +159,21 @@ rvs get 3309926
 rvs get 3309926 3309882 --history
 ```
 
+### Export all matches with full details
+
+`rvs export` takes the same filters as `search`. It finds every match, fetches each item's full details, and writes
+Markdown: an index table, then one section per item. Each section lists the fields, linked specifications, tests and
+complaints, and the full Description text (Definition / Acceptance Criteria / Out of Scope).
+
+```powershell
+rvs export --type "user story" --state Tested --text PRA --text-field Summary --out pra-tested.md
+```
+
+- Without `--out`, the Markdown is printed to the terminal.
+- `--field <name>` (repeatable) replaces the default field list.
+- `--json` writes JSON instead of Markdown.
+- `--limit` defaults to 1000, the maximum. If more items match, a warning is printed.
+
 ### Discover types, states, and saved queries
 
 ```powershell
@@ -176,6 +191,7 @@ Use `rvs help` to print all commands and options. The main command forms are:
 | `rvs search [filters]` | List matching records |
 | `rvs count [filters]` | Count records by one or more fields |
 | `rvs get <id> [id ...]` | Read full details |
+| `rvs export [filters] --out <file>` | Export all matches with full details as Markdown |
 | `rvs types [filter]` / `rvs states [type]` | Discover type and state names |
 | `rvs queries [filter]` / `rvs query <name>` | Find and run saved queries |
 
