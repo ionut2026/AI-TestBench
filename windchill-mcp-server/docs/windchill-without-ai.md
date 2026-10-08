@@ -169,7 +169,11 @@ complaints, and the full Description text (Definition / Acceptance Criteria / Ou
 rvs export --type "user story" --state Tested --text PRA --text-field Summary --out pra-tested.md
 ```
 
-- Without `--out`, the Markdown is printed to the terminal.
+- Files are always saved in the `exports` folder of the repository (`D:\projects\AI-TestBench\exports`), no matter
+  which folder you run the command from. The folder is created if needed. Set `RVS_EXPORT_DIR` to use another folder.
+- `--out <name>` sets the file name; without it the name is `rvs-export-<yyyyMMdd-HHmm>.md`. An absolute `--out`
+  path is used as given.
+- `--stdout` prints the Markdown to the terminal instead of saving a file.
 - `--field <name>` (repeatable) replaces the default field list.
 - `--json` writes JSON instead of Markdown.
 - `--limit` defaults to 1000, the maximum. If more items match, a warning is printed.
@@ -191,7 +195,7 @@ Use `rvs help` to print all commands and options. The main command forms are:
 | `rvs search [filters]` | List matching records |
 | `rvs count [filters]` | Count records by one or more fields |
 | `rvs get <id> [id ...]` | Read full details |
-| `rvs export [filters] --out <file>` | Export all matches with full details as Markdown |
+| `rvs export [filters] [--out <name>]` | Export all matches with full details as Markdown to `exports\` |
 | `rvs types [filter]` / `rvs states [type]` | Discover type and state names |
 | `rvs queries [filter]` / `rvs query <name>` | Find and run saved queries |
 

@@ -2,8 +2,11 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { fileURLToPath } from "node:url";
+import { dirname, isAbsolute, resolve } from "node:path";
 
 const SERVER_PATH = fileURLToPath(new URL("./server.js", import.meta.url));
+// Exports go to <repo root>\exports (the folder next to windchill-mcp-server) unless RVS_EXPORT_DIR is set.
+const EXPORT_DIR = process.env.RVS_EXPORT_DIR || fileURLToPath(new URL("../../exports", import.meta.url));
 
 const HELP = `Windchill RV&S terminal client (no AI)
 
@@ -23,7 +26,10 @@ Commands:
   queries [filter]           List saved queries
   query <name>              Run a saved query
   export                    Search, then export every match with full details as Markdown
-                            (same filters as search; --out <file>, --field, --limit up to 1000, --json)
+                            (same filters as search; --field, --limit up to 1000, --json)
+                            Saved to ${EXPORT_DIR} (override with RVS_EXPORT_DIR):
+                            --out <name> sets the file name (default rvs-export-<date>.md);
+                            absolute --out paths are used as given; --stdout prints instead
   help                      Show this help
 
 Search and count filters:
@@ -81,7 +87,7 @@ function parseArgs(args) {
   const positional = [];
   const options = new Map();
   const boolOptions = new Set([
-    "ascending", "case-sensitive", "no-subprojects", "json",
+    "ascending", "case-sensitive", "no-subprojects", "json", "stdout",
     "history", "attachments", "include-empty", "rich-text",
   ]);
 
@@ -267,7 +273,7 @@ function commandArguments(command, positional, options) {
     query: ["field", "limit", "offset", "json"],
     export: ["type", "project", "state", "text", "text-field", "text-match", "assignee", "created-by",
       "date-field", "from-date", "to-date", "last-days", "where", "no-subprojects", "case-sensitive",
-      "field", "sort", "ascending", "limit", "out", "json"],
+      "field", "sort", "ascending", "limit", "out", "stdout", "json"],
   };
   const allowed = commandOptions[command];
   if (!allowed) throw new Error(`Unknown command '${command}'.`);
@@ -402,7 +408,16 @@ function exportMarkdown(items, { filters, total }) {
   return `${lines.join("\n")}\n`;
 }
 
+function exportPath(options) {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+  const name = scalar(options, "out") || `rvs-export-${stamp}.${options.has("json") ? "json" : "md"}`;
+  return isAbsolute(name) ? name : resolve(EXPORT_DIR, name);
+}
+
 async function runExport(client, options) {
+  const out = options.has("stdout") ? undefined : exportPath(options);
   const filters = filterArguments(options);
   const limit = numberOption(options, "limit", 1000, 1, 1000);
   const timeout = Number(process.env.RVS_TIMEOUT_MS) || 600000;
@@ -422,17 +437,17 @@ async function runExport(client, options) {
   for (let i = 0; i < ids.length; i += 25) {
     const batch = await call("rvs_get_items", { ids: ids.slice(i, i + 25), fields, maxFieldLength: 1000000 });
     items.push(...(Array.isArray(batch) ? batch : batch.items ?? [batch]));
-    if (scalar(options, "out")) process.stderr.write(`\rFetched ${items.length}/${ids.length}`);
+    if (out) process.stderr.write(`\rFetched ${items.length}/${ids.length}`);
   }
-  if (scalar(options, "out")) process.stderr.write("\n");
+  if (out) process.stderr.write("\n");
 
   const total = found.hasMore ? Math.max(ids.length + 1, found.total ?? 0) : ids.length;
   const content = options.has("json")
     ? `${JSON.stringify({ resolved: found.resolved, count: items.length, hasMore: !!found.hasMore, items }, null, 2)}\n`
     : exportMarkdown(items, { filters, total });
-  const out = scalar(options, "out");
   if (out) {
-    const { writeFileSync } = await import("node:fs");
+    const { writeFileSync, mkdirSync } = await import("node:fs");
+    mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, content, "utf8");
     console.error(`Wrote ${items.length} item(s) to ${out}`);
   } else {
