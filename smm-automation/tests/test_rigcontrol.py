@@ -84,10 +84,10 @@ def test_clock_is_a_rig_control_feature_not_a_test_capability(script):
 
 def test_restart_and_failure(script):
     control = RigControl([sys.executable, str(script)])
-    control.restart_appsmm(1500)
-    control.restart_broker(10)
+    control.restart("appsmm", 1500)
+    control.restart("broker", 10)
     with pytest.raises(RigControlError, match="exit code 3: board unreachable"):
-        control.restart_appsmm(666)
+        control.restart("appsmm", 666)
     assert _calls(script)[1:] == ["restart-appsmm --down-ms 1500", "restart-broker --down-ms 10", "restart-appsmm --down-ms 666"]
 
 
@@ -95,7 +95,7 @@ def test_missing_capability_is_refused(script):
     script.with_name("caps.txt").write_text("fetch-log")
     control = RigControl([sys.executable, str(script)])
     with pytest.raises(RigControlError, match="does not support restart-appsmm"):
-        control.restart_appsmm(1000)
+        control.restart("appsmm", 1000)
     assert _calls(script) == ["capabilities"]
 
 
@@ -113,7 +113,7 @@ def test_timeout_and_missing_program(script):
     script.with_name("caps.txt").write_text("restart-broker")
     control.capabilities()
     with pytest.raises(RigControlError, match="did not finish within 0.5 s"):
-        control.restart_broker(5000)
+        control.restart("broker", 5000)
     with pytest.raises(RigControlError, match="not found"):
         RigControl(["no-such-program-smm-rig"]).capabilities()
 

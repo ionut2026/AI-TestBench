@@ -19,14 +19,13 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
-from smm_automation import icd
+from smm_automation import project
 from smm_automation.pipeline.rvs import RvsClient, run
 
 HASH_VERSION = 2
 CATALOG_SCHEMA = 2
 DEFAULT_RETIRED_STATES = ["Rejected", "To Be Deleted", "Deleted"]
 REF = re.compile(r"^(?P<id>\d+)\s+\((?P<type>[^)]+)\)\s*(?P<summary>.*?)\s*(?:\[(?P<state>[^\]]+)\])?$")
-MESSAGE_NAME = re.compile(r"\b([A-Z][A-Za-z]+?(?:Request|Response|Notification))\b")
 ET_SECTIONS = [
     ("preconditions", r"pre-?conditions?\s*:"),
     ("steps", r"steps?\s*:"),
@@ -126,8 +125,10 @@ def parse_explorative_test(description: str | None) -> dict:
 
 
 def message_names(text: str | None, known: set[str] | None = None) -> list[str]:
-    names = []
-    for name in MESSAGE_NAME.findall(text or ""):
+    """Message names (``[catalog] message_pattern``) the text mentions, limited to ``known`` when given."""
+    pattern = project.current().message_pattern
+    names: list[str] = []
+    for name in pattern.findall(text or "") if pattern else []:
         if (not known or name in known) and name not in names:
             names.append(name)
     return names
@@ -150,7 +151,7 @@ def scope_specifications(scope: dict) -> dict[int, str | None]:
         for area, ids in raw.items():
             for sid in ids:
                 if int(sid) in out and out[int(sid)] != area:
-                    raise ValueError(f"SDS-{sid} is listed under two areas: {out[int(sid)]} and {area}")
+                    raise ValueError(f"{project.current().spec_tag(sid)} is listed under two areas: {out[int(sid)]} and {area}")
                 out[int(sid)] = area
     else:
         for sid in raw:
@@ -197,8 +198,8 @@ async def _ingest(scope: dict, server_js: Path | None) -> dict:
 def build_catalog(scope: dict, specs: list[dict], requirements: list[dict], stories: list[dict], ets: list[dict],
                   assigned: dict[int, str | None] | None = None, known: set[str] | None = None) -> dict:
     """``specs`` carry ``Text`` as RV&S rich text (or plain text); ``assigned`` maps spec id -> area from the scope;
-    ``known`` are the ICD message names (default: from the automation service)."""
-    known = icd.message_names() if known is None else known
+    ``known`` are the message names specifications may mention (default: from the project's plugin, e.g. the ICD)."""
+    known = (project.current().plugin.known_messages() or set()) if known is None else known
     not_testable = {int(k): v for k, v in (scope.get("not_testable") or {}).items()}
     deferred = {int(k): v for k, v in (scope.get("deferred") or {}).items()}
     areas = scope.get("areas") or {}
@@ -329,7 +330,7 @@ def ingest(scope_file: Path, out_file: Path, server_js: Path | None = None) -> d
         catalog["changes"] = diff_catalogs(previous, catalog)
     for key, spec in catalog["specifications"].items():
         if spec.get("areaSource") != "scope":
-            print(f"WARNING: SDS-{key} has no area in the scope file; guessed '{spec['area']}' from keywords "
+            print(f"WARNING: {project.current().spec_tag(key)} has no area in the scope file; guessed '{spec['area']}' from keywords "
                   f"(list it under its area in [specifications])", file=sys.stderr)
     write_catalog(out_file, catalog)
     return catalog

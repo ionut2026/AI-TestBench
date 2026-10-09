@@ -2,22 +2,23 @@
 
 How appSMM, the broker and the log files on the instrument's RTC board can be reached differs per site (ssh,
 a service on the board, a power switch...), so the framework does not assume one: the site provides a command
-in the environment variable ``SMM_RIG_CONTROL`` (e.g. ``python D:\\rig\\rig_control.py`` or
+in the environment variable ``<ENV_PREFIX>_RIG_CONTROL`` (``SMM_RIG_CONTROL`` for SMM; e.g. ``python D:\\rig\\rig_control.py`` or
 ``powershell -NoProfile -File D:\\rig\\rig_control.ps1``; run without a shell, or a JSON list of arguments) that
-implements these subcommands:
+implements these subcommands (the restart targets come from the project's ``[rig] targets``; for SMM):
 
     capabilities                     print the supported subcommands (whitespace separated)
-    restart-appsmm --down-ms <ms>    kill appSMM (no goodbye), wait <ms>, start it again; return once it runs
-    restart-broker --down-ms <ms>    stop the MQTT broker, wait <ms>, start it again; return once it listens
-    fetch-log <dir>                  copy appSMM's SmartInspect log files (appSMM*.sil) into <dir>
+    restart-<target> --down-ms <ms>  stop the target, wait <ms>, start it again; return once it runs
+                                     (SMM: restart-appsmm kills appSMM, no goodbye; restart-broker the MQTT broker)
+    fetch-log <dir>                  copy the product's log files (``[rig] log_files``; SMM: appSMM*.sil) into <dir>
     clock                            print "<offset_ms> <uncertainty_ms>": how far the time appSMM stamps its log
                                      lines with (the board's wall-clock time, read as this PC's local time) is
                                      ahead of this PC's clock (optional; without it log times are taken as is)
 
-Exit code 0 means done; anything else is a failure whose stderr is reported. ``SMM_RIG_CONTROL_TIMEOUT``
+Exit code 0 means done; anything else is a failure whose stderr is reported. ``<ENV_PREFIX>_RIG_CONTROL_TIMEOUT``
 (seconds, default 300) bounds every call. Only the subcommands listed by ``capabilities`` are used: the rig
-tier runs ``requires:restart`` tests only with ``restart-appsmm``, ``requires:broker-restart`` tests only with
-``restart-broker`` and ``needs:applog`` tests only with ``fetch-log``.
+tier gets the capability of a target (SMM: ``restart-appsmm`` -> ``requires:restart``, ``restart-broker`` ->
+``requires:broker-restart``) only from its restart subcommand, and the log capability (``needs:applog``) only
+from ``fetch-log``.
 """
 
 from __future__ import annotations
@@ -28,12 +29,35 @@ import shlex
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
-ENV = "SMM_RIG_CONTROL"
-TIMEOUT_ENV = "SMM_RIG_CONTROL_TIMEOUT"
-SUBCOMMANDS = ("restart-appsmm", "restart-broker", "fetch-log", "clock")
-# rig control subcommand -> test capability (see capabilities.TAG_CAPABILITY)
-CAPABILITY_OF = {"restart-appsmm": "restart", "restart-broker": "broker-restart", "fetch-log": "applog"}
+from smm_automation import project
+
+
+def env_name() -> str:
+    return project.current().env("RIG_CONTROL")
+
+
+def timeout_env_name() -> str:
+    return project.current().env("RIG_CONTROL_TIMEOUT")
+
+
+def capability_of() -> dict[str, str]:
+    """Rig control subcommand -> test capability (see the project's ``[capabilities]``)."""
+    p = project.current()
+    return {**{f"restart-{t}": cap for t, cap in p.rig_targets.items()}, "fetch-log": p.rig_log_capability}
+
+
+def subcommands() -> tuple[str, ...]:
+    return (*capability_of(), "clock")
+
+
+def __getattr__(name: str) -> Any:
+    # module constants of the current project (kept for callers of the pre-project API)
+    values = {"ENV": env_name, "TIMEOUT_ENV": timeout_env_name, "SUBCOMMANDS": subcommands, "CAPABILITY_OF": capability_of}
+    if name in values:
+        return values[name]()
+    raise AttributeError(name)
 
 
 class RigControlError(RuntimeError):
@@ -41,15 +65,15 @@ class RigControlError(RuntimeError):
 
 
 def split_command(command: str) -> list[str]:
-    """``SMM_RIG_CONTROL`` as an argument list: a JSON list, or a command line (quotes group, backslashes stay)."""
+    """The rig control command as an argument list: a JSON list, or a command line (quotes group, backslashes stay)."""
     text = command.strip()
     if text.startswith("["):
         try:
             parts = json.loads(text)
         except ValueError as err:
-            raise RigControlError(f"{ENV} is not a valid JSON list: {err}") from err
+            raise RigControlError(f"{env_name()} is not a valid JSON list: {err}") from err
         if not isinstance(parts, list) or not parts or not all(isinstance(p, str) for p in parts):
-            raise RigControlError(f"{ENV} must be a non-empty JSON list of strings")
+            raise RigControlError(f"{env_name()} must be a non-empty JSON list of strings")
         return parts
     parts = shlex.split(text, posix=False)
     return [p[1:-1] if len(p) >= 2 and p[0] == p[-1] and p[0] in "\"'" else p for p in parts]
@@ -58,22 +82,22 @@ def split_command(command: str) -> list[str]:
 class RigControl:
     def __init__(self, command: list[str], timeout_s: float = 300.0):
         if not command:
-            raise RigControlError(f"{ENV} is empty")
+            raise RigControlError(f"{env_name()} is empty")
         self.command = command
         self.timeout_s = timeout_s
         self._capabilities: frozenset[str] | None = None
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> RigControl | None:
-        """The configured rig control, or None when ``SMM_RIG_CONTROL`` is not set."""
+        """The configured rig control, or None when ``<ENV_PREFIX>_RIG_CONTROL`` is not set."""
         env = os.environ if env is None else env
-        command = env.get(ENV, "").strip()
+        command = env.get(env_name(), "").strip()
         if not command:
             return None
         try:
-            timeout = float(env.get(TIMEOUT_ENV) or 300)
+            timeout = float(env.get(timeout_env_name()) or 300)
         except ValueError as err:
-            raise RigControlError(f"{TIMEOUT_ENV} must be a number of seconds") from err
+            raise RigControlError(f"{timeout_env_name()} must be a number of seconds") from err
         return cls(split_command(command), timeout)
 
     def __str__(self) -> str:
@@ -83,7 +107,8 @@ class RigControl:
         """The subcommands the site script supports (asked once)."""
         if self._capabilities is None:
             words = set(self._run("capabilities", timeout_s=min(self.timeout_s, 30)).split())
-            self._capabilities = frozenset(w for w in words if w in SUBCOMMANDS)
+            known = subcommands()
+            self._capabilities = frozenset(w for w in words if w in known)
         return self._capabilities
 
     def has(self, subcommand: str) -> bool:
@@ -91,24 +116,24 @@ class RigControl:
 
     def test_capabilities(self) -> set[str]:
         """The test capabilities (tag side) the rig gets from this script."""
-        return {CAPABILITY_OF[c] for c in self.capabilities() if c in CAPABILITY_OF}
+        of = capability_of()
+        return {of[c] for c in self.capabilities() if c in of}
 
-    def restart_appsmm(self, down_ms: int) -> None:
-        self._require("restart-appsmm")
-        self._run("restart-appsmm", "--down-ms", str(int(down_ms)))
-
-    def restart_broker(self, down_ms: int) -> None:
-        self._require("restart-broker")
-        self._run("restart-broker", "--down-ms", str(int(down_ms)))
+    def restart(self, target: str, down_ms: int) -> None:
+        """``restart-<target> --down-ms <ms>`` (a target of the project's ``[rig] targets``)."""
+        self._require(f"restart-{target}")
+        self._run(f"restart-{target}", "--down-ms", str(int(down_ms)))
 
     def fetch_log(self, dest: Path) -> list[Path]:
-        """Copies appSMM's log files into ``dest``; returns the ``.sil`` files found there."""
+        """Copies the product's log files into ``dest``; returns the files found there (``[rig] log_files``)."""
         self._require("fetch-log")
         dest.mkdir(parents=True, exist_ok=True)
         self._run("fetch-log", str(dest))
-        files = sorted(dest.glob("*.sil"))
+        pattern = project.current().rig_log_files
+        files = sorted(dest.glob(pattern))
         if not files:
-            raise RigControlError(f"'{self} fetch-log' copied no .sil file into {dest}")
+            what = pattern.removeprefix("*") if pattern.startswith("*.") else pattern
+            raise RigControlError(f"'{self} fetch-log' copied no {what} file into {dest}")
         return files
 
     def log_clock_offset(self) -> tuple[float, float]:

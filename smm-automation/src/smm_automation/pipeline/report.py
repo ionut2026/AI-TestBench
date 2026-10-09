@@ -20,16 +20,17 @@ import json
 from pathlib import Path
 from typing import Any
 
+from smm_automation import project
 from smm_automation.pipeline.drift import (
     KNOWN_ISSUE_TAG,
     NOSPEC_TAG,
     PENDING_TAG,
-    SDS_TAG,
     TestRef,
     agent_reviews,
     check,
     hash_for,
     parse_hash_tags,
+    spec_ids,
 )
 
 ORDER = ["FAIL", "NOT RUN", "UNCOVERED", "SKIP", "PARTIAL", "DEFERRED", "PASS", "NOT TESTABLE"]
@@ -41,8 +42,8 @@ COLORS = {
 
 
 def outcome(test: dict, product: bool = True) -> str:
-    """PASS / SKIP / NEW FAIL / KNOWN FAIL / FIXED? of one executed test. Known issues are findings about appSMM:
-    on the mock tier (not the product) they are ignored, so every mock failure is NEW."""
+    """PASS / SKIP / NEW FAIL / KNOWN FAIL / FIXED? of one executed test. Known issues are findings about the product:
+    on a non-evidence tier (a mock of the product) they are ignored, so every mock failure is NEW."""
     known = product and bool(test.get("knownIssues"))
     if test["status"] == "FAIL":
         return "KNOWN FAIL" if known else "NEW FAIL"
@@ -52,11 +53,12 @@ def outcome(test: dict, product: bool = True) -> str:
 
 
 def is_product_tier(tier: str) -> bool:
-    return not tier.startswith("mock")
+    """Whether the tier's verdicts are evidence about the product (``evidence`` of the project's tier)."""
+    return project.current().is_evidence(tier)
 
 
 def classify(tests: list[dict], product: bool = True) -> dict:
-    """Test names per failure class, for the exit code of ``smm-auto run`` and the report header."""
+    """Test names per failure class, for the exit code of ``<cli> run`` and the report header."""
     out: dict[str, list[str]] = {"new": [], "known": [], "fixed": []}
     for t in tests:
         o = outcome(t, product)
@@ -83,7 +85,7 @@ def read_results(output_xml: Path) -> tuple[list[dict], dict]:
                 "message": t.message,
                 "elapsed": round(t.elapsedtime / 1000, 2) if hasattr(t, "elapsedtime") else round(t.elapsed_time.total_seconds(), 2),
                 "tags": tags,
-                "specs": [int(m[1]) for x in tags if (m := SDS_TAG.match(x))],
+                "specs": spec_ids(tags),
                 "hash": plain,
                 "hashes": per_spec,
                 "pending": any(x.lower() == PENDING_TAG for x in tags),
@@ -216,13 +218,13 @@ def _badge(verdict: str) -> str:
 
 def render_html(report: dict) -> str:
     e = html.escape
+    p = project.current()
     meta_rows = "".join(f"<tr><th>{e(k)}</th><td>{e(v)}</td></tr>" for k, v in report["metadata"].items())
     summary = " ".join(f"{_badge(v)} {n}" for v, n in report["summary"].items() if n)
     cov = report["coverage"]
     warn = ""
     if not report["productEvidence"]:
-        warn = ("<div class='warn'><b>MOCK TIER:</b> these verdicts come from the scripted mock appSMM. They check the "
-                "test framework and the tests themselves, they are <b>not evidence about the SMM product</b>.</div>")
+        warn = f"<div class='warn'>{p.text('non_evidence', 'these verdicts are <b>not evidence about the product</b>.')}</div>"
     spec_rows = []
     for s in report["specifications"]:
         tests = "<br>".join(
@@ -252,7 +254,7 @@ def render_html(report: dict) -> str:
         else:
             review = "-"
         spec_rows.append(
-            f"<tr><td>{_badge(s['verdict'])}</td><td>{review}</td><td><b>SDS-{s['id']}</b><br><small>{e(s['area'])}</small></td>"
+            f"<tr><td>{_badge(s['verdict'])}</td><td>{review}</td><td><b>{e(p.spec_tag(s['id']))}</b><br><small>{e(s['area'])}</small></td>"
             f"<td class='text'>{e(s['text'][:600])}</td><td>{tests or '-'}</td><td><small>{e(links)}</small><br>{'<br>'.join(notes)}</td></tr>"
         )
     failures = report.get("failures") or {"new": [], "known": [], "fixed": []}
@@ -273,7 +275,7 @@ def render_html(report: dict) -> str:
     def roll_table(items: list[dict], prefix: str) -> str:
         rows = "".join(
             f"<tr><td>{_badge(i['verdict'])}</td><td><b>{prefix}-{i['id']}</b></td><td>{e(str(i['title']))}</td>"
-            f"<td>{e(str(i['state']))}</td><td>{', '.join(f'SDS-{s}' for s in i['specifications'])}</td></tr>"
+            f"<td>{e(str(i['state']))}</td><td>{', '.join(e(p.spec_tag(s)) for s in i['specifications'])}</td></tr>"
             for i in sorted(items, key=lambda i: (ORDER.index(i["verdict"]), i["id"]))
         )
         return f"<table><tr><th>Verdict</th><th>ID</th><th>Title</th><th>RV&amp;S state</th><th>Specifications in scope</th></tr>{rows}</table>"
@@ -285,7 +287,8 @@ def render_html(report: dict) -> str:
         for t in report.get("nospec") or []
     )
     nospec_html = ("<h2>Tests without a specification</h2><p>Robustness and unspecified state x request cells "
-                   "(<code>nospec:</code>): they do not count for any specification; a SKIP carries what appSMM did.</p>"
+                   "(<code>nospec:</code>): they do not count for any specification; "
+                   f"{p.text('nospec_skip', 'a SKIP carries what the product did')}.</p>"
                    f"<table><tr><th>Outcome</th><th>Kind</th><th>Test</th><th>Message / observation</th></tr>{nospec_rows}</table>"
                    if nospec_rows else "")
     drift = report.get("drift") or {}
@@ -294,7 +297,7 @@ def render_html(report: dict) -> str:
         if drift.get(key):
             drift_html += f"<h3>{e(key)} ({len(drift[key])})</h3><ul>" + "".join(f"<li><code>{e(json.dumps(i, ensure_ascii=False))}</code></li>" for i in drift[key]) + "</ul>"
     scope = report.get("scope") or {}
-    return f"""<!doctype html><html><head><meta charset="utf-8"><title>SMM traceability: {e(str(scope.get('name')))} ({e(report['tier'])})</title>
+    return f"""<!doctype html><html><head><meta charset="utf-8"><title>{e(p.name)} traceability: {e(str(scope.get('name')))} ({e(report['tier'])})</title>
 <style>
 body{{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#222}} table{{border-collapse:collapse;margin:8px 0 24px;width:100%}}
 td,th{{border:1px solid #ccc;padding:4px 6px;vertical-align:top;text-align:left;font-size:13px}} th{{background:#f4f4f4}}
@@ -303,7 +306,7 @@ td,th{{border:1px solid #ccc;padding:4px 6px;vertical-align:top;text-align:left;
 .bad{{background:#f7c0c0;border:1px solid #c00;padding:10px;margin:12px 0}}
 table.meta{{width:auto}}
 </style></head><body>
-<h1>SMM traceability report</h1>
+<h1>{e(p.name)} traceability report</h1>
 <p>{e(str(scope.get('title') or ''))}</p>
 {warn}
 {fail_html}

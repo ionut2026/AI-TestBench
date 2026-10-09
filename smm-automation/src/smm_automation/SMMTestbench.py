@@ -191,7 +191,7 @@ class SMMTestbench:
         self._segment(f"appSMM restarted (down {down})")
         down_ms = int(timestr_to_secs(down) * 1000)
         if self._kind("appSmm") == "external":
-            self._require_control("restart-appsmm", "restart appSMM").restart_appsmm(down_ms)
+            self._require_control("restart-appsmm", "restart appSMM").restart("appsmm", down_ms)
         else:
             self.client.restart_appsmm(down_ms)
 
@@ -203,7 +203,7 @@ class SMMTestbench:
         self._segment(f"MQTT broker restarted (down {down})")
         down_ms = int(timestr_to_secs(down) * 1000)
         if self._kind("broker") == "external":
-            self._require_control("restart-broker", "restart the MQTT broker").restart_broker(down_ms)
+            self._require_control("restart-broker", "restart the MQTT broker").restart("broker", down_ms)
         else:
             self.client.restart_broker(down_ms)
 

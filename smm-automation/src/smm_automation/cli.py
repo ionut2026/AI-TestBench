@@ -25,16 +25,12 @@ import argparse
 import datetime as dt
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 
-from smm_automation import FRAMEWORK_ROOT
-from smm_automation.capabilities import TIERS, excluded_tags, tier_capabilities
+from smm_automation import project
+from smm_automation.capabilities import excluded_tags, tier_capabilities
 from smm_automation.operator_prompt import MODES as OPERATOR_MODES
-
-DEFAULT_SCOPE = FRAMEWORK_ROOT / "catalog" / "pilot.scope.toml"
-REVIEWS = FRAMEWORK_ROOT / "catalog" / "reviews.toml"
 
 
 def _default_operator() -> str:
@@ -53,11 +49,11 @@ def _catalog_path(args) -> Path:
 
     with open(args.scope, "rb") as f:
         name = tomllib.load(f).get("name", "pilot")
-    return FRAMEWORK_ROOT / "catalog" / f"{name}.json"
+    return project.current().path("catalog_dir") / f"{name}.json"
 
 
 def _suites(args) -> list[Path]:
-    return [Path(s) for s in args.suites] if args.suites else [FRAMEWORK_ROOT / "robot" / "suites"]
+    return [Path(s) for s in args.suites] if args.suites else project.current().paths("suites")
 
 
 def cmd_ingest(args) -> int:
@@ -140,7 +136,7 @@ def cmd_review(args) -> int:
     tests = collect_tests(_suites(args))
     chosen = []
     for selector in args.tests:
-        sid = selector.upper().removeprefix("SDS-")
+        sid = selector.upper().removeprefix(project.current().spec_prefix.upper() + "-")
         found = [t for t in tests if t.name == selector] or ([t for t in tests if int(sid) in t.specs] if sid.isdigit() else [])
         if not found:
             print(f"No test named or tagged '{selector}'", file=sys.stderr)
@@ -168,41 +164,16 @@ def cmd_lint(args) -> int:
 
     catalog_path = _catalog_path(args)
     violations = lint(_suites(args), load_catalog(catalog_path) if catalog_path.exists() else None)
-    print(format_text(violations, FRAMEWORK_ROOT))
+    print(format_text(violations, project.current().root))
     return 1 if violations else 0
 
 
-def cmd_matrix(args) -> int:
-    from smm_automation.pipeline.drift import collect_tests, load_reviews
-    from smm_automation.pipeline.ingest import load_catalog
-    from smm_automation.pipeline.matrix import MatrixError, generate, load_model, validate, write
-
-    try:
-        model = load_model(Path(args.model))
-    except (MatrixError, TypeError) as err:
-        print(f"{args.model}: {err}", file=sys.stderr)
-        return 2
-    catalog = load_catalog(_catalog_path(args))
-    errors = validate(model, catalog, collect_tests(_suites(args)))
-    if errors:
-        print("\n".join(f"{args.model}: {e}" for e in errors), file=sys.stderr)
-        return 2
-    paths = {"suite": Path(args.suite), "questions": Path(args.questions)}
-    differ = write(generate(model, catalog, load_reviews(Path(args.reviews))), paths, check=args.check)
-    if args.check:
-        for p in differ:
-            print(f"OUT OF DATE: {p} (run smm-auto matrix)")
-        return 1 if differ else 0
-    generated = sum(1 for c in model.cells if c.generated)
-    print(f"{len(model.cells)} cells, {generated} generated test(s); written: {', '.join(map(str, differ)) or '(unchanged)'}")
-    return 0
-
-
-def _report(catalog_path: Path, output_xml: Path, out_dir: Path, suites: list[Path], reviews: Path = REVIEWS) -> dict:
+def _report(catalog_path: Path, output_xml: Path, out_dir: Path, suites: list[Path], reviews: Path | None = None) -> dict:
     from smm_automation.pipeline.drift import collect_tests, load_reviews
     from smm_automation.pipeline.ingest import load_catalog
     from smm_automation.pipeline.report import write_report
 
+    reviews = reviews or project.current().path("reviews")
     report = write_report(load_catalog(catalog_path), output_xml, out_dir, collect_tests(suites), load_reviews(reviews))
     print(f"Traceability report: {out_dir / 'traceability.html'}")
     print("Specifications: " + ", ".join(f"{k} {v}" for k, v in report["summary"].items() if v))
@@ -240,25 +211,22 @@ def _exit_code(rc: int, output: Path, fail_on: str) -> int:
     return rc
 
 
-# Why only the mock tier runs in parallel: offline workers would share one appSMM installation (its config files are
-# rewritten per run), the Mosquitto port in appSMM's InstrumentControl.config, the COP port and the SIL log folder;
-# the rig is one instrument.
-PARALLEL_TIERS = ("mock",)
-
-
 def cmd_run(args, robot_args: list[str]) -> int:
     from robot.run import run_cli
 
+    p = project.current()
     if args.processes < 1:
         print("--processes must be at least 1", file=sys.stderr)
         return 2
-    if args.processes > 1 and args.tier not in PARALLEL_TIERS:
-        print(f"--processes {args.processes}: parallel runs are only possible on the {', '.join(PARALLEL_TIERS)} tier "
-              f"(offline: one appSMM installation with fixed MQTT/COP ports and log folder; rig: one instrument)", file=sys.stderr)
+    parallel = [t.name for t in p.tiers.values() if t.parallel]
+    if args.processes > 1 and args.tier not in parallel:
+        # which tiers may run in parallel and why the others may not: [tiers] in grf.toml
+        print(f"--processes {args.processes}: parallel runs are only possible on the {', '.join(parallel) or 'no'} tier "
+              f"(see [tiers] in {p.root / project.CONFIG_FILE})", file=sys.stderr)
         return 2
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-    out_dir = Path(args.outdir) if args.outdir else FRAMEWORK_ROOT / "results" / f"{args.tier}-{stamp}"
-    from smm_automation.operator_prompt import ENV as OPERATOR_ENV
+    out_dir = Path(args.outdir) if args.outdir else p.path("results") / f"{args.tier}-{stamp}"
+    from smm_automation.operator_prompt import env_name as operator_env_name
     from smm_automation.rigcontrol import RigControlError
 
     try:
@@ -269,21 +237,22 @@ def cmd_run(args, robot_args: list[str]) -> int:
     excludes = excluded_tags(caps)
     print("Capabilities: " + "; ".join(notes))
     print(f"Excluded (capability missing): {', '.join(excludes) or 'nothing'}")
-    os.environ[OPERATOR_ENV] = args.operator
+    os.environ[operator_env_name()] = args.operator
+    os.environ[project.PROJECT_ENV] = str(p.root)
     if args.exclude_pending:
         excludes.append("review:pending")
     options = {
-        "variablefile": [str(FRAMEWORK_ROOT / "robot" / "environments" / f"{args.tier}.py")],
+        "variablefile": [str(p.path("environments") / f"{args.tier}.py")],
         "exclude": excludes,
         "outputdir": str(out_dir),
-        "name": f"SMM {args.tier}",
+        "name": f"{p.name} {args.tier}",
         "metadata": [f"Run:{stamp}"],
     }
     argv: list[str] = []
     for key, values in options.items():
         for value in values if isinstance(values, list) else [values]:
             argv += [f"--{key}", str(value)]
-    argv += robot_args + [str(p) for p in _suites(args)]
+    argv += robot_args + [str(suite) for suite in _suites(args)]
     if args.processes > 1:
         from pabot.pabot import main_program
 
@@ -330,12 +299,13 @@ def cmd_mutate(args) -> int:
             return 2
         mutants = [m for m in mutants if m["id"] in args.mutant]
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-    out_dir = Path(args.outdir) if args.outdir else FRAMEWORK_ROOT / "results" / f"mutation-{stamp}"
+    p = project.current()
+    out_dir = Path(args.outdir) if args.outdir else p.path("results") / f"mutation-{stamp}"
     suites = _suites(args)
     tests = collect_tests(suites)
     excludes = excluded_tags(tier_capabilities(args.tier)[0])
     print(f"{len(mutants)} mutant(s) on the {args.tier} tier -> {out_dir}")
-    result = mutate(mutants, tests, out_dir, tier=args.tier, variablefile=FRAMEWORK_ROOT / "robot" / "environments" / f"{args.tier}.py",
+    result = mutate(mutants, tests, out_dir, tier=args.tier, variablefile=p.path("environments") / f"{args.tier}.py",
                     excludes=excludes, suites=suites, baseline=not args.no_baseline)
     if not args.mutant:
         result["specsWithoutMutants"] = specs_without_mutants(mutants, tests, excludes)
@@ -351,7 +321,7 @@ def cmd_mutate(args) -> int:
     print(f"Mutation score: {sc['score']} (killed {sc['killed']}, survived {sc['survived']}, no tests {sc['noTests']}, errors {sc['errors']})")
     for m in result["mutants"]:
         if m["status"] == "survived":
-            print(f"  SURVIVED {m['id']} (SDS-{', SDS-'.join(map(str, m['specs']))}): {m['description']}")
+            print(f"  SURVIVED {m['id']} ({', '.join(p.spec_tag(s) for s in m['specs'])}): {m['description']}")
     if result.get("specsWithoutMutants"):
         print(f"Specifications with tests but no mutant: {', '.join(map(str, result['specsWithoutMutants']))}")
     if sc["errors"]:
@@ -369,86 +339,77 @@ def cmd_doctor(args) -> int:
     return 1 if failed else 0
 
 
-def cmd_service(args) -> int:
-    dist = FRAMEWORK_ROOT / "service" / "dist" / "smm-automation-service.mjs"
-    if not dist.exists():
-        print(f"{dist} not found: run `npm install && npm run build` in {dist.parent.parent}", file=sys.stderr)
-        return 2
-    return subprocess.call(["node", str(dist), "--port", str(args.port)])
-
-
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="smm-auto", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, allow_abbrev=False)
-    parser.add_argument("--scope", default=str(DEFAULT_SCOPE), help="scope file (default: catalog/pilot.scope.toml)")
+    p = project.current()
+    tiers = list(p.tiers)
+    parser = argparse.ArgumentParser(prog=p.cli, description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, allow_abbrev=False)
+    scope, reviews = p.raw_paths("scope")[0], p.raw_paths("reviews")[0]
+    parser.add_argument("--scope", default=str(p.path("scope")), help=f"scope file (default: {scope})")
     parser.add_argument("--catalog", help="catalog JSON (default: catalog/<scope name>.json)")
-    parser.add_argument("--suites", action="append", help="suite file/directory, repeatable (default: robot/suites)")
-    parser.add_argument("--reviews", default=str(REVIEWS), help="review ledger (default: catalog/reviews.toml)")
+    parser.add_argument("--suites", action="append", help=f"suite file/directory, repeatable (default: {', '.join(p.raw_paths('suites'))})")
+    parser.add_argument("--reviews", default=str(p.path("reviews")), help=f"review ledger (default: {reviews})")
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("ingest", allow_abbrev=False, help="read specifications, requirements, user stories and ETs from RV&S")
-    p = sub.add_parser("briefs", allow_abbrev=False, help="write generation briefs for the test-authoring agent")
-    p.add_argument("--spec", nargs="*", help="only these specification IDs")
-    p.add_argument("--out", default=str(FRAMEWORK_ROOT / "generated" / "briefs"))
-    p = sub.add_parser("drift", allow_abbrev=False, help="compare suites with the catalog")
-    p.add_argument("--strict", action="store_true", help="exit code 1 on stale/orphan/untagged/uncovered/unrecorded review or a lint violation")
-    p.add_argument("--json", help="also write the result as JSON")
-    p = sub.add_parser("accept", allow_abbrev=False, help="accept RV&S state/link changes of specifications as the new baseline")
-    p.add_argument("ids", nargs="*", type=int, help="specification IDs")
-    p.add_argument("--all", action="store_true", help="every specification")
-    p = sub.add_parser("migrate-hashes", allow_abbrev=False, help="update spechash tags after a hashing change (same text, new hash)")
-    p.add_argument("--from", dest="old", required=True, help="the catalog JSON before the re-ingestion")
-    p = sub.add_parser("review", allow_abbrev=False, help="record a review of tests in the review ledger")
-    p.add_argument("tests", nargs="+", help="exact test name(s) or SDS-<id> (every test tagged with it)")
-    p.add_argument("--reviewer", required=True, help="the person's name, or agent:<model> for an agent review")
-    p.add_argument("--verdict", required=True, choices=["approved", "approved-with-notes", "changes-requested", "rejected"])
-    p.add_argument("--ref", help="PR / commit")
-    p.add_argument("--notes")
-    p.add_argument("--date", help="YYYY-MM-DD (default: today)")
+    cmd = sub.add_parser("briefs", allow_abbrev=False, help="write generation briefs for the test-authoring agent")
+    cmd.add_argument("--spec", nargs="*", help="only these specification IDs")
+    cmd.add_argument("--out", default=str(p.path("briefs")))
+    cmd = sub.add_parser("drift", allow_abbrev=False, help="compare suites with the catalog")
+    cmd.add_argument("--strict", action="store_true", help="exit code 1 on stale/orphan/untagged/uncovered/unrecorded review or a lint violation")
+    cmd.add_argument("--json", help="also write the result as JSON")
+    cmd = sub.add_parser("accept", allow_abbrev=False, help="accept RV&S state/link changes of specifications as the new baseline")
+    cmd.add_argument("ids", nargs="*", type=int, help="specification IDs")
+    cmd.add_argument("--all", action="store_true", help="every specification")
+    cmd = sub.add_parser("migrate-hashes", allow_abbrev=False, help="update spechash tags after a hashing change (same text, new hash)")
+    cmd.add_argument("--from", dest="old", required=True, help="the catalog JSON before the re-ingestion")
+    cmd = sub.add_parser("review", allow_abbrev=False, help="record a review of tests in the review ledger")
+    cmd.add_argument("tests", nargs="+", help=f"exact test name(s) or {p.spec_prefix}-<id> (every test tagged with it)")
+    cmd.add_argument("--reviewer", required=True, help="the person's name, or agent:<model> for an agent review")
+    cmd.add_argument("--verdict", required=True, choices=["approved", "approved-with-notes", "changes-requested", "rejected"])
+    cmd.add_argument("--ref", help="PR / commit")
+    cmd.add_argument("--notes")
+    cmd.add_argument("--date", help="YYYY-MM-DD (default: today)")
     sub.add_parser("lint", allow_abbrev=False, help="check the test rules (exit code 1 on violations)")
-    p = sub.add_parser("matrix", allow_abbrev=False, help="generate the state x request matrix suite and its open questions")
-    p.add_argument("--model", default=str(FRAMEWORK_ROOT / "catalog" / "state-matrix.toml"))
-    p.add_argument("--suite", default=str(FRAMEWORK_ROOT / "robot" / "suites" / "pilot" / "state_matrix.robot"))
-    p.add_argument("--questions", default=str(FRAMEWORK_ROOT / "catalog" / "state-matrix.questions.md"))
-    p.add_argument("--check", action="store_true", help="only check that the generated files are up to date (exit code 1 if not)")
-    p = sub.add_parser("run", allow_abbrev=False, help="run suites against a tier and write the traceability report (extra args go to robot)")
-    p.add_argument("--tier", choices=TIERS, default="mock")
-    p.add_argument("--operator", choices=OPERATOR_MODES, default=_default_operator(),
-                   help="who does manual steps at the instrument (default: $SMM_OPERATOR or none); console/dialog also run "
-                        "needs:operator and needs:hardware-action tests")
-    p.add_argument("--outdir")
-    p.add_argument("--fail-on", choices=["new", "any", "none"], default="new",
-                   help="exit code: number of NEW failures (default; known-issue failures do not count), of ANY failures, or 0")
-    p.add_argument("--exclude-pending", action="store_true", help="do not run tests tagged review:pending (they run and are labelled UNREVIEWED by default)")
-    p.add_argument("--include-pending", action="store_true", help=argparse.SUPPRESS)  # pre-1.1 option, now the default
-    p.add_argument("--no-report", action="store_true")
-    p.add_argument("--processes", type=int, default=1,
-                   help="run suites in N parallel processes with pabot (mock tier only; each worker gets its own service and broker)")
-    p = sub.add_parser("report", allow_abbrev=False, help="traceability report for an existing output.xml")
-    p.add_argument("--output", required=True)
-    p.add_argument("--outdir")
-    p = sub.add_parser("mutate", allow_abbrev=False, help="mutation testing: inject defects into the mock appSMM and check that the tests notice")
-    p.add_argument("--tier", choices=["mock"], default="mock", help="only the mock appSMM supports fault injection")
-    p.add_argument("--mutants", default=str(FRAMEWORK_ROOT / "catalog" / "mutants.toml"))
-    p.add_argument("--mutant", action="append", help="only this mutant id (repeatable)")
-    p.add_argument("--outdir")
-    p.add_argument("--min-score", type=float, default=0.9, help="exit code 1 when the share of killed mutants is lower (default 0.9)")
-    p.add_argument("--no-baseline", action="store_true", help="skip the run without faults (the selected tests must pass without faults)")
-    p = sub.add_parser("doctor", allow_abbrev=False, help="check that a tier can run before a long run (exit code 1 on FAIL)")
-    p.add_argument("--tier", choices=TIERS, default="mock")
-    p.add_argument("--operator", choices=OPERATOR_MODES, default=_default_operator())
-    p.add_argument("--deep", action="store_true", help="also start the environment and ask appSMM for its state and version "
-                                                     "(on the rig this connects a Bridge to the instrument)")
-    p = sub.add_parser("service", allow_abbrev=False, help="run the automation service in the foreground")
-    p.add_argument("--port", type=int, default=8765)
+    cmd = sub.add_parser("run", allow_abbrev=False, help="run suites against a tier and write the traceability report (extra args go to robot)")
+    cmd.add_argument("--tier", choices=tiers, default=tiers[0])
+    cmd.add_argument("--operator", choices=OPERATOR_MODES, default=_default_operator(),
+                     help=f"who does manual steps at the instrument (default: ${p.env('OPERATOR')} or none); console/dialog also run "
+                          "needs:operator and needs:hardware-action tests")
+    cmd.add_argument("--outdir")
+    cmd.add_argument("--fail-on", choices=["new", "any", "none"], default="new",
+                     help="exit code: number of NEW failures (default; known-issue failures do not count), of ANY failures, or 0")
+    cmd.add_argument("--exclude-pending", action="store_true", help="do not run tests tagged review:pending (they run and are labelled UNREVIEWED by default)")
+    cmd.add_argument("--include-pending", action="store_true", help=argparse.SUPPRESS)  # pre-1.1 option, now the default
+    cmd.add_argument("--no-report", action="store_true")
+    cmd.add_argument("--processes", type=int, default=1,
+                     help="run suites in N parallel processes with pabot (mock tier only; each worker gets its own service and broker)")
+    cmd = sub.add_parser("report", allow_abbrev=False, help="traceability report for an existing output.xml")
+    cmd.add_argument("--output", required=True)
+    cmd.add_argument("--outdir")
+    cmd = sub.add_parser("mutate", allow_abbrev=False, help=f"mutation testing: inject defects into the mock {p.product} and check that the tests notice")
+    mock_tiers = [t.name for t in p.tiers.values() if not t.evidence]
+    cmd.add_argument("--tier", choices=mock_tiers, default=mock_tiers[0] if mock_tiers else None,
+                     help=f"only the mock {p.product} supports fault injection")
+    cmd.add_argument("--mutants", default=str(p.path("mutants")))
+    cmd.add_argument("--mutant", action="append", help="only this mutant id (repeatable)")
+    cmd.add_argument("--outdir")
+    cmd.add_argument("--min-score", type=float, default=0.9, help="exit code 1 when the share of killed mutants is lower (default 0.9)")
+    cmd.add_argument("--no-baseline", action="store_true", help="skip the run without faults (the selected tests must pass without faults)")
+    cmd = sub.add_parser("doctor", allow_abbrev=False, help="check that a tier can run before a long run (exit code 1 on FAIL)")
+    cmd.add_argument("--tier", choices=tiers, default=tiers[0])
+    cmd.add_argument("--operator", choices=OPERATOR_MODES, default=_default_operator())
+    cmd.add_argument("--deep", action="store_true", help="also start the environment and talk to the product (see the project's doctor; "
+                                                       "on a rig this may connect to the instrument)")
+    plugin_commands = p.plugin.add_commands(sub)
 
     args, extra = parser.parse_known_args(argv)
     if extra and args.command != "run":
         parser.error(f"unrecognized arguments: {' '.join(extra)}")
     if args.command == "run":
         return cmd_run(args, extra)
-    return {"ingest": cmd_ingest, "briefs": cmd_briefs, "drift": cmd_drift, "accept": cmd_accept, "migrate-hashes": cmd_migrate_hashes,
-            "review": cmd_review, "lint": cmd_lint, "matrix": cmd_matrix, "report": cmd_report, "mutate": cmd_mutate, "doctor": cmd_doctor,
-            "service": cmd_service}[args.command](args)
+    commands = {"ingest": cmd_ingest, "briefs": cmd_briefs, "drift": cmd_drift, "accept": cmd_accept, "migrate-hashes": cmd_migrate_hashes,
+                "review": cmd_review, "lint": cmd_lint, "report": cmd_report, "mutate": cmd_mutate, "doctor": cmd_doctor}
+    return {**commands, **plugin_commands}[args.command](args)
 
 
 if __name__ == "__main__":

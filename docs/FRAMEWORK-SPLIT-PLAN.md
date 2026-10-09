@@ -84,6 +84,23 @@ install of the sibling GRF; CI pins a GRF release tag.
 - WindchillMcpServer gets its own repo.
 - AI-TestBench becomes GRF, and SMMAutomationFramework is a new repo.
 
+## Deviations from the plan (recorded as they happen)
+
+- **P1:**
+  - The seam is `smm_automation\project.py`, which reads `smm-automation\grf.toml` (`GRF_PROJECT` selects another
+    project), and `plugin.py` (`ProductPlugin`). It still lives in `smm_automation`; P2 moves it to `grf`.
+  - `ProductPlugin` hooks: `known_messages`, `brief_sections`, `doctor_class` and `add_commands`. Tier
+    capabilities, mutation faults (env name), the brief rules (`catalog\brief-rules.md`) and the keyword docs are plain
+    configuration, not hooks.
+  - The SMM plugin is `product.py` (`SmmPlugin`). The SMM doctor checks (service, pin, environment, offline,
+    rig broker, `--deep`) are in `smm_doctor.py` (`SmmDoctor`). `matrix` and `service` are plugin commands, so the
+    state matrix (`pipeline\matrix.py`) and `client.py` stay SMM-specific.
+  - The rig control API is `restart(target, down_ms)` for the `[rig] targets` (`restart_appsmm`/`restart_broker` are
+    gone). The ssh rig control waits for `[rig] ready_ports` (the broker's 1883) unless the target sets `port`.
+  - Texts, lint codes, env vars, tags and the help of `smm-auto` are unchanged for SMM, except the parallel-tier error,
+    which now points to `[tiers]` in `grf.toml`, the generic `doctor --deep` help, and the order of the commands in
+    `--help` (plugin commands last).
+
 ## Open points (proposed defaults)
 
 1. **Visibility:** all three private, in a GitHub organisation, for multi-person access and shared secrets.

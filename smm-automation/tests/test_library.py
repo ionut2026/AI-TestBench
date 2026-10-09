@@ -503,11 +503,8 @@ class FakeControl:
     def has(self, subcommand):
         return subcommand in self.subcommands
 
-    def restart_appsmm(self, down_ms):
-        self.calls.append(("restart-appsmm", down_ms))
-
-    def restart_broker(self, down_ms):
-        self.calls.append(("restart-broker", down_ms))
+    def restart(self, target, down_ms):
+        self.calls.append((f"restart-{target}", down_ms))
 
 
 def _on_the_rig(smm, monkeypatch, control=None, operator="none"):

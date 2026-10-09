@@ -1,11 +1,14 @@
-"""Test rules the Robot suites must follow (``smm-auto lint``, also part of ``smm-auto drift --strict``).
+"""Test rules the Robot suites must follow (``<cli> lint``, also part of ``<cli> drift --strict``).
+
+Rule codes carry the project's ``rule_prefix`` (SMM for the SMM project); rules 04.. are the project's tag rules
+(``[[lint.tag_rules]]`` in ``grf.toml``). For SMM:
 
 * SMM01 no-sleep        - no ``Sleep``: wait for a message/state, or assert silence (`Message Should Not Arrive`)
 * SMM02 documentation   - every test has ``[Documentation]`` that quotes its specification (at least
   ``QUOTE_WORDS`` consecutive words of the spec text) or, for a variant, names the specification id. A test
   without a specification (``nospec:<kind>`` tag, e.g. robustness) needs documentation saying what it expects
 * SMM03 literal-timeout - ``timeout=`` / ``duration=`` and the `Wait Until Keyword Succeeds` timeout are
-  variables (tier timeouts from ``robot/environments``, spec limits as ``${SDS_<id>_LIMIT}``), not literals
+  variables (tier timeouts from ``robot/environments``, spec limits as ``${<SPEC_PREFIX>_<id>_LIMIT}``), not literals
 * SMM04 twin-tag        - a test that drives the hardware twin unconditionally (not inside ``IF``) is tagged
   ``needs:twin``; a ``needs:twin`` test uses at least one hardware keyword
 * SMM05 restart-tag     - same for restarting appSMM and `requires:restart`, and for restarting the MQTT broker
@@ -25,30 +28,10 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from smm_automation import project
+from smm_automation.project import norm_keyword as norm
+
 QUOTE_WORDS = 5
-# Keywords only the hardware twin can do (offline tier).
-TWIN_KEYWORDS = {
-    "triggerhardwareaction", "gethardwaresnapshot", "hardwarestateshouldbe",
-    "clearhardwaretwinracks", "waitforhardwarecommand", "hardwarecommandshouldnotbesent",
-    "sethardwarefaults", "clearhardwarefaults", "gethardwarefaultstatus", "hardwarefaultshouldhavebeenapplied",
-}
-# Hardware actions the operator can also do on the real instrument.
-ACTION_KEYWORDS = {"triggeremergencystop"}
-HARDWARE_KEYWORDS = TWIN_KEYWORDS | ACTION_KEYWORDS
-RESTART_KEYWORDS = {"restartappsmm"}
-BROKER_RESTART_KEYWORDS = {"restartmqttbroker"}
-OPERATOR_KEYWORDS = {"operatoraction"}
-APPLOG_KEYWORDS = {"getappsmmlogmessages", "icdmessagesshouldbeloggedbyappsmm"}
-# (rule, tag, other tags that also allow the use, keywords that need the tag, keywords that justify the tag, what)
-TAG_RULES: tuple[tuple[str, str, set[str], set[str], set[str], str], ...] = (
-    ("SMM04", "needs:twin", set(), TWIN_KEYWORDS, HARDWARE_KEYWORDS, "drives the hardware twin"),
-    ("SMM05", "requires:restart", set(), RESTART_KEYWORDS, RESTART_KEYWORDS, "restarts appSMM"),
-    ("SMM05", "requires:broker-restart", set(), BROKER_RESTART_KEYWORDS, BROKER_RESTART_KEYWORDS, "restarts the MQTT broker"),
-    ("SMM06", "needs:applog", set(), APPLOG_KEYWORDS, APPLOG_KEYWORDS, "reads the appSMM log files"),
-    ("SMM07", "needs:hardware-action", {"needs:twin"}, ACTION_KEYWORDS, ACTION_KEYWORDS, "triggers an E-Stop"),
-    ("SMM07", "needs:operator", set(), OPERATOR_KEYWORDS, OPERATOR_KEYWORDS, "asks the operator for an action"),
-)
-TAGGED_KEYWORDS = set().union(*(r[4] for r in TAG_RULES))
 TIMING_ARGS = ("timeout=", "duration=")
 NOSPEC_PREFIX = "nospec:"
 RUN_KEYWORD_CONDITIONAL = {"runkeywordif", "runkeywordunless"}
@@ -64,11 +47,6 @@ class Violation:
 
     def as_dict(self) -> dict:
         return {"rule": self.rule, "source": self.source, "line": self.line, "item": self.item, "message": self.message}
-
-
-def norm(name: str) -> str:
-    name = name.split(".")[-1] if "." in name and " " not in name.split(".")[0] else name
-    return re.sub(r"[\s_]", "", name).lower()
 
 
 def _words(text: str) -> list[str]:
@@ -141,6 +119,7 @@ class KeywordIndex:
 
     def __init__(self):
         self.keywords: dict[str, list[Call]] = {}
+        self.tagged: frozenset[str] = frozenset().union(*(r.satisfied_by for r in project.current().lint_tag_rules))
 
     def add(self, model) -> None:
         for kw in _section_items(model, "KeywordSection"):
@@ -150,10 +129,10 @@ class KeywordIndex:
         n = norm(call.name)
         if n.startswith("runkeyword") or n in ("waituntilkeywordsucceeds", "repeatkeyword"):
             cond = call.conditional or n in RUN_KEYWORD_CONDITIONAL
-            return [Call(a, (), call.line, cond) for a in call.args if norm(a) in self.keywords or norm(a) in TAGGED_KEYWORDS]
+            return [Call(a, (), call.line, cond) for a in call.args if norm(a) in self.keywords or norm(a) in self.tagged]
         return []
 
-    def uses(self, calls: list[Call], targets: set[str]) -> tuple[bool, bool]:
+    def uses(self, calls: list[Call], targets: frozenset[str]) -> tuple[bool, bool]:
         """(used at all, used unconditionally) of any keyword in ``targets``."""
         any_use = uncond = False
         seen: set[tuple[str, bool]] = set()
@@ -205,17 +184,19 @@ def _resources(model, source: Path) -> list[Path]:
 
 
 def _check_calls(calls: list[Call], source: str, item: str, out: list[Violation]) -> None:
+    p = project.current()
     for c in calls:
         n = norm(c.name)
         if n == "sleep":
-            out.append(Violation("SMM01", source, c.line, item, "Sleep: wait for a message or state, or assert silence with Message Should Not Arrive"))
+            out.append(Violation(p.rule(1), source, c.line, item, "Sleep: wait for a message or state, or assert silence with Message Should Not Arrive"))
         timing = [a for a in c.args if a.lower().startswith(TIMING_ARGS)]
         if n == "waituntilkeywordsucceeds" and c.args:
             timing.append("timeout=" + c.args[0])
         for a in timing:
             value = a.split("=", 1)[1]
             if value and "${" not in value:
-                out.append(Violation("SMM03", source, c.line, item, f"Literal timing value '{a}': use a tier variable or ${{SDS_<id>_LIMIT}}"))
+                out.append(Violation(p.rule(3), source, c.line, item,
+                                     f"Literal timing value '{a}': use a tier variable or ${{{p.spec_prefix}_<id>_LIMIT}}"))
 
 
 def lint(paths: list[Path], catalog: dict | None = None) -> list[Violation]:
@@ -234,6 +215,7 @@ def lint(paths: list[Path], catalog: dict | None = None) -> list[Violation]:
         if f.suffix == ".resource":
             shared.add(m)
 
+    p = project.current()
     out: list[Violation] = []
     for f, model in models.items():
         src = str(f)
@@ -250,14 +232,14 @@ def lint(paths: list[Path], catalog: dict | None = None) -> list[Violation]:
         for test in _section_items(model, "TestCaseSection"):
             nodes = {type(n).__name__: n for n in test.body}
             tags = [t.lower() for t in suite_tags + list(getattr(nodes.get("Tags"), "values", ()) or ())]
-            spec_ids = [int(t[4:]) for t in tags if re.fullmatch(r"sds-\d+", t)]
+            spec_ids = [int(m[1]) for t in tags if (m := p.spec_tag_re.match(t))]
             doc = nodes["Documentation"].value if "Documentation" in nodes else ""
             nospec = not spec_ids and any(t.startswith(NOSPEC_PREFIX) for t in tags)
             if not doc.strip():
                 what = "say what the test expects" if nospec else "quote the specification text"
-                out.append(Violation("SMM02", src, test.lineno, test.name, f"No [Documentation]: {what}"))
+                out.append(Violation(p.rule(2), src, test.lineno, test.name, f"No [Documentation]: {what}"))
             elif not nospec and not cites(doc, spec_ids, catalog):
-                out.append(Violation("SMM02", src, test.lineno, test.name, f"[Documentation] does not quote the specification text ({QUOTE_WORDS}+ consecutive words) or name the specification id"))
+                out.append(Violation(p.rule(2), src, test.lineno, test.name, f"[Documentation] does not quote the specification text ({QUOTE_WORDS}+ consecutive words) or name the specification id"))
             template = nodes.get("Template")
             template_name = template.value if template is not None else (suite_template.value if suite_template is not None else None)
             if template_name and template_name.upper() != "NONE":
@@ -270,13 +252,13 @@ def lint(paths: list[Path], catalog: dict | None = None) -> list[Violation]:
                 calls.append(Call(suite_setup.name, tuple(suite_setup.args), suite_setup.lineno, False))
             if "Teardown" not in nodes and suite_teardown is not None and suite_teardown.name:
                 calls.append(Call(suite_teardown.name, tuple(suite_teardown.args), suite_teardown.lineno, False))
-            for rule, tag, also, targets, satisfies, what in TAG_RULES:
-                _, uncond = index.uses(calls, targets)
-                used, _ = index.uses(calls, satisfies)
-                if uncond and tag not in tags and not also & set(tags):
-                    out.append(Violation(rule, src, test.lineno, test.name, f"Test {what} but is not tagged {tag}"))
-                elif tag in tags and not used:
-                    out.append(Violation(rule, src, test.lineno, test.name, f"Tagged {tag} but never {what}"))
+            for tag_rule in p.lint_tag_rules:
+                _, uncond = index.uses(calls, tag_rule.keywords)
+                used, _ = index.uses(calls, tag_rule.satisfied_by)
+                if uncond and tag_rule.tag not in tags and not tag_rule.also & set(tags):
+                    out.append(Violation(tag_rule.rule, src, test.lineno, test.name, f"Test {tag_rule.what} but is not tagged {tag_rule.tag}"))
+                elif tag_rule.tag in tags and not used:
+                    out.append(Violation(tag_rule.rule, src, test.lineno, test.name, f"Tagged {tag_rule.tag} but never {tag_rule.what}"))
     return out
 
 

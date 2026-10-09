@@ -1,6 +1,6 @@
 import pytest
 
-from smm_automation import icd
+from smm_automation import icd, project
 
 # ICD messages the unit tests know about; the real list comes from the automation service (smm_automation.icd).
 FAKE_ICD = {
@@ -17,3 +17,12 @@ def fake_icd(monkeypatch):
     monkeypatch.setattr(icd, "message_names", lambda: set(FAKE_ICD))
     monkeypatch.setattr(icd, "schema", lambda name: schemas.get(name))
     return schemas
+
+
+@pytest.fixture(autouse=True)
+def smm_project(monkeypatch):
+    """Every test sees the SMM project; ``smm-auto run`` exports GRF_PROJECT, which must not leak into later tests."""
+    monkeypatch.setenv(project.PROJECT_ENV, str(project.default_root()))
+    project.use(None)
+    yield project.current()
+    project.use(None)

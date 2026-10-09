@@ -67,20 +67,20 @@ def test_ssh_is_non_interactive():
 
 def test_restart_appsmm_waits_down_and_until_running():
     board = Board({"is-app": [1, 1, 0]})
-    board.rig().restart_appsmm(1500)
+    board.rig().restart("appsmm", 1500)
     assert [c[-1] for c in board.calls] == ["kill-app", "start-app", "is-app", "is-app", "is-app"]
     assert board.sleeps[0] == 1.5
 
 
 def test_restart_appsmm_times_out():
     board = Board({"is-app": [1] * 500})
-    with pytest.raises(RigSshError, match="appSMM to run again"):
-        board.rig({**CONFIG, "ready_timeout_s": 5}).restart_appsmm(0)
+    with pytest.raises(RigSshError, match="appsmm to run again"):
+        board.rig({**CONFIG, "ready_timeout_s": 5}).restart("appsmm", 0)
 
 
 def test_restart_broker_waits_for_the_port():
     board = Board()
-    board.rig(port_ready_after=2).restart_broker(200)
+    board.rig(port_ready_after=2).restart("broker", 200)
     assert [c[-1] for c in board.calls] == ["stop-mq", "start-mq"]
     assert board.port_checks == 3
 
@@ -88,7 +88,7 @@ def test_restart_broker_waits_for_the_port():
 def test_failures_carry_the_remote_error():
     board = Board({"kill-app": 3})
     with pytest.raises(RigSshError, match="exit code 3: boom"):
-        board.rig().restart_appsmm(0)
+        board.rig().restart("appsmm", 0)
 
 
 def test_fetch_log_uses_scp(tmp_path):

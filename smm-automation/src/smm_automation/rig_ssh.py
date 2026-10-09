@@ -1,9 +1,11 @@
-"""A rig control (``SMM_RIG_CONTROL``, see ``rigcontrol.py``) that reaches the instrument's RTC board over ssh.
+"""A rig control (``<ENV_PREFIX>_RIG_CONTROL``, see ``rigcontrol.py``) that reaches the instrument's board over ssh.
 
-The site describes the board in a TOML file (``--config <file>`` or ``SMM_RIG_SSH_CONFIG``; example in
-``robot\\environments\\rig_ssh.example.toml``): host, user, and the shell commands that stop, start and check appSMM and the
-broker on the board, and where appSMM writes its ``.sil`` logs (with an optional board command that first stages them,
-e.g. out of a container). Only the parts present in the file are offered as capabilities; ``clock`` (the board's log
+The site describes the board in a TOML file (``--config <file>`` or ``<ENV_PREFIX>_RIG_SSH_CONFIG``; SMM example in
+``robot\\environments\\rig_ssh.example.toml``): host, user, and for each restart target of the project (``[rig] targets``;
+SMM: ``[appsmm]`` and ``[broker]``) the shell commands that stop and start it on the board, with its readiness (a
+``running`` command that exits 0, and/or a ``port`` that accepts connections), and where the product writes its logs
+(with an optional board command that first stages them, e.g. out of a container). Only the parts present in the file
+are offered as capabilities; ``clock`` (the board's log
 clock against this PC's) is always offered and reads the board's time with ``[clock] command``. Two clients: OpenSSH (``client = "openssh"``, the default; ssh and scp with ``BatchMode=yes``, key
 authentication only) and PuTTY (``client = "plink"``; plink and pscp with ``-batch``, a key or a password read from
 ``password_file``, a file outside the repository that only the site's operator writes). Neither ever prompts::
@@ -25,7 +27,18 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-CONFIG_ENV = "SMM_RIG_SSH_CONFIG"
+from smm_automation import project
+
+
+def config_env() -> str:
+    return project.current().env("RIG_SSH_CONFIG")
+
+
+def __getattr__(name: str) -> Any:
+    if name == "CONFIG_ENV":
+        return config_env()
+    raise AttributeError(name)
+
 # Prints the board's local wall-clock time (what appSMM stamps its log lines with); 1 s resolution.
 DEFAULT_CLOCK_COMMAND = "date +%Y-%m-%dT%H:%M:%S"
 
@@ -90,14 +103,13 @@ class RigSsh:
         self.ready_timeout_s = float(config.get("ready_timeout_s", 180))
         self.run, self.sleep, self.port_open, self.clock, self.wall_ms = run, sleep, port_open, clock, wall_ms
 
+    def targets(self) -> list[str]:
+        """The project's restart targets this config can stop and start."""
+        return [t for t in project.current().rig_targets if self._section(t).get("stop") and self._section(t).get("start")]
+
     def capabilities(self) -> list[str]:
-        caps = []
-        appsmm, broker, log = self._section("appsmm"), self._section("broker"), self._section("log")
-        if appsmm.get("stop") and appsmm.get("start"):
-            caps.append("restart-appsmm")
-        if broker.get("stop") and broker.get("start"):
-            caps.append("restart-broker")
-        if log.get("dir"):
+        caps = [f"restart-{t}" for t in self.targets()]
+        if self._section("log").get("dir"):
             caps.append("fetch-log")
         caps.append("clock")
         return caps
@@ -106,28 +118,28 @@ class RigSsh:
         """Fails unless a non-interactive ssh login works (doctor calls ``capabilities``, which calls this)."""
         self.remote("true", timeout_s=30)
 
-    def restart_appsmm(self, down_ms: int) -> None:
-        section = self._section("appsmm")
+    def restart(self, target: str, down_ms: int) -> None:
+        """Stops ``target``, waits ``down_ms``, starts it and waits until it is ready: its ``running`` command exits 0
+        and/or its ``port`` (default: the project's ``[rig] ready_ports``) accepts connections."""
+        section = self._section(target)
+        if not (section.get("stop") and section.get("start")):
+            raise RigSshError(f"restart-{target} is not configured in the rig ssh config")
+        port = section.get("port", project.current().rig_ready_ports.get(target))
         self.remote(section["stop"])
         self.sleep(down_ms / 1000)
         self.remote(section["start"])
         if section.get("running"):
-            self._until(lambda: self.remote(section["running"], check=False).returncode == 0, "appSMM to run again")
-
-    def restart_broker(self, down_ms: int) -> None:
-        section = self._section("broker")
-        port = int(section.get("port", 1883))
-        self.remote(section["stop"])
-        self.sleep(down_ms / 1000)
-        self.remote(section["start"])
-        self._until(lambda: self.port_open(self.host, port), f"the broker to listen on {self.host}:{port}")
+            self._until(lambda: self.remote(section["running"], check=False).returncode == 0, f"{target} to run again")
+        if port:
+            self._until(lambda: self.port_open(self.host, int(port)), f"{target} to listen on {self.host}:{port}")
 
     def fetch_log(self, dest: Path) -> None:
         section = self._section("log")
         dest.mkdir(parents=True, exist_ok=True)
         if section.get("prepare"):
             self.remote(section["prepare"])
-        source = f"{self.target}:{str(section['dir']).rstrip('/')}/{section.get('pattern', 'appSMM*.sil')}"
+        pattern = section.get("pattern", project.current().rig_log_pattern)
+        source = f"{self.target}:{str(section['dir']).rstrip('/')}/{pattern}"
         self._call([self.scp, *self.options, "-q", source, str(dest)], f"{self.scp} {source}")
 
     def clock_offset(self, samples: int = 3) -> tuple[float, float]:
@@ -181,9 +193,9 @@ class RigSsh:
 
 
 def load_config(path: str | None) -> dict[str, Any]:
-    path = path or os.environ.get(CONFIG_ENV)
+    path = path or os.environ.get(config_env())
     if not path:
-        raise RigSshError(f"no config: pass --config <file> or set {CONFIG_ENV}")
+        raise RigSshError(f"no config: pass --config <file> or set {config_env()}")
     try:
         with open(path, "rb") as f:
             return tomllib.load(f)
@@ -193,12 +205,12 @@ def load_config(path: str | None) -> dict[str, Any]:
 
 def main(argv: Sequence[str] | None = None, rig: RigSsh | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m smm_automation.rig_ssh", description=__doc__.splitlines()[0])
-    parser.add_argument("--config", help=f"site TOML file (default: ${CONFIG_ENV})")
+    parser.add_argument("--config", help=f"site TOML file (default: ${config_env()})")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("capabilities")
     sub.add_parser("clock")
-    for name in ("restart-appsmm", "restart-broker"):
-        sub.add_parser(name).add_argument("--down-ms", type=int, default=0)
+    for target in project.current().rig_targets:
+        sub.add_parser(f"restart-{target}").add_argument("--down-ms", type=int, default=0)
     sub.add_parser("fetch-log").add_argument("dir", type=Path)
     args = parser.parse_args(argv)
     try:
@@ -212,12 +224,10 @@ def main(argv: Sequence[str] | None = None, rig: RigSsh | None = None) -> int:
         else:
             if args.command not in rig.capabilities():
                 raise RigSshError(f"{args.command} is not configured in the rig ssh config")
-            if args.command == "restart-appsmm":
-                rig.restart_appsmm(args.down_ms)
-            elif args.command == "restart-broker":
-                rig.restart_broker(args.down_ms)
-            else:
+            if args.command == "fetch-log":
                 rig.fetch_log(args.dir)
+            else:
+                rig.restart(args.command.removeprefix("restart-"), args.down_ms)
     except RigSshError as err:
         print(err, file=sys.stderr)
         return 1

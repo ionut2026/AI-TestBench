@@ -1,59 +1,30 @@
 """Generation briefs: one self-contained Markdown file per specification, the input of the test-authoring
-agent (.github/agents/smm-test-author.agent.md). A brief holds everything needed to write the Robot test:
-the specification, the requirement and user story it serves, the Explorative Tests that show how people
-test it by hand, the ICD schemas of the messages involved, the available keywords and the authoring rules."""
+agent. A brief holds everything needed to write the Robot test: the specification, the requirement and user
+story it serves, the Explorative Tests that show how people test it by hand, what the project's plugin adds
+(e.g. the interface schemas of the messages involved), the available keywords and the project's authoring
+rules (``[paths] brief_rules``)."""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-from smm_automation import FRAMEWORK_ROOT, icd
+from smm_automation import project
 from smm_automation.pipeline.drift import TestRef
 
-RULES = """\
-1. One test per observable behaviour of the specification; negative cases of the same specification are separate tests.
-2. Name: `SDS-<id> <behaviour in title case>`. Put the specification text verbatim into `[Documentation]`
-   and explain any interpretation you made on extra `...` lines.
-3. Tags: exactly the tags under "Tags" below, plus `review:pending`, plus capability tags:
-   `needs:twin` when the test drives the simulated hardware (Trigger Hardware Action other than the emergency stop,
-   racks, Wait For Hardware Command as a *required* step, or COP faults with `Set Hardware Faults`);
-   `needs:hardware-action` (with `Require Hardware Action`) when its only hardware step is `Trigger Emergency Stop`,
-   which the twin does offline and an operator does on the rig; `needs:operator` when it uses `Operator Action`;
-   `requires:restart` when it restarts appSMM; `requires:broker-restart` when it restarts the MQTT broker;
-   `needs:applog` when it reads appSMM's log files (`ICD Messages Should Be Logged By appSMM`).
-   A test that
-   covers several specifications carries `SDS-<id>` and `spechash:<id>:<hash>` for each of them
-   (a plain `spechash:<hash>` only works on a single-specification test).
-4. Only use keywords from the list below and Robot BuiltIn/Collections. No `Sleep` (`smm-auto lint` rejects it):
-   wait for messages (`Wait For Message`, `Wait For Message Sequence`, `Wait For System State`), prove absence
-   with `Message Should Not Arrive`, simulate a lost Bridge with `Interrupt Bridge Connection`. Each wait consumes
-   the message it matched (two waits need two messages); consecutive waits do not imply order, so assert order
-   with `Wait For Message Sequence` (or `since=last`).
-5. Preconditions with `Bring SMM To State`, `Bring SMM To E-Stop With Shutdown` or
-   `Restart appSMM And Wait Until NotInitialized`; they are not verification steps.
-6. Assert what the specification says and nothing more: states, message order, fields, topic (`@topic=/is/iw/tx`),
-   ICD schema validity (`Received Messages Should Be Schema Valid`). Values the specification leaves open
-   (e.g. "EventId": ??) are logged, not asserted.
-7. Timeouts come from variables (`${RESPONSE_TIMEOUT}`, `${STARTUP_TIMEOUT}`, `${INIT_TIMEOUT}`,
-   `${RECOVER_TIMEOUT}`, `${QUIET_PERIOD}`, `${SHORT_QUIET_PERIOD}`). A time stated by the specification goes into a
-   suite variable `${SDS_<id>_LIMIT}` (quote it in the documentation); literal `timeout=`/`duration=` values are
-   rejected by `smm-auto lint`. Assert the stated time itself with `Time Between Should Be Less Than` (and, for
-   "if no reply within N s", `Time Between Should Be At Least`); a missing or late hardware reply is simulated
-   with `Set Hardware Faults` (`DeInitializeRsp | action=drop`, `... | delay=15s`).
-8. If the behaviour cannot be observed through the ICD, the hardware twin or appSMM's log, do not write a test: say why,
-   so the specification can be listed under `[deferred]` in the scope file.
-9. Add the test to the suite file named under "Target"; keep the suite's Settings unchanged.
-10. A human reviews every generated test against the specification and removes `review:pending`.
-"""
+
+def rules() -> str:
+    """The project's authoring rules (``[paths] brief_rules``)."""
+    return project.current().path("brief_rules").read_text(encoding="utf-8")
 
 
 def keyword_docs() -> str:
-    """Short documentation of the SMMTestbench and smm.resource keywords (libdoc)."""
+    """Short documentation of the project's keyword libraries and resource files (``[paths] keyword_docs``, libdoc)."""
     from robot.libdocpkg import LibraryDocumentation
 
+    p = project.current()
     lines = []
-    for source in ("smm_automation.SMMTestbench", str(FRAMEWORK_ROOT / "robot" / "resources" / "smm.resource")):
+    for entry in p.raw_paths("keyword_docs"):
+        source = str(p.root / entry) if "/" in entry or "\\" in entry or entry.endswith((".resource", ".robot")) else entry
         doc = LibraryDocumentation(source)
         lines.append(f"### {doc.name}\n")
         for kw in doc.keywords:
@@ -68,7 +39,7 @@ def tags_for(spec: dict, multi: bool = False) -> list[str]:
     """Traceability tags of a specification; ``multi`` gives the per-specification hash form for tests that
     cover several specifications."""
     h = spec["hash"][:8]
-    return [f"SDS-{spec['id']}", f"spechash:{spec['id']}:{h}" if multi else f"spechash:{h}"]
+    return [project.current().spec_tag(spec["id"]), f"spechash:{spec['id']}:{h}" if multi else f"spechash:{h}"]
 
 
 def render_brief(catalog: dict, spec: dict, keywords: str, existing: list[TestRef], target: str) -> str:
@@ -76,7 +47,7 @@ def render_brief(catalog: dict, spec: dict, keywords: str, existing: list[TestRe
     stories = [catalog["userStories"].get(str(u)) for u in spec["userStories"]]
     ets = [catalog["explorativeTests"].get(str(e)) for e in spec["explorativeTests"]]
     out = [
-        f"# Generation brief: SDS-{spec['id']}",
+        f"# Generation brief: {project.current().spec_tag(spec['id'])}",
         "",
         f"- Document: {spec.get('document')} | State: {spec.get('state')} | Modified: {spec.get('modified')}",
         f"- Area: {spec['area']} | Target: `{target}`",
@@ -106,20 +77,18 @@ def render_brief(catalog: dict, spec: dict, keywords: str, existing: list[TestRe
                 out += [f"**{label}:**", "", *[f"- {line}" for line in e[key]], ""]
     if not any(ets):
         out += ["(none linked)", ""]
-    out += ["## ICD schemas", ""]
-    for name in spec["messages"]:
-        schema = icd.schema(name)
-        if schema is not None:
-            out += [f"### {name}", "", "```json", json.dumps(schema, indent=2), "```", ""]
+    out += project.current().plugin.brief_sections(spec)
     out += ["## Existing tests for this specification", ""]
     out += [f"- `{t.name}` ({t.suite}){' [review:pending]' if t.pending else ''}" for t in existing] or ["(none)"]
-    out += ["", "## Keywords", "", keywords, "## Authoring rules", "", RULES]
+    out += ["", "## Keywords", "", keywords, "## Authoring rules", "", rules()]
     return "\n".join(out)
 
 
 def write_briefs(catalog: dict, out_dir: Path, tests: list[TestRef], only: list[int] | None = None, scope_name: str = "pilot") -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
+    p = project.current()
     keywords = keyword_docs()
+    target_pattern = str(p.data.get("paths", {}).get("brief_target", "robot/suites/{scope}/{area}.robot"))
     written = []
     for key, spec in catalog["specifications"].items():
         if only and int(key) not in only:
@@ -127,8 +96,8 @@ def write_briefs(catalog: dict, out_dir: Path, tests: list[TestRef], only: list[
         if not spec["testable"]:
             continue
         existing = [t for t in tests if int(key) in t.specs]
-        target = f"robot/suites/{scope_name}/{spec['area']}.robot"
-        path = out_dir / f"SDS-{key}.md"
+        target = target_pattern.format(scope=scope_name, area=spec["area"])
+        path = out_dir / f"{p.spec_tag(key)}.md"
         path.write_text(render_brief(catalog, spec, keywords, existing, target), encoding="utf-8")
         written.append(path)
     return written

@@ -22,6 +22,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from smm_automation import project
 from smm_automation.pipeline.drift import TestRef
 
 MUTANT_ID = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -108,10 +109,11 @@ def per_spec(entries: list[dict]) -> dict[str, dict]:
 
 def robot_argv(tier: str, variablefile: Path, specs: list[int], excludes: list[str], out_dir: Path, suites: list[Path],
                metadata: str) -> list[str]:
+    p = project.current()
     argv = [sys.executable, "-m", "robot", "--variablefile", str(variablefile), "--outputdir", str(out_dir),
-            "--name", f"SMM {tier} mutation", "--metadata", metadata, "--console", "dotted", "--report", "NONE"]
+            "--name", f"{p.name} {tier} mutation", "--metadata", metadata, "--console", "dotted", "--report", "NONE"]
     for spec in specs:
-        argv += ["--include", f"SDS-{spec}"]
+        argv += ["--include", p.spec_tag(spec)]
     for tag in excludes:
         argv += ["--exclude", tag]
     return argv + [str(p) for p in suites]
@@ -131,11 +133,12 @@ def _subprocess_runner(argv: list[str], env: dict[str, str], console: Path, time
 
 def run_once(name: str, faults: list[dict], specs: list[int], out_dir: Path, *, tier: str, variablefile: Path, excludes: list[str],
              suites: list[Path], runner: Runner = _subprocess_runner, timeout_s: int = 1800) -> tuple[int, list[dict]]:
-    """Runs the tests of ``specs`` once with ``faults`` active in the mock appSMM; returns (rc, test results)."""
+    """Runs the tests of ``specs`` once with ``faults`` active in the mock product (``[mutation] faults_env``);
+    returns (rc, test results)."""
     from smm_automation.pipeline.report import read_results
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    env = dict(os.environ, SMM_MOCK_FAULTS=json.dumps(faults))
+    env = dict(os.environ, **{project.current().mutation_faults_env: json.dumps(faults)})
     rc = runner(robot_argv(tier, variablefile, specs, excludes, out_dir, suites, f"Mutant:{name}"), env, out_dir / "console.txt", timeout_s)
     output = out_dir / "output.xml"
     if not output.exists():
@@ -190,6 +193,7 @@ def write_report(result: dict, out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "mutation.json").write_text(json.dumps(result, indent=1, ensure_ascii=False), encoding="utf-8")
     e = html.escape
+    p = project.current()
     sc = result.get("score") or {}
     rows = "".join(
         f"<tr class='{m['status']}'><td>{e(m['id'])}</td><td>{e(m['status'])}</td><td>{e(', '.join(map(str, m['specs'])))}</td>"
@@ -197,14 +201,14 @@ def write_report(result: dict, out_dir: Path) -> Path:
         f"<td><code>{e(json.dumps(m['faults']))}</code></td></tr>"
         for m in result.get("mutants", []))
     spec_rows = "".join(
-        f"<tr><td>SDS-{e(s)}</td><td>{len(v['killed'])}</td><td>{len(v['survived'])}</td><td>{e(', '.join(v['survived']))}</td></tr>"
+        f"<tr><td>{e(p.spec_tag(s))}</td><td>{len(v['killed'])}</td><td>{len(v['survived'])}</td><td>{e(', '.join(v['survived']))}</td></tr>"
         for s, v in (result.get("specs") or {}).items())
-    page = f"""<!doctype html><html><head><meta charset="utf-8"><title>SMM mutation testing</title><style>
+    page = f"""<!doctype html><html><head><meta charset="utf-8"><title>{e(p.name)} mutation testing</title><style>
 body{{font-family:Segoe UI,Arial,sans-serif;margin:24px}}table{{border-collapse:collapse;margin-bottom:24px}}
 td,th{{border:1px solid #ccc;padding:4px 8px;text-align:left;vertical-align:top}}code{{font-size:11px}}
 tr.killed td:nth-child(2){{color:#1a7f37}}tr.survived td:nth-child(2){{color:#cf222e;font-weight:bold}}</style></head><body>
 <h1>Mutation testing ({e(result.get('tier', '?'))} tier)</h1>
-<p>Measures whether the suites notice defects injected into the mock appSMM. Not evidence about the product.</p>
+<p>Measures whether the suites notice defects injected into the mock {e(p.product)}. Not evidence about the product.</p>
 <p>{e(result.get('aborted', ''))}</p>
 <p>Score: <b>{sc.get('score')}</b> &mdash; killed {sc.get('killed', 0)}, survived {sc.get('survived', 0)},
 no tests {sc.get('noTests', 0)}, errors {sc.get('errors', 0)}. Started {e(result.get('started', ''))}.</p>
@@ -221,10 +225,12 @@ def survivors_markdown(result: dict) -> str:
     survived = [m for m in result.get("mutants", []) if m["status"] == "survived"]
     if not survived:
         return ""
+    p = project.current()
+    mutants_file = p.raw_paths("mutants", ["catalog/mutants.toml"])[0]
     lines = [f"Mutation score {result['score']['score']} ({result['score']['killed']} killed, {len(survived)} survived).", "",
-             "Each surviving mutant is an appSMM defect the suites would not notice: strengthen the tests of its "
-             "specifications, or document why the mutant is equivalent (catalog/mutants.toml).", ""]
+             f"Each surviving mutant is an {p.product} defect the suites would not notice: strengthen the tests of its "
+             f"specifications, or document why the mutant is equivalent ({mutants_file}).", ""]
     for m in survived:
-        lines += [f"- **{m['id']}** (SDS-{', SDS-'.join(map(str, m['specs']))}): {m['description']}",
+        lines += [f"- **{m['id']}** ({', '.join(p.spec_tag(s) for s in m['specs'])}): {m['description']}",
                   f"  - passing tests: {'; '.join(m['passed'])}"]
     return "\n".join(lines) + "\n"

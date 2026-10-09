@@ -1,6 +1,7 @@
-"""What a tier can do, and therefore which tagged tests ``smm-auto run`` excludes (plan 6.2).
+"""What a tier can do, and therefore which tagged tests ``<cli> run`` excludes (plan 6.2).
 
-A test declares what it needs with a tag; a tier runs it only if it has the matching capability:
+A test declares what it needs with a tag; a tier runs it only if it has the matching capability. Tags, tiers and
+what they can do come from the project (``[capabilities]``, ``[tiers.*]``, ``[operator]`` in ``grf.toml``). For SMM:
 
     needs:twin               twin             the SMM hardware twin (fault injection, racks, COP trace)
     needs:hardware-action    hardware-action  a physical action such as the emergency stop (twin or operator)
@@ -17,46 +18,43 @@ site's rig control script (``SMM_RIG_CONTROL``, see rigcontrol.py) and ``operato
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import Any
 
+from smm_automation import project
 from smm_automation.rigcontrol import RigControl
 
-TAG_CAPABILITY = {
-    "needs:twin": "twin",
-    "needs:hardware-action": "hardware-action",
-    "needs:operator": "operator",
-    "needs:applog": "applog",
-    "requires:restart": "restart",
-    "requires:broker-restart": "broker-restart",
-}
-TIER_CAPABILITIES: dict[str, frozenset[str]] = {
-    "mock": frozenset({"restart", "broker-restart"}),
-    "offline": frozenset({"restart", "broker-restart", "twin", "applog", "hardware-action"}),
-    "rig": frozenset(),
-}
-TIERS = tuple(TIER_CAPABILITIES)
+
+def __getattr__(name: str) -> Any:
+    # module constants of the current project (kept for callers of the pre-project API)
+    if name == "TAG_CAPABILITY":
+        return project.current().tag_capability
+    if name == "TIERS":
+        return tuple(project.current().tiers)
+    raise AttributeError(name)
 
 
 def tier_capabilities(tier: str, operator: str = "none", env: Mapping[str, str] | None = None,
                       rig_control: RigControl | None = None) -> tuple[set[str], list[str]]:
     """(capabilities, where they come from). On the rig the site script is asked (RigControlError if it fails)."""
-    if tier not in TIER_CAPABILITIES:
-        raise ValueError(f"Unknown tier '{tier}' ({', '.join(TIERS)})")
-    caps = set(TIER_CAPABILITIES[tier])
+    p = project.current()
+    t = p.tier(tier)
+    caps = set(t.capabilities)
     notes = [f"{tier} tier: {', '.join(sorted(caps)) or 'nothing extra'}"]
-    if tier == "rig":
+    if t.rig_control:
         control = rig_control or RigControl.from_env(env)
         if control is None:
-            notes.append("no rig control (SMM_RIG_CONTROL not set): no appSMM/broker restart, no log files")
+            missing = sorted({*p.rig_targets.values(), p.rig_log_capability})
+            notes.append(f"no rig control ({p.env('RIG_CONTROL')} not set): no {', '.join(missing)}")
         else:
             got = control.test_capabilities()
             caps |= got
             notes.append(f"rig control '{control}': {', '.join(sorted(got)) or 'nothing'}")
     if operator != "none":
-        caps |= {"operator", "hardware-action"}
-        notes.append(f"operator ({operator}): operator, hardware-action")
+        caps |= p.operator_capabilities
+        notes.append(f"operator ({operator}): {', '.join(sorted(p.operator_capabilities))}")
     return caps, notes
 
 
 def excluded_tags(caps: set[str]) -> list[str]:
-    """The capability tags whose capability is missing (in TAG_CAPABILITY order)."""
-    return [tag for tag, cap in TAG_CAPABILITY.items() if cap not in caps]
+    """The capability tags whose capability is missing (in the project's ``[capabilities]`` order)."""
+    return [tag for tag, cap in project.current().tag_capability.items() if cap not in caps]

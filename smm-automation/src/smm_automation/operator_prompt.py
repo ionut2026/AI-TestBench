@@ -1,7 +1,8 @@
 """Manual steps done by an operator at the instrument (plan 6.3): ``Operator Action``.
 
-Modes (``${OPERATOR}`` or the environment variable ``SMM_OPERATOR``; ``smm-auto run --operator <mode>`` sets it):
-    none      no operator: the step fails as unavailable (tests needing one are excluded by smm-auto run)
+Modes (``${OPERATOR}`` or the environment variable ``<ENV_PREFIX>_OPERATOR``, e.g. ``SMM_OPERATOR``;
+``<cli> run --operator <mode>`` sets it):
+    none      no operator: the step fails as unavailable (tests needing one are excluded by ``<cli> run``)
     console   the instruction is printed on the console; the operator types ``done`` (or ``fail <reason>``)
     dialog    a Robot Framework dialog (robot.libraries.Dialogs) with PASS/FAIL buttons
 """
@@ -13,10 +14,22 @@ import queue
 import sys
 import threading
 import time
-from typing import TextIO
+from typing import Any, TextIO
+
+from smm_automation import project
 
 MODES = ("none", "console", "dialog")
-ENV = "SMM_OPERATOR"
+
+
+def env_name() -> str:
+    """The environment variable of the operator mode (``SMM_OPERATOR`` for SMM)."""
+    return project.current().env("OPERATOR")
+
+
+def __getattr__(name: str) -> Any:
+    if name == "ENV":
+        return env_name()
+    raise AttributeError(name)
 
 
 class OperatorUnavailable(RuntimeError):
@@ -24,7 +37,7 @@ class OperatorUnavailable(RuntimeError):
 
 
 def operator_mode(configured: str | None = None) -> str:
-    mode = (configured or os.environ.get(ENV) or "none").strip().lower()
+    mode = (configured or os.environ.get(env_name()) or "none").strip().lower()
     if mode not in MODES:
         raise ValueError(f"Operator mode '{mode}' is not one of {', '.join(MODES)}")
     return mode

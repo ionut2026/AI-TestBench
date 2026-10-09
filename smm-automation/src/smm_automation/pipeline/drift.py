@@ -1,19 +1,19 @@
 """Drift check: compares the Robot suites with the RV&S catalog.
 
 * stale     - a test's spechash for one of its specifications differs from the current specification text
-* orphan    - a test references ``SDS-<id>`` that is not in the catalog (removed or out of scope)
-* untagged  - a test without any ``SDS-<id>`` tag (no traceability) and without a ``nospec:<kind>`` tag
+* orphan    - a test references a specification (``<spec_prefix>-<id>``, e.g. ``SDS-<id>``) that is not in the catalog (removed or out of scope)
+* untagged  - a test without any specification tag (no traceability) and without a ``nospec:<kind>`` tag
 * nospec    - (information) tests that verify behaviour no specification states (``nospec:<kind>``, e.g.
   robustness or unspecified state x request cells): listed, not a problem
-* nohash    - a test without a spechash for one of its specifications. A test with one ``SDS-<id>`` tag uses
+* nohash    - a test without a spechash for one of its specifications. A test with one specification tag uses
   ``spechash:<hash>``; a test with several uses ``spechash:<id>:<hash>`` for each of them
 * uncovered - a testable, not deferred, not retired specification without any test
-* stateChanged - a covered specification whose RV&S state differs from the accepted baseline (``smm-auto accept``)
+* stateChanged - a covered specification whose RV&S state differs from the accepted baseline (``<cli> accept``)
 * linksChanged - a covered specification whose requirement / user story links differ from the accepted baseline
 * retired   - a covered specification in a retired state (Rejected, To Be Deleted, Deleted…): remove or re-target the tests
 * suspect   - a covered specification RV&S flags as suspect (Suspect Count > 0)
 * pending   - tests still tagged ``review:pending``
-* unrecorded - a test without ``review:pending`` but without a human review in the ledger ``catalog/reviews.toml``
+* unrecorded - a test without ``review:pending`` but without a human review in the review ledger (``[paths] reviews``)
   for its current ``spechash`` (the tag was removed without a recorded review, or the spec changed since)
 * areaGuessed - (information) specifications whose suite was guessed from keywords, not given in the scope file
 """
@@ -27,11 +27,18 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-SDS_TAG = re.compile(r"^SDS-(\d+)$", re.I)
+from smm_automation import project
+
 HASH_TAG = re.compile(r"^spechash:(?:(\d+):)?([0-9a-f]{6,64})$", re.I)
 KNOWN_ISSUE_TAG = re.compile(r"^known-issue:(\S+)$", re.I)
 NOSPEC_TAG = re.compile(r"^nospec:(\S+)$", re.I)
 PENDING_TAG = "review:pending"
+
+
+def spec_ids(tags: list[str]) -> list[int]:
+    """The specification ids of the project's specification tags (``SDS-<id>``) among ``tags``."""
+    pattern = project.current().spec_tag_re
+    return [int(m[1]) for tag in tags if (m := pattern.match(tag))]
 
 
 def parse_hash_tags(tags: list[str]) -> tuple[str | None, dict[int, str]]:
@@ -183,9 +190,7 @@ def collect_tests(paths: list[Path]) -> list[TestRef]:
             tags = [str(x) for x in t.tags]
             plain, per_spec = parse_hash_tags(tags)
             ref = TestRef(name=t.name, suite=s.longname, source=str(s.source), tags=tags, hash=plain, hashes=per_spec)
-            for tag in tags:
-                if m := SDS_TAG.match(tag):
-                    ref.specs.append(int(m[1]))
+            ref.specs += spec_ids(tags)
             out.append(ref)
         for child in s.suites:
             walk(child)
@@ -279,21 +284,23 @@ def problems(result: dict) -> int:
 
 
 def format_text(result: dict) -> str:
+    p = project.current()
+    reviews = p.raw_paths("reviews", ["catalog/reviews.toml"])[0]
     lines = [f"Drift check: {result['tests']} tests cover {result['coveredSpecs']} specifications (catalog {result['catalogGeneratedAt']})"]
     labels = {
         "stale": "STALE (specification text changed since the test was written)",
         "orphan": "ORPHAN (specification not in the catalog)",
-        "untagged": "UNTAGGED (no SDS-<id> tag and no nospec:<kind> tag)",
+        "untagged": f"UNTAGGED (no {p.spec_prefix}-<id> tag and no nospec:<kind> tag)",
         "nohash": "NO HASH (missing spechash: tag for a specification of the test)",
         "uncovered": "UNCOVERED specifications",
-        "stateChanged": "SPEC-STATE-CHANGED (RV&S state differs from the accepted baseline: re-check the tests, then smm-auto accept)",
-        "linksChanged": "LINKS-CHANGED (requirement / user story links differ from the accepted baseline: re-check, then smm-auto accept)",
+        "stateChanged": f"SPEC-STATE-CHANGED (RV&S state differs from the accepted baseline: re-check the tests, then {p.cli} accept)",
+        "linksChanged": f"LINKS-CHANGED (requirement / user story links differ from the accepted baseline: re-check, then {p.cli} accept)",
         "retired": "RETIRED (covered specification is rejected/deleted in RV&S: remove or re-target the tests)",
         "suspect": "SUSPECT in RV&S (re-review the covering tests)",
         "pending": "PENDING human review",
         "agentReviewed": "Agent reviews (information for the human reviewer, never a review)",
-        "unrecorded": "UNRECORDED REVIEW (review:pending removed without a matching entry in catalog/reviews.toml)",
-        "lint": "LINT (test rule violations, see smm-auto lint)",
+        "unrecorded": f"UNRECORDED REVIEW (review:pending removed without a matching entry in {reviews})",
+        "lint": f"LINT (test rule violations, see {p.cli} lint)",
         "nospec": "Tests of behaviour no specification states (nospec:<kind>)",
         "deferred": "Deferred",
         "notTestable": "Not testable",
