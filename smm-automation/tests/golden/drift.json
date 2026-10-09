@@ -1,0 +1,348 @@
+{
+ "agentReviewed": [],
+ "areaGuessed": [],
+ "catalogGeneratedAt": "2026-10-06T13:31:05+00:00",
+ "coveredSpecs": 25,
+ "deferred": [],
+ "linksChanged": [],
+ "nohash": [],
+ "nospec": [
+  {
+   "kind": "robustness",
+   "suite": "Suites.Pilot.Robustness",
+   "test": "Truncated JSON Is Ignored"
+  },
+  {
+   "kind": "robustness",
+   "suite": "Suites.Pilot.Robustness",
+   "test": "Text That Is Not JSON Is Ignored"
+  },
+  {
+   "kind": "robustness",
+   "suite": "Suites.Pilot.Robustness",
+   "test": "Empty Payload Is Ignored"
+  },
+  {
+   "kind": "robustness",
+   "suite": "Suites.Pilot.Robustness",
+   "test": "JSON null Is Ignored"
+  },
+  {
+   "kind": "robustness",
+   "suite": "Suites.Pilot.Robustness",
+   "test": "JSON Array Is Ignored"
+  },
+  {
+   "kind": "robustness",
+   "suite": "Suites.Pilot.Robustness",
+   "test": "Request Body Of The Wrong Type Does Not Restart Initialization"
+  },
+  {
+   "kind": "robustness",
+   "suite": "Suites.Pilot.Robustness",
+   "test": "Unknown ICD Version Does Not Disturb appSMM"
+  },
+  {
+   "kind": "robustness",
+   "suite": "Suites.Pilot.Robustness",
+   "test": "Missing ICD Version Does Not Disturb appSMM"
+  },
+  {
+   "kind": "robustness",
+   "suite": "Suites.Pilot.Robustness",
+   "test": "Unknown Message Is Ignored"
+  },
+  {
+   "kind": "robustness",
+   "suite": "Suites.Pilot.Robustness",
+   "test": "ShutdownRequest On appSMM's Own Transmit Topic Is Not Executed"
+  },
+  {
+   "kind": "robustness",
+   "suite": "Suites.Pilot.Robustness",
+   "test": "ShutdownRequest On An Unknown Topic Is Not Executed"
+  },
+  {
+   "kind": "state-matrix",
+   "suite": "Suites.Pilot.State Matrix",
+   "test": "Matrix ShutdownRequest In NotInitialized"
+  },
+  {
+   "kind": "state-matrix",
+   "suite": "Suites.Pilot.State Matrix",
+   "test": "Matrix ShutdownRequest In E-Stop"
+  },
+  {
+   "kind": "state-matrix",
+   "suite": "Suites.Pilot.State Matrix",
+   "test": "Matrix SetConfigurationRequest In Idle"
+  },
+  {
+   "kind": "state-matrix",
+   "suite": "Suites.Pilot.State Matrix",
+   "test": "Matrix SetConfigurationRequest In E-Stop"
+  }
+ ],
+ "notTestable": [
+  {
+   "reason": "PDS overview statement: no observable behaviour at the ICD",
+   "spec": 2327588
+  }
+ ],
+ "orphan": [],
+ "pending": [
+  {
+   "suite": "Suites.Pilot.Bridge Connection",
+   "test": "SDS-2854109 Bridge Crash Puts The System Into E-Stop"
+  },
+  {
+   "suite": "Suites.Pilot.Bridge Connection",
+   "test": "SDS-2854109 Broker Outage Puts The System Into E-Stop"
+  },
+  {
+   "suite": "Suites.Pilot.Bridge Connection",
+   "test": "SDS-2854281 Operator Warning When The Bridge Connection Is Re-Established"
+  },
+  {
+   "suite": "Suites.Pilot.Initialization",
+   "test": "SDS-2955303 SystemStatusResponse Reports NotInitialized Before Initialization Starts"
+  },
+  {
+   "suite": "Suites.Pilot.Initialization",
+   "test": "SDS-2525423 Initialization Starts On InitializationRequest In NotInitialized"
+  },
+  {
+   "suite": "Suites.Pilot.Initialization",
+   "test": "SDS-2525423 InitializationRequest Outside NotInitialized Does Not Start Initialization"
+  },
+  {
+   "suite": "Suites.Pilot.Initialization",
+   "test": "SDS-2532404 InitializationResponse Error When Initialization Does Not Start Within 20 Seconds"
+  },
+  {
+   "suite": "Suites.Pilot.Initialization",
+   "test": "SDS-2528698 Initializing Is Notified After InitializationResponse OK"
+  },
+  {
+   "suite": "Suites.Pilot.Initialization",
+   "test": "SDS-2528703 Idle Is Notified When Clearing Is Completed"
+  },
+  {
+   "suite": "Suites.Pilot.Initialization",
+   "test": "SDS-2528710 InitializationRequest And InitializationResponse Are Logged With Topic And Content"
+  },
+  {
+   "suite": "Suites.Pilot.Recover",
+   "test": "SDS-2653094 System Restarts With RecoverRequest After Shutdown"
+  },
+  {
+   "suite": "Suites.Pilot.Recover",
+   "test": "SDS-2653094 System Restarts With RecoverRequest After A Hardware Fatal Error"
+  },
+  {
+   "suite": "Suites.Pilot.Recover",
+   "test": "SDS-2532492 RecoverRequest In E-Stop Sends DeInitializeCmd To RTC"
+  },
+  {
+   "suite": "Suites.Pilot.Recover",
+   "test": "SDS-2532492 RecoverRequest Outside E-Stop Does Not De-Initialize"
+  },
+  {
+   "suite": "Suites.Pilot.Recover",
+   "test": "SDS-2532504 RecoverResponse OK Matches The ICD Schema"
+  },
+  {
+   "suite": "Suites.Pilot.Recover",
+   "test": "SDS-2532504 RecoverResponse OK When DeInitializeRsp Comes Late But Within 20 Seconds"
+  },
+  {
+   "suite": "Suites.Pilot.Recover",
+   "test": "SDS-2532508 RecoverResponse Error When DeInitializeRsp Does Not Come Within 20 Seconds"
+  },
+  {
+   "suite": "Suites.Pilot.Recover",
+   "test": "SDS-2532510 Initialization Starts After RecoverResponse"
+  },
+  {
+   "suite": "Suites.Pilot.Robustness",
+   "test": "Truncated JSON Is Ignored"
+  },
+  {
+   "suite": "Suites.Pilot.Robustness",
+   "test": "Text That Is Not JSON Is Ignored"
+  },
+  {
+   "suite": "Suites.Pilot.Robustness",
+   "test": "Empty Payload Is Ignored"
+  },
+  {
+   "suite": "Suites.Pilot.Robustness",
+   "test": "JSON null Is Ignored"
+  },
+  {
+   "suite": "Suites.Pilot.Robustness",
+   "test": "JSON Array Is Ignored"
+  },
+  {
+   "suite": "Suites.Pilot.Robustness",
+   "test": "Request Body Of The Wrong Type Does Not Restart Initialization"
+  },
+  {
+   "suite": "Suites.Pilot.Robustness",
+   "test": "Unknown ICD Version Does Not Disturb appSMM"
+  },
+  {
+   "suite": "Suites.Pilot.Robustness",
+   "test": "Missing ICD Version Does Not Disturb appSMM"
+  },
+  {
+   "suite": "Suites.Pilot.Robustness",
+   "test": "Unknown Message Is Ignored"
+  },
+  {
+   "suite": "Suites.Pilot.Robustness",
+   "test": "ShutdownRequest On appSMM's Own Transmit Topic Is Not Executed"
+  },
+  {
+   "suite": "Suites.Pilot.Robustness",
+   "test": "ShutdownRequest On An Unknown Topic Is Not Executed"
+  },
+  {
+   "suite": "Suites.Pilot.Robustness",
+   "test": "SDS-2525423 A Second InitializationRequest During Initialization Does Not Start It Again"
+  },
+  {
+   "suite": "Suites.Pilot.Robustness",
+   "test": "SDS-2525392 Every One Of Back-To-Back SystemStatusRequests Gets A SystemStatusResponse On is/iw/tx"
+  },
+  {
+   "suite": "Suites.Pilot.Shutdown",
+   "test": "SDS-2428419 E-Stop Is Notified After ShutdownResponse"
+  },
+  {
+   "suite": "Suites.Pilot.Shutdown",
+   "test": "SDS-2428417 ShutdownResponse OK Is Published On is/iw/tx And Matches The ICD Schema"
+  },
+  {
+   "suite": "Suites.Pilot.Shutdown",
+   "test": "SDS-2428417 ShutdownResponse OK When The Stop Reply Comes Late But Within 20 Seconds"
+  },
+  {
+   "suite": "Suites.Pilot.State Matrix",
+   "test": "SDS-2525392 Matrix SystemStatusRequest In Idle"
+  },
+  {
+   "suite": "Suites.Pilot.State Matrix",
+   "test": "SDS-2525392 Matrix SystemStatusRequest In E-Stop"
+  },
+  {
+   "suite": "Suites.Pilot.State Matrix",
+   "test": "SDS-2525423 Matrix InitializationRequest In E-Stop"
+  },
+  {
+   "suite": "Suites.Pilot.State Matrix",
+   "test": "SDS-2532492 Matrix RecoverRequest In NotInitialized"
+  },
+  {
+   "suite": "Suites.Pilot.State Matrix",
+   "test": "Matrix ShutdownRequest In NotInitialized"
+  },
+  {
+   "suite": "Suites.Pilot.State Matrix",
+   "test": "Matrix ShutdownRequest In E-Stop"
+  },
+  {
+   "suite": "Suites.Pilot.State Matrix",
+   "test": "Matrix SetConfigurationRequest In Idle"
+  },
+  {
+   "suite": "Suites.Pilot.State Matrix",
+   "test": "Matrix SetConfigurationRequest In E-Stop"
+  },
+  {
+   "suite": "Suites.Pilot.System Status",
+   "test": "SDS-2525388 PowerOn Then NotInitialized Are Notified After appSMM Connects To The Broker"
+  },
+  {
+   "suite": "Suites.Pilot.System Status",
+   "test": "SDS-2752658 NotInitialized Is Notified After appSMM Restart"
+  },
+  {
+   "suite": "Suites.Pilot.System Status",
+   "test": "SDS-2525392 Every SystemStatusRequest Gets A SystemStatusResponse On is/iw/tx"
+  },
+  {
+   "suite": "Suites.Pilot.System Status",
+   "test": "SDS-2525390 SystemStatusNotification Matches The ICD Schema And Uses is/iw/tx"
+  },
+  {
+   "suite": "Suites.Pilot.System Status",
+   "test": "SDS-2528706 Idle Then Clearing Are Notified When All Lanes Are Initialized"
+  },
+  {
+   "suite": "Suites.Pilot.System Status",
+   "test": "SDS-2427781 SetConfigurationRequest In NotInitialized Notifies Configuring"
+  },
+  {
+   "suite": "Suites.Pilot.System Status",
+   "test": "SDS-2551270 NotInitialized Is Notified After SetConfigurationResponse"
+  },
+  {
+   "suite": "Suites.Pilot.System Status",
+   "test": "SDS-2535547 NormalOperation Is Notified When A Loaded Rack Is Picked Up In Idle"
+  },
+  {
+   "suite": "Suites.Pilot.System Status",
+   "test": "SDS-2653086 E-Stop After A Fatal Error Is Notified From Idle"
+  },
+  {
+   "suite": "Suites.Pilot.System Status",
+   "test": "SDS-2528708 SystemStatus Messages Are Logged With Topic And Content"
+  }
+ ],
+ "retired": [],
+ "stale": [],
+ "stateChanged": [],
+ "suspect": [
+  {
+   "spec": 2528698,
+   "suspectCount": 2
+  },
+  {
+   "spec": 2528703,
+   "suspectCount": 3
+  },
+  {
+   "spec": 2653094,
+   "suspectCount": 1
+  },
+  {
+   "spec": 2428417,
+   "suspectCount": 1
+  },
+  {
+   "spec": 2525388,
+   "suspectCount": 2
+  },
+  {
+   "spec": 2528706,
+   "suspectCount": 3
+  },
+  {
+   "spec": 2427781,
+   "suspectCount": 2
+  },
+  {
+   "spec": 2551270,
+   "suspectCount": 1
+  },
+  {
+   "spec": 2535547,
+   "suspectCount": 2
+  }
+ ],
+ "tests": 52,
+ "uncovered": [],
+ "unrecorded": [],
+ "untagged": []
+}

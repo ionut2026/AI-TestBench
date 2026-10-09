@@ -1,0 +1,2005 @@
+{
+ "catalogGeneratedAt": "2026-10-06T13:31:05+00:00",
+ "coverage": {
+  "automated": 25,
+  "passed": 15,
+  "testable": 25,
+  "verified": 0
+ },
+ "drift": {
+  "agentReviewed": [],
+  "areaGuessed": [],
+  "catalogGeneratedAt": "2026-10-06T13:31:05+00:00",
+  "coveredSpecs": 25,
+  "deferred": [],
+  "linksChanged": [],
+  "nohash": [],
+  "nospec": [
+   {
+    "kind": "robustness",
+    "suite": "Suites.Pilot.Robustness",
+    "test": "Truncated JSON Is Ignored"
+   },
+   {
+    "kind": "robustness",
+    "suite": "Suites.Pilot.Robustness",
+    "test": "Text That Is Not JSON Is Ignored"
+   },
+   {
+    "kind": "robustness",
+    "suite": "Suites.Pilot.Robustness",
+    "test": "Empty Payload Is Ignored"
+   },
+   {
+    "kind": "robustness",
+    "suite": "Suites.Pilot.Robustness",
+    "test": "JSON null Is Ignored"
+   },
+   {
+    "kind": "robustness",
+    "suite": "Suites.Pilot.Robustness",
+    "test": "JSON Array Is Ignored"
+   },
+   {
+    "kind": "robustness",
+    "suite": "Suites.Pilot.Robustness",
+    "test": "Request Body Of The Wrong Type Does Not Restart Initialization"
+   },
+   {
+    "kind": "robustness",
+    "suite": "Suites.Pilot.Robustness",
+    "test": "Unknown ICD Version Does Not Disturb appSMM"
+   },
+   {
+    "kind": "robustness",
+    "suite": "Suites.Pilot.Robustness",
+    "test": "Missing ICD Version Does Not Disturb appSMM"
+   },
+   {
+    "kind": "robustness",
+    "suite": "Suites.Pilot.Robustness",
+    "test": "Unknown Message Is Ignored"
+   },
+   {
+    "kind": "robustness",
+    "suite": "Suites.Pilot.Robustness",
+    "test": "ShutdownRequest On appSMM's Own Transmit Topic Is Not Executed"
+   },
+   {
+    "kind": "robustness",
+    "suite": "Suites.Pilot.Robustness",
+    "test": "ShutdownRequest On An Unknown Topic Is Not Executed"
+   },
+   {
+    "kind": "state-matrix",
+    "suite": "Suites.Pilot.State Matrix",
+    "test": "Matrix ShutdownRequest In NotInitialized"
+   },
+   {
+    "kind": "state-matrix",
+    "suite": "Suites.Pilot.State Matrix",
+    "test": "Matrix ShutdownRequest In E-Stop"
+   },
+   {
+    "kind": "state-matrix",
+    "suite": "Suites.Pilot.State Matrix",
+    "test": "Matrix SetConfigurationRequest In Idle"
+   },
+   {
+    "kind": "state-matrix",
+    "suite": "Suites.Pilot.State Matrix",
+    "test": "Matrix SetConfigurationRequest In E-Stop"
+   }
+  ],
+  "notTestable": [
+   {
+    "reason": "PDS overview statement: no observable behaviour at the ICD",
+    "spec": 2327588
+   }
+  ],
+  "orphan": [],
+  "pending": [
+   {
+    "suite": "Suites.Pilot.Bridge Connection",
+    "test": "SDS-2854109 Bridge Crash Puts The System Into E-Stop"
+   },
+   {
+    "suite": "Suites.Pilot.Bridge Connection",
+    "test": "SDS-2854109 Broker Outage Puts The System Into E-Stop"
+   },
+   {
+    "suite": "Suites.Pilot.Bridge Connection",
+    "test": "SDS-2854281 Operator Warning When The Bridge Connection Is Re-Established"
+   },
+   {
+    "suite": "Suites.Pilot.Initialization",
+    "test": "SDS-2955303 SystemStatusResponse Reports NotInitialized Before Initialization Starts"
+   },
+   {
+    "suite": "Suites.Pilot.Initialization",
+    "test": "SDS-2525423 Initialization Starts On InitializationRequest In NotInitialized"
+   },
+   {
+    "suite": "Suites.Pilot.Initialization",
+    "test": "SDS-2525423 InitializationRequest Outside NotInitialized Does Not Start Initialization"
+   },
+   {
+    "suite": "Suites.Pilot.Initialization",
+    "test": "SDS-2532404 InitializationResponse Error When Initialization Does Not Start Within 20 Seconds"
+   },
+   {
+    "suite": "Suites.Pilot.Initialization",
+    "test": "SDS-2528698 Initializing Is Notified After InitializationResponse OK"
+   },
+   {
+    "suite": "Suites.Pilot.Initialization",
+    "test": "SDS-2528703 Idle Is Notified When Clearing Is Completed"
+   },
+   {
+    "suite": "Suites.Pilot.Initialization",
+    "test": "SDS-2528710 InitializationRequest And InitializationResponse Are Logged With Topic And Content"
+   },
+   {
+    "suite": "Suites.Pilot.Recover",
+    "test": "SDS-2653094 System Restarts With RecoverRequest After Shutdown"
+   },
+   {
+    "suite": "Suites.Pilot.Recover",
+    "test": "SDS-2653094 System Restarts With RecoverRequest After A Hardware Fatal Error"
+   },
+   {
+    "suite": "Suites.Pilot.Recover",
+    "test": "SDS-2532492 RecoverRequest In E-Stop Sends DeInitializeCmd To RTC"
+   },
+   {
+    "suite": "Suites.Pilot.Recover",
+    "test": "SDS-2532492 RecoverRequest Outside E-Stop Does Not De-Initialize"
+   },
+   {
+    "suite": "Suites.Pilot.Recover",
+    "test": "SDS-2532504 RecoverResponse OK Matches The ICD Schema"
+   },
+   {
+    "suite": "Suites.Pilot.Recover",
+    "test": "SDS-2532504 RecoverResponse OK When DeInitializeRsp Comes Late But Within 20 Seconds"
+   },
+   {
+    "suite": "Suites.Pilot.Recover",
+    "test": "SDS-2532508 RecoverResponse Error When DeInitializeRsp Does Not Come Within 20 Seconds"
+   },
+   {
+    "suite": "Suites.Pilot.Recover",
+    "test": "SDS-2532510 Initialization Starts After RecoverResponse"
+   },
+   {
+    "suite": "Suites.Pilot.Robustness",
+    "test": "Truncated JSON Is Ignored"
+   },
+   {
+    "suite": "Suites.Pilot.Robustness",
+    "test": "Text That Is Not JSON Is Ignored"
+   },
+   {
+    "suite": "Suites.Pilot.Robustness",
+    "test": "Empty Payload Is Ignored"
+   },
+   {
+    "suite": "Suites.Pilot.Robustness",
+    "test": "JSON null Is Ignored"
+   },
+   {
+    "suite": "Suites.Pilot.Robustness",
+    "test": "JSON Array Is Ignored"
+   },
+   {
+    "suite": "Suites.Pilot.Robustness",
+    "test": "Request Body Of The Wrong Type Does Not Restart Initialization"
+   },
+   {
+    "suite": "Suites.Pilot.Robustness",
+    "test": "Unknown ICD Version Does Not Disturb appSMM"
+   },
+   {
+    "suite": "Suites.Pilot.Robustness",
+    "test": "Missing ICD Version Does Not Disturb appSMM"
+   },
+   {
+    "suite": "Suites.Pilot.Robustness",
+    "test": "Unknown Message Is Ignored"
+   },
+   {
+    "suite": "Suites.Pilot.Robustness",
+    "test": "ShutdownRequest On appSMM's Own Transmit Topic Is Not Executed"
+   },
+   {
+    "suite": "Suites.Pilot.Robustness",
+    "test": "ShutdownRequest On An Unknown Topic Is Not Executed"
+   },
+   {
+    "suite": "Suites.Pilot.Robustness",
+    "test": "SDS-2525423 A Second InitializationRequest During Initialization Does Not Start It Again"
+   },
+   {
+    "suite": "Suites.Pilot.Robustness",
+    "test": "SDS-2525392 Every One Of Back-To-Back SystemStatusRequests Gets A SystemStatusResponse On is/iw/tx"
+   },
+   {
+    "suite": "Suites.Pilot.Shutdown",
+    "test": "SDS-2428419 E-Stop Is Notified After ShutdownResponse"
+   },
+   {
+    "suite": "Suites.Pilot.Shutdown",
+    "test": "SDS-2428417 ShutdownResponse OK Is Published On is/iw/tx And Matches The ICD Schema"
+   },
+   {
+    "suite": "Suites.Pilot.Shutdown",
+    "test": "SDS-2428417 ShutdownResponse OK When The Stop Reply Comes Late But Within 20 Seconds"
+   },
+   {
+    "suite": "Suites.Pilot.State Matrix",
+    "test": "SDS-2525392 Matrix SystemStatusRequest In Idle"
+   },
+   {
+    "suite": "Suites.Pilot.State Matrix",
+    "test": "SDS-2525392 Matrix SystemStatusRequest In E-Stop"
+   },
+   {
+    "suite": "Suites.Pilot.State Matrix",
+    "test": "SDS-2525423 Matrix InitializationRequest In E-Stop"
+   },
+   {
+    "suite": "Suites.Pilot.State Matrix",
+    "test": "SDS-2532492 Matrix RecoverRequest In NotInitialized"
+   },
+   {
+    "suite": "Suites.Pilot.State Matrix",
+    "test": "Matrix ShutdownRequest In NotInitialized"
+   },
+   {
+    "suite": "Suites.Pilot.State Matrix",
+    "test": "Matrix ShutdownRequest In E-Stop"
+   },
+   {
+    "suite": "Suites.Pilot.State Matrix",
+    "test": "Matrix SetConfigurationRequest In Idle"
+   },
+   {
+    "suite": "Suites.Pilot.State Matrix",
+    "test": "Matrix SetConfigurationRequest In E-Stop"
+   },
+   {
+    "suite": "Suites.Pilot.System Status",
+    "test": "SDS-2525388 PowerOn Then NotInitialized Are Notified After appSMM Connects To The Broker"
+   },
+   {
+    "suite": "Suites.Pilot.System Status",
+    "test": "SDS-2752658 NotInitialized Is Notified After appSMM Restart"
+   },
+   {
+    "suite": "Suites.Pilot.System Status",
+    "test": "SDS-2525392 Every SystemStatusRequest Gets A SystemStatusResponse On is/iw/tx"
+   },
+   {
+    "suite": "Suites.Pilot.System Status",
+    "test": "SDS-2525390 SystemStatusNotification Matches The ICD Schema And Uses is/iw/tx"
+   },
+   {
+    "suite": "Suites.Pilot.System Status",
+    "test": "SDS-2528706 Idle Then Clearing Are Notified When All Lanes Are Initialized"
+   },
+   {
+    "suite": "Suites.Pilot.System Status",
+    "test": "SDS-2427781 SetConfigurationRequest In NotInitialized Notifies Configuring"
+   },
+   {
+    "suite": "Suites.Pilot.System Status",
+    "test": "SDS-2551270 NotInitialized Is Notified After SetConfigurationResponse"
+   },
+   {
+    "suite": "Suites.Pilot.System Status",
+    "test": "SDS-2535547 NormalOperation Is Notified When A Loaded Rack Is Picked Up In Idle"
+   },
+   {
+    "suite": "Suites.Pilot.System Status",
+    "test": "SDS-2653086 E-Stop After A Fatal Error Is Notified From Idle"
+   },
+   {
+    "suite": "Suites.Pilot.System Status",
+    "test": "SDS-2528708 SystemStatus Messages Are Logged With Topic And Content"
+   }
+  ],
+  "retired": [],
+  "stale": [],
+  "stateChanged": [],
+  "suspect": [
+   {
+    "spec": 2528698,
+    "suspectCount": 2
+   },
+   {
+    "spec": 2528703,
+    "suspectCount": 3
+   },
+   {
+    "spec": 2653094,
+    "suspectCount": 1
+   },
+   {
+    "spec": 2428417,
+    "suspectCount": 1
+   },
+   {
+    "spec": 2525388,
+    "suspectCount": 2
+   },
+   {
+    "spec": 2528706,
+    "suspectCount": 3
+   },
+   {
+    "spec": 2427781,
+    "suspectCount": 2
+   },
+   {
+    "spec": 2551270,
+    "suspectCount": 1
+   },
+   {
+    "spec": 2535547,
+    "suspectCount": 2
+   }
+  ],
+  "tests": 52,
+  "uncovered": [],
+  "unrecorded": [],
+  "untagged": []
+ },
+ "failures": {
+  "fixed": [],
+  "known": [],
+  "new": []
+ },
+ "generatedAt": "2000-01-01T00:00:00+00:00",
+ "metadata": {
+  "Automation API": "1.4.0",
+  "ICD version": "7",
+  "Run": "20261009-110307",
+  "SMM TestBench": "c55073075f06",
+  "Tier": "mock (framework self-test: NOT product evidence)",
+  "appSMM version": "0.0.0.0"
+ },
+ "nospec": [
+  {
+   "elapsed": 4.36,
+   "kind": "robustness",
+   "message": "",
+   "name": "Truncated JSON Is Ignored",
+   "outcome": "PASS",
+   "pending": true,
+   "status": "PASS",
+   "suite": "SMM mock.Pilot.Robustness"
+  },
+  {
+   "elapsed": 2.03,
+   "kind": "robustness",
+   "message": "",
+   "name": "Text That Is Not JSON Is Ignored",
+   "outcome": "PASS",
+   "pending": true,
+   "status": "PASS",
+   "suite": "SMM mock.Pilot.Robustness"
+  },
+  {
+   "elapsed": 2.03,
+   "kind": "robustness",
+   "message": "",
+   "name": "Empty Payload Is Ignored",
+   "outcome": "PASS",
+   "pending": true,
+   "status": "PASS",
+   "suite": "SMM mock.Pilot.Robustness"
+  },
+  {
+   "elapsed": 2.03,
+   "kind": "robustness",
+   "message": "",
+   "name": "JSON null Is Ignored",
+   "outcome": "PASS",
+   "pending": true,
+   "status": "PASS",
+   "suite": "SMM mock.Pilot.Robustness"
+  },
+  {
+   "elapsed": 2.03,
+   "kind": "robustness",
+   "message": "",
+   "name": "JSON Array Is Ignored",
+   "outcome": "PASS",
+   "pending": true,
+   "status": "PASS",
+   "suite": "SMM mock.Pilot.Robustness"
+  },
+  {
+   "elapsed": 2.03,
+   "kind": "robustness",
+   "message": "",
+   "name": "Request Body Of The Wrong Type Does Not Restart Initialization",
+   "outcome": "PASS",
+   "pending": true,
+   "status": "PASS",
+   "suite": "SMM mock.Pilot.Robustness"
+  },
+  {
+   "elapsed": 2.03,
+   "kind": "robustness",
+   "message": "",
+   "name": "Unknown ICD Version Does Not Disturb appSMM",
+   "outcome": "PASS",
+   "pending": true,
+   "status": "PASS",
+   "suite": "SMM mock.Pilot.Robustness"
+  },
+  {
+   "elapsed": 2.03,
+   "kind": "robustness",
+   "message": "",
+   "name": "Missing ICD Version Does Not Disturb appSMM",
+   "outcome": "PASS",
+   "pending": true,
+   "status": "PASS",
+   "suite": "SMM mock.Pilot.Robustness"
+  },
+  {
+   "elapsed": 2.03,
+   "kind": "robustness",
+   "message": "",
+   "name": "Unknown Message Is Ignored",
+   "outcome": "PASS",
+   "pending": true,
+   "status": "PASS",
+   "suite": "SMM mock.Pilot.Robustness"
+  },
+  {
+   "elapsed": 2.03,
+   "kind": "robustness",
+   "message": "",
+   "name": "ShutdownRequest On appSMM's Own Transmit Topic Is Not Executed",
+   "outcome": "PASS",
+   "pending": true,
+   "status": "PASS",
+   "suite": "SMM mock.Pilot.Robustness"
+  },
+  {
+   "elapsed": 2.03,
+   "kind": "robustness",
+   "message": "",
+   "name": "ShutdownRequest On An Unknown Topic Is Not Executed",
+   "outcome": "PASS",
+   "pending": true,
+   "status": "PASS",
+   "suite": "SMM mock.Pilot.Robustness"
+  },
+  {
+   "elapsed": 4.05,
+   "kind": "state-matrix",
+   "message": "Not specified; observed: ShutdownResponse {/"Status/": /"OK/"} on /is/iw/tx; NotInitialized -> E-Stop; settled in E-Stop. Open: Does appSMM accept a ShutdownRequest in NotInitialized? Which ShutdownResponse Status does it publish? / Which state follows a ShutdownRequest in NotInitialized (E-Stop, or unchanged)?",
+   "name": "Matrix ShutdownRequest In NotInitialized",
+   "outcome": "SKIP",
+   "pending": true,
+   "status": "SKIP",
+   "suite": "SMM mock.Pilot.State Matrix"
+  },
+  {
+   "elapsed": 2.03,
+   "kind": "state-matrix",
+   "message": "Not specified; observed: ShutdownResponse {/"Status/": /"OK/"} on /is/iw/tx; no state notification; settled in E-Stop. Open: Does appSMM answer a ShutdownRequest in E-Stop (already stopped)? With which ShutdownResponse Status? / Is a StopCmd sent to rtc_appl again in E-Stop?",
+   "name": "Matrix ShutdownRequest In E-Stop",
+   "outcome": "SKIP",
+   "pending": true,
+   "status": "SKIP",
+   "suite": "SMM mock.Pilot.State Matrix"
+  },
+  {
+   "elapsed": 4.86,
+   "kind": "state-matrix",
+   "message": "Not specified; observed: SetConfigurationResponse {/"STI.Barcode.Code128/": /"Error/"} on /is/iw/tx; no state notification; settled in Idle. Open: Is a SetConfigurationRequest accepted in Idle (2427781 only covers NotInitialized)? Which SetConfigurationResponse does appSMM publish? / Does appSMM go through Configuring in Idle, and which state follows?",
+   "name": "Matrix SetConfigurationRequest In Idle",
+   "outcome": "SKIP",
+   "pending": true,
+   "status": "SKIP",
+   "suite": "SMM mock.Pilot.State Matrix"
+  },
+  {
+   "elapsed": 2.04,
+   "kind": "state-matrix",
+   "message": "Not specified; observed: SetConfigurationResponse {/"STI.Barcode.Code128/": /"Error/"} on /is/iw/tx; no state notification; settled in E-Stop. Open: Is a SetConfigurationRequest accepted in E-Stop? Which SetConfigurationResponse does appSMM publish? / Which state follows a SetConfigurationRequest in E-Stop?",
+   "name": "Matrix SetConfigurationRequest In E-Stop",
+   "outcome": "SKIP",
+   "pending": true,
+   "status": "SKIP",
+   "suite": "SMM mock.Pilot.State Matrix"
+  }
+ ],
+ "productEvidence": false,
+ "requirements": [
+  {
+   "id": 1640380,
+   "specifications": [
+    2428417
+   ],
+   "state": "Accepted",
+   "title": "The Sample Tube Identification Software shall perform a controlled shutdown of the software and OS when requested over the external interface.",
+   "verdict": "PARTIAL"
+  },
+  {
+   "id": 1853224,
+   "specifications": [
+    2528703,
+    2528698,
+    2653086,
+    2551270,
+    2535547,
+    2528706,
+    2525388,
+    2427781
+   ],
+   "state": "Accepted",
+   "title": "The system shall operate in the following states:",
+   "verdict": "NOT RUN"
+  },
+  {
+   "id": 1853225,
+   "specifications": [
+    2528703,
+    2528698,
+    2653086,
+    2551270,
+    2535547,
+    2528706,
+    2525388,
+    2427781
+   ],
+   "state": "Accepted",
+   "title": "",
+   "verdict": "NOT RUN"
+  },
+  {
+   "id": 1853226,
+   "specifications": [
+    2528703,
+    2528698,
+    2535547,
+    2528706,
+    2525388,
+    2427781,
+    2653094,
+    2428417
+   ],
+   "state": "Accepted",
+   "title": "State/tPurpose/t/nPowerd On/tOperator powers up the device./nThe operating system starts up and launches the instrument control software./t/nNotInitializedReady to ini",
+   "verdict": "NOT RUN"
+  },
+  {
+   "id": 1853239,
+   "specifications": [
+    2525423
+   ],
+   "state": "Accepted",
+   "title": "The user shall be able to request SMM system initialization from the IL software.",
+   "verdict": "PASS"
+  },
+  {
+   "id": 1853241,
+   "specifications": [
+    2528703,
+    2528698,
+    2528706
+   ],
+   "state": "Accepted",
+   "title": "The user shall be able to identify that the system was successfully initialized.",
+   "verdict": "PASS"
+  },
+  {
+   "id": 1853245,
+   "specifications": [
+    2528703
+   ],
+   "state": "Accepted",
+   "title": "The SMM system shall complete initialization when all SMM modules could be successfully initialized and all racks, excepting the ones occupied in the pipettor l",
+   "verdict": "PASS"
+  },
+  {
+   "id": 1932308,
+   "specifications": [
+    2653086
+   ],
+   "state": "Accepted",
+   "title": "If a Fatal Error is generated the system shall suspend all SMM running rack processing jobs.",
+   "verdict": "NOT RUN"
+  },
+  {
+   "id": 1932310,
+   "specifications": [
+    2653094
+   ],
+   "state": "Accepted",
+   "title": "If a Fatal Error is generated a user interaction is required for recovery (see 2389460).",
+   "verdict": "PARTIAL"
+  },
+  {
+   "id": 1932312,
+   "specifications": [
+    2653094,
+    2532510
+   ],
+   "state": "Accepted",
+   "title": "After a fatal error and possible user recovery an initialization must be performed.",
+   "verdict": "PARTIAL"
+  },
+  {
+   "id": 1932314,
+   "specifications": [
+    2653086
+   ],
+   "state": "Accepted",
+   "title": "After a Fatal Error the system shall abort any pending rack processing job during initialization.",
+   "verdict": "NOT RUN"
+  },
+  {
+   "id": 1932397,
+   "specifications": [
+    2653086
+   ],
+   "state": "Accepted",
+   "title": "The system execution shall stop after reporting a Fatal event and the system status goes to E-Stop (Halted).",
+   "verdict": "NOT RUN"
+  },
+  {
+   "id": 1939068,
+   "specifications": [
+    2752658
+   ],
+   "state": "Accepted",
+   "title": "SMM shall automatically restart after an unexpected software failure./nSMM shall inform IW about the fact that the SW was not shut down properly./nAfterwards the ",
+   "verdict": "PASS"
+  },
+  {
+   "id": 1939072,
+   "specifications": [
+    2428419
+   ],
+   "state": "Accepted",
+   "title": "SMM shall publish the following changes in system information and configuration so that it can be shown and appropriate action can be taken if needed: /n- SMM sy",
+   "verdict": "PASS"
+  },
+  {
+   "id": 2384071,
+   "specifications": [
+    2528703,
+    2528698,
+    2551270,
+    2535547,
+    2528706,
+    2525388,
+    2427781
+   ],
+   "state": "Accepted",
+   "title": "The system shall operate in the following states: /n- Powered On: Booting OS and SW/n- Not Initialized: Ready to initialize or configure/n- Initializing: Homing al",
+   "verdict": "NOT RUN"
+  },
+  {
+   "id": 2384136,
+   "specifications": [
+    2528703,
+    2528706
+   ],
+   "state": "Changed",
+   "title": "appSMM shall publish system status Clearing when racks are moved to the output./nIn case of success appSMM shall publish system status Idle after clearing finish",
+   "verdict": "PASS"
+  },
+  {
+   "id": 2384146,
+   "specifications": [
+    2532492,
+    2532504,
+    2532508
+   ],
+   "state": "Accepted",
+   "title": "appSMM shall initiate recovery from fatal error codition (E-Stopped) when requested./nAfter recovery the state will be not initialized (2387196).",
+   "verdict": "NOT RUN"
+  },
+  {
+   "id": 2384148,
+   "specifications": [
+    2955303,
+    2528703,
+    2528698,
+    2551270,
+    2535547,
+    2528706,
+    2525390,
+    2525388,
+    2427781
+   ],
+   "state": "Accepted",
+   "title": "appSMM shall automatically publish system status (2384071) changes as they occur.",
+   "verdict": "NOT RUN"
+  },
+  {
+   "id": 2384154,
+   "specifications": [
+    2428419,
+    2428417
+   ],
+   "state": "Accepted",
+   "title": "appSMM shall initiate an immediate shutdown of the software and OS when requested.",
+   "verdict": "PARTIAL"
+  },
+  {
+   "id": 2386628,
+   "specifications": [
+    2525392
+   ],
+   "state": "Accepted",
+   "title": "appSMM shall publish system status (2384071) when requested.",
+   "verdict": "PASS"
+  },
+  {
+   "id": 2387196,
+   "specifications": [
+    2532404,
+    2525423
+   ],
+   "state": "Accepted",
+   "title": "appSMM shall initiate system initialization when requested./n(Only possible when state is not initialized)",
+   "verdict": "NOT RUN"
+  },
+  {
+   "id": 2389460,
+   "specifications": [
+    2532492
+   ],
+   "state": "Accepted",
+   "title": "The user shall be able to initiate error recovery from the IL software, after fatal error scenario (see 1932312 and 1932314 for more details).",
+   "verdict": "PARTIAL"
+  }
+ ],
+ "review": {
+  "tests": 52,
+  "unreviewed": 52
+ },
+ "scope": {
+  "name": "pilot",
+  "title": "Pilot: Initialization, Recover, Shutdown and System Status (7251 SDS Workflow / SDS Event Handling)"
+ },
+ "specifications": [
+  {
+   "area": "initialization",
+   "document": "7251 SDS Workflow",
+   "explorativeTests": [
+    2430841,
+    2439674
+   ],
+   "failClass": null,
+   "id": 2528710,
+   "notRun": [
+    "SDS-2528710 InitializationRequest And InitializationResponse Are Logged With Topic And Content"
+   ],
+   "reason": null,
+   "satisfies": [],
+   "stale": [],
+   "state": "Open",
+   "suspect": false,
+   "tests": [],
+   "text": "The InitializationRequest and InitializationResponse messages are logged in appSMM log files. The message topic and content of each exchanged message is included in the log files.",
+   "unreviewed": [
+    "SDS-2528710 InitializationRequest And InitializationResponse Are Logged With Topic And Content"
+   ],
+   "userStories": [
+    2403408
+   ],
+   "verdict": "NOT RUN",
+   "verified": false
+  },
+  {
+   "area": "initialization",
+   "document": "7251 SDS Workflow",
+   "explorativeTests": [
+    2430841,
+    2439674
+   ],
+   "failClass": null,
+   "id": 2532404,
+   "notRun": [
+    "SDS-2532404 InitializationResponse Error When Initialization Does Not Start Within 20 Seconds"
+   ],
+   "reason": null,
+   "satisfies": [
+    2387196
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": false,
+   "tests": [],
+   "text": "If SMM initialization does not start within 20 seconds after the InitializationRequest message is received, appSMM software publishes the InitializationResponse message with Status /"Error/" over the is/iw/tx topic.",
+   "unreviewed": [
+    "SDS-2532404 InitializationResponse Error When Initialization Does Not Start Within 20 Seconds"
+   ],
+   "userStories": [
+    2403408
+   ],
+   "verdict": "NOT RUN",
+   "verified": false
+  },
+  {
+   "area": "recover",
+   "document": "7251 SDS Workflow",
+   "explorativeTests": [
+    2441275,
+    2442193
+   ],
+   "failClass": null,
+   "id": 2532508,
+   "notRun": [
+    "SDS-2532508 RecoverResponse Error When DeInitializeRsp Does Not Come Within 20 Seconds"
+   ],
+   "reason": null,
+   "satisfies": [
+    2384146
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": false,
+   "tests": [],
+   "text": "If rtc_appl does not reply with /"DeInitializeRsp/" during 20 seconds (see 2532504), appSMM software publishes the RecoverResponse message with Status /"Error/" over the is/iw/tx topic./n/nNote:/n/nThe timeout for receiving the rtc_appl reply for any command (/"CommandResponseTimeoutMilliseconds/") is configured in the appSMM.yaml file, which can be viewed/updated in appSMM folder.",
+   "unreviewed": [
+    "SDS-2532508 RecoverResponse Error When DeInitializeRsp Does Not Come Within 20 Seconds"
+   ],
+   "userStories": [
+    2419846
+   ],
+   "verdict": "NOT RUN",
+   "verified": false
+  },
+  {
+   "area": "system_status",
+   "document": "7251 SDS Workflow",
+   "explorativeTests": [
+    2430842,
+    2431923
+   ],
+   "failClass": null,
+   "id": 2528708,
+   "notRun": [
+    "SDS-2528708 SystemStatus Messages Are Logged With Topic And Content"
+   ],
+   "reason": null,
+   "satisfies": [],
+   "stale": [],
+   "state": "Open",
+   "suspect": false,
+   "tests": [],
+   "text": "The SystemStatusRequest, SystemStatusResponse and SystemStatusNotification messages are logged in appSMM log files. The message topic and content of each exchanged message is included in the log files.",
+   "unreviewed": [
+    "SDS-2528708 SystemStatus Messages Are Logged With Topic And Content"
+   ],
+   "userStories": [
+    2404051,
+    2404069
+   ],
+   "verdict": "NOT RUN",
+   "verified": false
+  },
+  {
+   "area": "system_status",
+   "document": "7251 SDS Workflow",
+   "explorativeTests": [
+    2510136
+   ],
+   "failClass": null,
+   "id": 2535547,
+   "notRun": [
+    "SDS-2535547 NormalOperation Is Notified When A Loaded Rack Is Picked Up In Idle"
+   ],
+   "reason": null,
+   "satisfies": [
+    2384148,
+    2384071,
+    1853225,
+    1853224,
+    1853226
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": true,
+   "tests": [],
+   "text": "If a loaded rack was picked up by the Distributor either from Input lane or from FrontIn while the system status is /"Idle/", appSMM software publishes a SystemStatusNotification message over the is/iw/tx topic with the following details:/n- /"PreviousState/":/"Idle/"/n- /"CurrentState/":/"NormalOperation/"",
+   "unreviewed": [
+    "SDS-2535547 NormalOperation Is Notified When A Loaded Rack Is Picked Up In Idle"
+   ],
+   "userStories": [
+    2488626
+   ],
+   "verdict": "NOT RUN",
+   "verified": false
+  },
+  {
+   "area": "system_status",
+   "document": "7251 SDS Event Handling",
+   "explorativeTests": [],
+   "failClass": null,
+   "id": 2653086,
+   "notRun": [
+    "SDS-2653086 E-Stop After A Fatal Error Is Notified From Idle"
+   ],
+   "reason": null,
+   "satisfies": [
+    1932308,
+    1853225,
+    1853224,
+    1932314,
+    1932397
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": false,
+   "tests": [],
+   "text": "If the SMM system goes to E-Stop following a fatal error, appSMM software publishes a SystemStatusNotification message which notifies that system status changed from /"Idle/" (PreviousState) to /"E-Stop/" (CurrentState).",
+   "unreviewed": [
+    "SDS-2653086 E-Stop After A Fatal Error Is Notified From Idle"
+   ],
+   "userStories": [
+    1783271
+   ],
+   "verdict": "NOT RUN",
+   "verified": false
+  },
+  {
+   "area": "recover",
+   "document": "7251 SDS Workflow",
+   "explorativeTests": [
+    2441275,
+    2442193
+   ],
+   "failClass": null,
+   "id": 2532492,
+   "notRun": [
+    "SDS-2532492 RecoverRequest In E-Stop Sends DeInitializeCmd To RTC"
+   ],
+   "reason": null,
+   "satisfies": [
+    2389460,
+    2384146
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": false,
+   "tests": [
+    {
+     "agentReview": null,
+     "elapsed": 3.05,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2532492 RecoverRequest Outside E-Stop Does Not De-Initialize",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.Recover"
+    },
+    {
+     "agentReview": null,
+     "elapsed": 4.06,
+     "knownIssues": [],
+     "message": "Not specified; observed: RecoverResponse {/"Status/": /"Error/"} on /is/iw/tx; no state notification; settled in NotInitialized. Open: Does appSMM answer a RecoverRequest in NotInitialized with a RecoverResponse, and with which Status? / Does a RecoverRequest outside E-Stop change the system state (2532492 only forbids the DeInitializeCmd)?",
+     "name": "SDS-2532492 Matrix RecoverRequest In NotInitialized",
+     "outcome": "SKIP",
+     "pending": true,
+     "status": "SKIP",
+     "suite": "SMM mock.Pilot.State Matrix"
+    }
+   ],
+   "text": "If the RecoverRequest message is received over the is/iw/rx topic, appSMM software sends the /"DeInitializeCmd/" command to RTC, in order to initiate system de-initialization. The /"DeInitializeCmd/" command is sent only if the system status is /"E-Stop/".",
+   "unreviewed": [
+    "SDS-2532492 Matrix RecoverRequest In NotInitialized",
+    "SDS-2532492 RecoverRequest In E-Stop Sends DeInitializeCmd To RTC",
+    "SDS-2532492 RecoverRequest Outside E-Stop Does Not De-Initialize"
+   ],
+   "userStories": [
+    2419846
+   ],
+   "verdict": "PARTIAL",
+   "verified": false
+  },
+  {
+   "area": "recover",
+   "document": "7251 SDS Workflow",
+   "explorativeTests": [
+    2441275,
+    2442193
+   ],
+   "failClass": null,
+   "id": 2532504,
+   "notRun": [
+    "SDS-2532504 RecoverResponse OK When DeInitializeRsp Comes Late But Within 20 Seconds"
+   ],
+   "reason": null,
+   "satisfies": [
+    2384146
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": false,
+   "tests": [
+    {
+     "agentReview": null,
+     "elapsed": 0.53,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2532504 RecoverResponse OK Matches The ICD Schema",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.Recover"
+    }
+   ],
+   "text": "If rtc_appl replies with 'DeInitializeRsp' within 20 seconds, appSMM software publishes the RecoverResponse message with Status /"OK/" over the is/iw/tx topic. The structure of the RecoverResponse message published by appSMM software matches the structure of the message file attached under Properties.",
+   "unreviewed": [
+    "SDS-2532504 RecoverResponse OK Matches The ICD Schema",
+    "SDS-2532504 RecoverResponse OK When DeInitializeRsp Comes Late But Within 20 Seconds"
+   ],
+   "userStories": [
+    2419846
+   ],
+   "verdict": "PARTIAL",
+   "verified": false
+  },
+  {
+   "area": "recover",
+   "document": "7251 SDS Event Handling",
+   "explorativeTests": [],
+   "failClass": null,
+   "id": 2653094,
+   "notRun": [
+    "SDS-2653094 System Restarts With RecoverRequest After A Hardware Fatal Error"
+   ],
+   "reason": null,
+   "satisfies": [
+    1932310,
+    1853226,
+    1932312
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": true,
+   "tests": [
+    {
+     "agentReview": null,
+     "elapsed": 5.17,
+     "knownIssues": [
+      "FINDING-2"
+     ],
+     "message": "",
+     "name": "SDS-2653094 System Restarts With RecoverRequest After Shutdown",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.Recover"
+    }
+   ],
+   "text": "If the system is shut down following a fatal error event, the SMM system can be re-started if the RecoverRequest message is received over the is/iw/rx topic./n/nAfter the RecoverRequest message is received over the is/iw/rx topic, the SMM system follows the recovery procedure, as described in 2532492, 2532504, 2532508, 2532510.",
+   "unreviewed": [
+    "SDS-2653094 System Restarts With RecoverRequest After A Hardware Fatal Error",
+    "SDS-2653094 System Restarts With RecoverRequest After Shutdown"
+   ],
+   "userStories": [
+    1783271
+   ],
+   "verdict": "PARTIAL",
+   "verified": false
+  },
+  {
+   "area": "shutdown",
+   "document": "7251 SDS Workflow",
+   "explorativeTests": [
+    2441248,
+    2469925
+   ],
+   "failClass": null,
+   "id": 2428417,
+   "notRun": [
+    "SDS-2428417 ShutdownResponse OK When The Stop Reply Comes Late But Within 20 Seconds"
+   ],
+   "reason": null,
+   "satisfies": [
+    2384154,
+    1853226,
+    1640380
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": true,
+   "tests": [
+    {
+     "agentReview": null,
+     "elapsed": 2.85,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2428417 ShutdownResponse OK Is Published On is/iw/tx And Matches The ICD Schema",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.Shutdown"
+    }
+   ],
+   "text": "If rtc_appl replies with /"StopRsp/" within 20 seconds, appSMM software publishes the ShutDownResponse with Status /"OK/", over the is/iw/tx topic. The structure of the ShutDownResponse message published by appSMM software matches the structure of the message file attached under Properties.",
+   "unreviewed": [
+    "SDS-2428417 ShutdownResponse OK Is Published On is/iw/tx And Matches The ICD Schema",
+    "SDS-2428417 ShutdownResponse OK When The Stop Reply Comes Late But Within 20 Seconds"
+   ],
+   "userStories": [
+    2404361
+   ],
+   "verdict": "PARTIAL",
+   "verified": false
+  },
+  {
+   "area": "bridge_connection",
+   "document": "7251 SDS Event Handling",
+   "explorativeTests": [
+    2855849,
+    2855850
+   ],
+   "failClass": null,
+   "id": 2854109,
+   "notRun": [],
+   "reason": null,
+   "satisfies": [],
+   "stale": [],
+   "state": "Open",
+   "suspect": false,
+   "tests": [
+    {
+     "agentReview": null,
+     "elapsed": 4.57,
+     "knownIssues": [
+      "FINDING-1"
+     ],
+     "message": "",
+     "name": "SDS-2854109 Bridge Crash Puts The System Into E-Stop",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.Bridge Connection"
+    },
+    {
+     "agentReview": null,
+     "elapsed": 7.88,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2854109 Broker Outage Puts The System Into E-Stop",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.Bridge Connection"
+    }
+   ],
+   "text": "If the SMMBridge gets disconnected, the SMM system goes to default E-Stop state (i.e. system follows the behaviour described under Default E-Stop chapter).",
+   "unreviewed": [
+    "SDS-2854109 Bridge Crash Puts The System Into E-Stop",
+    "SDS-2854109 Broker Outage Puts The System Into E-Stop"
+   ],
+   "userStories": [
+    2837620
+   ],
+   "verdict": "PASS",
+   "verified": false
+  },
+  {
+   "area": "bridge_connection",
+   "document": "7251 SDS Event Handling",
+   "explorativeTests": [
+    2855849,
+    2855850
+   ],
+   "failClass": null,
+   "id": 2854281,
+   "notRun": [],
+   "reason": null,
+   "satisfies": [],
+   "stale": [],
+   "state": "Open",
+   "suspect": false,
+   "tests": [
+    {
+     "agentReview": null,
+     "elapsed": 5.58,
+     "knownIssues": [
+      "FINDING-1"
+     ],
+     "message": "",
+     "name": "SDS-2854281 Operator Warning When The Bridge Connection Is Re-Established",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.Bridge Connection"
+    }
+   ],
+   "text": "If the connection to SMMBridge is re-established and appSMM software restarts following the RecoverRequest message (see 2653094), appSMM software publishes an event over the is/iw/tx topic, with the following details:/n/n- /"Category/": /"Operator/"/n- /"EventId/": ??/n- /"Severity/": /"Warning/"/n- /"TimeStamp/": time when the event was detected/n- /"Message/": /"The SMM system went to E-Stop because the connection to SMMBridge was lost. Connection is re-established now./"/n- /"EventArgs/": none",
+   "unreviewed": [
+    "SDS-2854281 Operator Warning When The Bridge Connection Is Re-Established"
+   ],
+   "userStories": [
+    2837620
+   ],
+   "verdict": "PASS",
+   "verified": false
+  },
+  {
+   "area": "initialization",
+   "document": "7251 SDS Workflow",
+   "explorativeTests": [
+    2430841,
+    2439674
+   ],
+   "failClass": null,
+   "id": 2525423,
+   "notRun": [],
+   "reason": null,
+   "satisfies": [
+    1853239,
+    2387196
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": false,
+   "tests": [
+    {
+     "agentReview": null,
+     "elapsed": 4.06,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2525423 Initialization Starts On InitializationRequest In NotInitialized",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.Initialization"
+    },
+    {
+     "agentReview": null,
+     "elapsed": 4.34,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2525423 InitializationRequest Outside NotInitialized Does Not Start Initialization",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.Initialization"
+    },
+    {
+     "agentReview": null,
+     "elapsed": 3.55,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2525423 A Second InitializationRequest During Initialization Does Not Start It Again",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.Robustness"
+    },
+    {
+     "agentReview": null,
+     "elapsed": 2.03,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2525423 Matrix InitializationRequest In E-Stop",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.State Matrix"
+    }
+   ],
+   "text": "SMM begins the initialization process only after the InitializationRequest message is received over the is/iw/rx topic and the system state is /"NotInitialized/"./n/nNote:/n/nWhen the InitializationRequest message is received over the is/iw/rx topic, appSMM transmits the 'InitializeCmd' command to rtc_appl, only when the system state is 'NotInitialized'.",
+   "unreviewed": [
+    "SDS-2525423 A Second InitializationRequest During Initialization Does Not Start It Again",
+    "SDS-2525423 Initialization Starts On InitializationRequest In NotInitialized",
+    "SDS-2525423 InitializationRequest Outside NotInitialized Does Not Start Initialization",
+    "SDS-2525423 Matrix InitializationRequest In E-Stop"
+   ],
+   "userStories": [
+    2403408
+   ],
+   "verdict": "PASS",
+   "verified": false
+  },
+  {
+   "area": "initialization",
+   "document": "7251 SDS Workflow",
+   "explorativeTests": [
+    2431923
+   ],
+   "failClass": null,
+   "id": 2528698,
+   "notRun": [],
+   "reason": null,
+   "satisfies": [
+    2384071,
+    2384148,
+    1853241,
+    1853225,
+    1853224,
+    1853226
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": true,
+   "tests": [
+    {
+     "agentReview": null,
+     "elapsed": 2.03,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2528698 Initializing Is Notified After InitializationResponse OK",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.Initialization"
+    }
+   ],
+   "text": "After publishing the InitializationResponse message with Status /"OK/", appSMM software sends a SystemStatusNotification message over the is/iw/tx topic, which notifies that system state changed from /"NotInitialized/" to /"Initializing/".",
+   "unreviewed": [
+    "SDS-2528698 Initializing Is Notified After InitializationResponse OK"
+   ],
+   "userStories": [
+    2404069
+   ],
+   "verdict": "PASS",
+   "verified": false
+  },
+  {
+   "area": "initialization",
+   "document": "7251 SDS Workflow",
+   "explorativeTests": [
+    2430841,
+    2439674
+   ],
+   "failClass": null,
+   "id": 2528703,
+   "notRun": [],
+   "reason": null,
+   "satisfies": [
+    2384148,
+    1853245,
+    1853241,
+    2384071,
+    2384136,
+    1853225,
+    1853224,
+    1853226
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": true,
+   "tests": [
+    {
+     "agentReview": null,
+     "elapsed": 4.37,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2528703 Idle Is Notified When Clearing Is Completed",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.Initialization"
+    }
+   ],
+   "text": "If system clearing is completed (all racks detected during initialization were moved to Output), appSMM software publishes a SystemStatusNotification message which notifies that the CurrentState of the system changed to /"Idle/".",
+   "unreviewed": [
+    "SDS-2528703 Idle Is Notified When Clearing Is Completed"
+   ],
+   "userStories": [
+    2403408
+   ],
+   "verdict": "PASS",
+   "verified": false
+  },
+  {
+   "area": "initialization",
+   "document": "7251 SDS Workflow",
+   "explorativeTests": [
+    2431923
+   ],
+   "failClass": null,
+   "id": 2955303,
+   "notRun": [],
+   "reason": null,
+   "satisfies": [
+    2384148
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": false,
+   "tests": [
+    {
+     "agentReview": null,
+     "elapsed": 2.04,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2955303 SystemStatusResponse Reports NotInitialized Before Initialization Starts",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.Initialization"
+    }
+   ],
+   "text": "If the SystemStatusRequest message is received over the is/iw/rx topic before the initialization starts, appSMM software responds with the SystemStatusResponse having the current status: /"NotInitialized/".",
+   "unreviewed": [
+    "SDS-2955303 SystemStatusResponse Reports NotInitialized Before Initialization Starts"
+   ],
+   "userStories": [
+    2404069
+   ],
+   "verdict": "PASS",
+   "verified": false
+  },
+  {
+   "area": "recover",
+   "document": "7251 SDS Workflow",
+   "explorativeTests": [
+    2441275,
+    2442193
+   ],
+   "failClass": null,
+   "id": 2532510,
+   "notRun": [],
+   "reason": null,
+   "satisfies": [
+    1932312
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": false,
+   "tests": [
+    {
+     "agentReview": null,
+     "elapsed": 4.36,
+     "knownIssues": [
+      "FINDING-2"
+     ],
+     "message": "",
+     "name": "SDS-2532510 Initialization Starts After RecoverResponse",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.Recover"
+    }
+   ],
+   "text": "After publishing the RecoverResponse message, appSMM software sends the 'InitializeCmd' command to RTC, in order to initiate system initialization.",
+   "unreviewed": [
+    "SDS-2532510 Initialization Starts After RecoverResponse"
+   ],
+   "userStories": [
+    2419846
+   ],
+   "verdict": "PASS",
+   "verified": false
+  },
+  {
+   "area": "shutdown",
+   "document": "7251 SDS Workflow",
+   "explorativeTests": [
+    2441248,
+    2469925
+   ],
+   "failClass": null,
+   "id": 2428419,
+   "notRun": [],
+   "reason": null,
+   "satisfies": [
+    2384154,
+    1939072
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": false,
+   "tests": [
+    {
+     "agentReview": null,
+     "elapsed": 2.35,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2428419 E-Stop Is Notified After ShutdownResponse",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.Shutdown"
+    }
+   ],
+   "text": "After sending the ShutdownResponse, appSMM software publishes a SystemStatusNotification message which notifies that system status changed from /"Idle/" (PreviousState) to /"E-Stop/" (CurrentState)",
+   "unreviewed": [
+    "SDS-2428419 E-Stop Is Notified After ShutdownResponse"
+   ],
+   "userStories": [
+    2404361
+   ],
+   "verdict": "PASS",
+   "verified": false
+  },
+  {
+   "area": "system_status",
+   "document": "7251 SDS Workflow",
+   "explorativeTests": [
+    2534066,
+    2534601,
+    2534758,
+    2568719
+   ],
+   "failClass": null,
+   "id": 2427781,
+   "notRun": [],
+   "reason": null,
+   "satisfies": [
+    2384071,
+    2384148,
+    1853225,
+    1853224,
+    1853226
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": true,
+   "tests": [
+    {
+     "agentReview": null,
+     "elapsed": 2.04,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2427781 SetConfigurationRequest In NotInitialized Notifies Configuring",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.System Status"
+    }
+   ],
+   "text": "If the SetConfigurationRequest message is received over the is/iw/rx topic and the system state is 'NotInitialized', appSMM software automatically publishes the SystemStatusNotification message over the is/iw/tx topic, which notifies that system state changed from /"NotInitialized/" to /"Configuring/".",
+   "unreviewed": [
+    "SDS-2427781 SetConfigurationRequest In NotInitialized Notifies Configuring"
+   ],
+   "userStories": [
+    2492146
+   ],
+   "verdict": "PASS",
+   "verified": false
+  },
+  {
+   "area": "system_status",
+   "document": "7251 SDS Workflow",
+   "explorativeTests": [
+    2431923
+   ],
+   "failClass": null,
+   "id": 2525388,
+   "notRun": [],
+   "reason": null,
+   "satisfies": [
+    2384071,
+    2384148,
+    1853226,
+    1853225,
+    1853224
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": true,
+   "tests": [
+    {
+     "agentReview": null,
+     "elapsed": 2.03,
+     "knownIssues": [
+      "FINDING-3"
+     ],
+     "message": "",
+     "name": "SDS-2525388 PowerOn Then NotInitialized Are Notified After appSMM Connects To The Broker",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.System Status"
+    }
+   ],
+   "text": "Following appSMM connection to MQTT Broker, the appSMM software publishes two SystemStatusNotification messages over the is/iw/tx topic, to notify that CurrentState of the system changed first to /"PowerOn/", and then to /"NotInitialized/".",
+   "unreviewed": [
+    "SDS-2525388 PowerOn Then NotInitialized Are Notified After appSMM Connects To The Broker"
+   ],
+   "userStories": [
+    2404069
+   ],
+   "verdict": "PASS",
+   "verified": false
+  },
+  {
+   "area": "system_status",
+   "document": "7251 SDS Workflow",
+   "explorativeTests": [
+    2431923
+   ],
+   "failClass": null,
+   "id": 2525390,
+   "notRun": [],
+   "reason": null,
+   "satisfies": [
+    2384148
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": false,
+   "tests": [
+    {
+     "agentReview": null,
+     "elapsed": 3.55,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2525390 SystemStatusNotification Matches The ICD Schema And Uses is/iw/tx",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.System Status"
+    }
+   ],
+   "text": "The structure of the SystemStatusNotification message published by appSMM software matches the structure of the message file attached under Properties./nThe SystemStatusNotification message is always published over the is/iw/tx topic.",
+   "unreviewed": [
+    "SDS-2525390 SystemStatusNotification Matches The ICD Schema And Uses is/iw/tx"
+   ],
+   "userStories": [
+    2404069
+   ],
+   "verdict": "PASS",
+   "verified": false
+  },
+  {
+   "area": "system_status",
+   "document": "7251 SDS Workflow",
+   "explorativeTests": [
+    2430842
+   ],
+   "failClass": null,
+   "id": 2525392,
+   "notRun": [],
+   "reason": null,
+   "satisfies": [
+    2386628
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": false,
+   "tests": [
+    {
+     "agentReview": null,
+     "elapsed": 1.92,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2525392 Every One Of Back-To-Back SystemStatusRequests Gets A SystemStatusResponse On is/iw/tx",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.Robustness"
+    },
+    {
+     "agentReview": null,
+     "elapsed": 4.37,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2525392 Matrix SystemStatusRequest In Idle",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.State Matrix"
+    },
+    {
+     "agentReview": null,
+     "elapsed": 2.04,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2525392 Matrix SystemStatusRequest In E-Stop",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.State Matrix"
+    },
+    {
+     "agentReview": null,
+     "elapsed": 0.02,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2525392 Every SystemStatusRequest Gets A SystemStatusResponse On is/iw/tx",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.System Status"
+    }
+   ],
+   "text": "After it gets connected to the MQTT Broker, the appSMM software automatically publishes a SystemStatusResponse message each time when a SystemStatusRequest message is received over the is/iw/rx topic. The SystemStatusResponse message is always published over the is/iw/tx topic.",
+   "unreviewed": [
+    "SDS-2525392 Every One Of Back-To-Back SystemStatusRequests Gets A SystemStatusResponse On is/iw/tx",
+    "SDS-2525392 Every SystemStatusRequest Gets A SystemStatusResponse On is/iw/tx",
+    "SDS-2525392 Matrix SystemStatusRequest In E-Stop",
+    "SDS-2525392 Matrix SystemStatusRequest In Idle"
+   ],
+   "userStories": [
+    2404051
+   ],
+   "verdict": "PASS",
+   "verified": false
+  },
+  {
+   "area": "system_status",
+   "document": "7251 SDS Workflow",
+   "explorativeTests": [
+    2431923
+   ],
+   "failClass": null,
+   "id": 2528706,
+   "notRun": [],
+   "reason": null,
+   "satisfies": [
+    2384148,
+    1853226,
+    2384136,
+    1853241,
+    2384071,
+    1853225,
+    1853224
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": true,
+   "tests": [
+    {
+     "agentReview": null,
+     "elapsed": 3.55,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2528706 Idle Then Clearing Are Notified When All Lanes Are Initialized",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.System Status"
+    }
+   ],
+   "text": "If all SMM lanes are successfully initialized, appSMM software publishes two SystemStatusNotification messages, which notifiy that the CurrentState of the system changed firstly to /"Idle/" and then to /"Clearing/".",
+   "unreviewed": [
+    "SDS-2528706 Idle Then Clearing Are Notified When All Lanes Are Initialized"
+   ],
+   "userStories": [
+    2404069
+   ],
+   "verdict": "PASS",
+   "verified": false
+  },
+  {
+   "area": "system_status",
+   "document": "7251 SDS Workflow",
+   "explorativeTests": [
+    2534066,
+    2534601,
+    2534758,
+    2568719
+   ],
+   "failClass": null,
+   "id": 2551270,
+   "notRun": [],
+   "reason": null,
+   "satisfies": [
+    2384071,
+    2384148,
+    1853225,
+    1853224
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": true,
+   "tests": [
+    {
+     "agentReview": null,
+     "elapsed": 2.85,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2551270 NotInitialized Is Notified After SetConfigurationResponse",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.System Status"
+    }
+   ],
+   "text": "If the SetConfigurationResponse message was published over the is/iw/tx topic, appSMM software automatically publishes the SystemStatusNotification message over the is/iw/tx topic, which notifies that system state changed from /"Configuring/" to /"NotInitialized/".",
+   "unreviewed": [
+    "SDS-2551270 NotInitialized Is Notified After SetConfigurationResponse"
+   ],
+   "userStories": [
+    2492146
+   ],
+   "verdict": "PASS",
+   "verified": false
+  },
+  {
+   "area": "system_status",
+   "document": "7251 SDS Event Handling",
+   "explorativeTests": [
+    2806610
+   ],
+   "failClass": null,
+   "id": 2752658,
+   "notRun": [],
+   "reason": null,
+   "satisfies": [
+    1939068
+   ],
+   "stale": [],
+   "state": "Open",
+   "suspect": false,
+   "tests": [
+    {
+     "agentReview": null,
+     "elapsed": 4.37,
+     "knownIssues": [],
+     "message": "",
+     "name": "SDS-2752658 NotInitialized Is Notified After appSMM Restart",
+     "outcome": "PASS",
+     "pending": true,
+     "status": "PASS",
+     "suite": "SMM mock.Pilot.System Status"
+    }
+   ],
+   "text": "After restart appSMM software publishes the SystemStatusNotification message over the is/iw/tx topic, to notify the Bridge that the current system state is /"NotInitialized/".",
+   "unreviewed": [
+    "SDS-2752658 NotInitialized Is Notified After appSMM Restart"
+   ],
+   "userStories": [
+    2741405
+   ],
+   "verdict": "PASS",
+   "verified": false
+  },
+  {
+   "area": "other",
+   "document": "7251-PDS SMM",
+   "explorativeTests": [],
+   "failClass": null,
+   "id": 2327588,
+   "notRun": [],
+   "reason": "PDS overview statement: no observable behaviour at the ICD",
+   "satisfies": [],
+   "stale": [],
+   "state": "Open",
+   "suspect": false,
+   "tests": [],
+   "text": "The SMM:/n- Responsible for association of sample ID to tube position and rack./n- Moves racks efficiently through the system./n- Dynamically routes racks through the system as FIFO, while respecting constraints provided per rack via the Bridge for priorities and destinations./n- Actively requests the route for each rack in the system, at each destination decision checkpoint and state change (based on the current SMM and track state, rack location and/or bridge's reroute notification)./nThe Bridge:/n- The single point of interface for all SMM to analyzer and IW communications./n- Upon request from the SMM, calculates the next destination analyzer for the rack. The algorithm to determine the route is Werfen’s responsibility and is independent of the track logic. The route (next analyzer) is calculated based on the analyzers' capabilities, analyzer's current schedule, analyzer's material expiration, configuration options on the IW and test orders coming from the IW./n- Upon request from the SMM, calculates the next analyzer for the rack. The algorithm to determine the route is Werfen’s responsibility and is independent of the track logic. Currently the route (next analyzer) is calculated based on a multitude of considerations e.g. analyzers' capabilities, analyzers' current schedule, analyzers' material expiration, configuration options, resource utilization and sample test orders./n- Assigns the priority and destination analyzer specific for each requested rack./nThe IW:/n- Assigns test orders to the samples (via LIS or manual entry)./n- Cancels test orders./n- Recalls a sample./n- Manages jobs for each test order./n- Creates Rerun/Reflex jobs when necessary./n- Handles the completion and release for each sample./n- Initiates system operating commands and settings, e.g. change of states, configuration, shutdown, etc./n- Collects and responds to system monitoring and error management information./n- Is a system module external to the SMM, and therefore not in the scope of this requirement document.",
+   "unreviewed": [],
+   "userStories": [],
+   "verdict": "NOT TESTABLE",
+   "verified": false
+  }
+ ],
+ "summary": {
+  "DEFERRED": 0,
+  "FAIL": 0,
+  "NOT RUN": 6,
+  "NOT TESTABLE": 1,
+  "PARTIAL": 4,
+  "PASS": 15,
+  "SKIP": 0,
+  "UNCOVERED": 0
+ },
+ "tier": "mock (framework self-test: NOT product evidence)",
+ "totals": {
+  "fail": 0,
+  "pass": 37,
+  "skip": 5
+ },
+ "userStories": [
+  {
+   "id": 1783271,
+   "specifications": [
+    2653086,
+    2653094
+   ],
+   "state": "Accepted",
+   "title": "Error Handling - Default - E-Stop",
+   "verdict": "NOT RUN"
+  },
+  {
+   "id": 2403408,
+   "specifications": [
+    2532404,
+    2528710,
+    2528703,
+    2525423
+   ],
+   "state": "Tested",
+   "title": "StartUp: Initialization Response",
+   "verdict": "NOT RUN"
+  },
+  {
+   "id": 2404051,
+   "specifications": [
+    2528708,
+    2525392
+   ],
+   "state": "Tested",
+   "title": "StartUp: System Status Response",
+   "verdict": "NOT RUN"
+  },
+  {
+   "id": 2404069,
+   "specifications": [
+    2955303,
+    2528698,
+    2528708,
+    2528706,
+    2525390,
+    2525388
+   ],
+   "state": "Tested",
+   "title": "StartUp: System Status Notification",
+   "verdict": "NOT RUN"
+  },
+  {
+   "id": 2404361,
+   "specifications": [
+    2428419,
+    2428417
+   ],
+   "state": "Accepted",
+   "title": "Shut Down the appSMM",
+   "verdict": "PARTIAL"
+  },
+  {
+   "id": 2419846,
+   "specifications": [
+    2532492,
+    2532504,
+    2532508,
+    2532510
+   ],
+   "state": "Accepted",
+   "title": "Recover the appSMM upon request",
+   "verdict": "NOT RUN"
+  },
+  {
+   "id": 2488626,
+   "specifications": [
+    2535547
+   ],
+   "state": "Accepted",
+   "title": "New routing: SystemStatusNotification during normal operation mode (appSMM)",
+   "verdict": "NOT RUN"
+  },
+  {
+   "id": 2492146,
+   "specifications": [
+    2551270,
+    2427781
+   ],
+   "state": "Accepted",
+   "title": "Configuration: SetConfigurationResponse (appSMM)",
+   "verdict": "PASS"
+  },
+  {
+   "id": 2741405,
+   "specifications": [
+    2752658
+   ],
+   "state": "Defined",
+   "title": "Error Handling - Unexpected software failures (appSMM)",
+   "verdict": "PASS"
+  },
+  {
+   "id": 2837620,
+   "specifications": [
+    2854281,
+    2854109
+   ],
+   "state": "Tested",
+   "title": "Error Handling - Disconnect from SMMBridge (appSMM)",
+   "verdict": "PASS"
+  }
+ ]
+}

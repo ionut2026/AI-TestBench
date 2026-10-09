@@ -1,0 +1,12 @@
+s.robot:8: SMM01 [SDS-1 Bad Timing] Sleep: wait for a message or state, or assert silence with Message Should Not Arrive
+s.robot:9: SMM03 [SDS-1 Bad Timing] Literal timing value 'timeout=20s': use a tier variable or ${SDS_<id>_LIMIT}
+s.robot:11: SMM02 [SDS-1 No Doc] No [Documentation]: quote the specification text
+s.robot:15: SMM02 [SDS-1 Unrelated Doc] [Documentation] does not quote the specification text (5+ consecutive words) or name the specification id
+s.robot:20: SMM05 [SDS-1 Restarts Through A User Keyword] Test restarts appSMM but is not tagged requires:restart
+s.robot:25: SMM04 [SDS-1 Tagged Without Use] Tagged needs:twin but never drives the hardware twin
+s.robot:25: SMM05 [SDS-1 Tagged Without Use] Tagged requires:restart but never restarts appSMM
+s.robot:30: SMM06 [SDS-1 Reads The Log Without Tag] Test reads the appSMM log files but is not tagged needs:applog
+s.robot:35: SMM07 [SDS-1 E-Stop Without Tag] Test triggers an E-Stop but is not tagged needs:hardware-action
+s.robot:40: SMM05 [SDS-1 Broker Restart Needs Its Own Tag] Tagged requires:restart but never restarts appSMM
+s.robot:40: SMM05 [SDS-1 Broker Restart Needs Its Own Tag] Test restarts the MQTT broker but is not tagged requires:broker-restart
+11 rule violation(s).
