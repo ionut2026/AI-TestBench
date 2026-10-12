@@ -1,37 +1,35 @@
-# Repository split
+# Repository layout
 
-The user approved GitHub creation, pushes and rename on 2026-10-12.
+The framework split is complete. Each repository has a separate responsibility and release workflow.
 
 | Repository | Visibility | Contents |
 |---|---|---|
-| [GeneralRobotFramework](https://github.com/ionut2026/GeneralRobotFramework) | Public (preserved) | Generic Python core, starter/demo, generic CI and agents |
-| [SMMAutomationFramework](https://github.com/ionut2026/SMMAutomationFramework) | Private | SMM service, keywords, suites, catalog, handbook, product CI and agents |
+| [GeneralRobotFramework](https://github.com/ionut2026/GeneralRobotFramework) | Public | Generic Python core, starter/demo, generic CI and agents |
+| [SMMAutomationFramework](https://github.com/ionut2026/SMMAutomationFramework) | Private | SMM service, product adapters and keywords, specifications, suites, handbook and product CI |
 | [WindchillMcpServer](https://github.com/ionut2026/WindchillMcpServer) | Private | Read-only RV&S MCP server and CLI |
 
-SMM and Windchill are filtered from main at `3292490`; their original path histories are retained.
-GRF keeps the original repository history, with a normal root-layout cutover commit (no force push).
-The existing local checkout stays `D:\projects\AI-TestBench`; its origin points to GeneralRobotFramework.
-The original history still includes SMM/MCP files because the source repository was already public.
+SMM and Windchill retain filtered Git histories. GeneralRobotFramework retains the original repository history
+and has the generic core at its root; prior revisions can still contain files that were split out.
 
-Current extraction/publication candidates live in the ignored
-`general-robot-framework\results\cutover` directory inside the active checkout. Fresh independent checkouts may
-be placed as siblings on D: once the user is ready; do not move the active checkout while sessions use it.
-The user's modified `exports\pra-tested.md` is preserved and is not part of cutover commits.
+## Development and integration
 
-For SMM development, install the GRF sibling editable via `scripts\setup.ps1 -GrfPath <GRF checkout>`.
-CI installs GRF from its approved `v0.1.0` Git tag. Keep `[framework] version` and the dependency tag synchronized.
-The public core needs no private read token. Existing SMM-TestBench access remains separately controlled.
+- Add reusable functionality to GeneralRobotFramework. Keep SMM-specific service, ICD/COP, product keywords,
+  catalog and suites in SMMAutomationFramework. Keep the Windchill API bridge and RV&S server tools in
+  WindchillMcpServer.
+- SMM uses the released GRF package and pins its approved Git tag. Keep the exact `[framework] version` in SMM's
+  `grf.toml` synchronized with that dependency.
+- The GRF checkout path is supplied by the active development environment. Do not assume a fixed local path or
+  modify another checkout when working in a session workspace.
+- Windchill MCP registration and connection settings are user-managed. Set the server entry to the selected
+  WindchillMcpServer checkout and configure its exports directory explicitly when setting up the integration;
+  preserve existing RVS connection settings.
 
-The Windchill server configuration remains user-managed. After choosing the final local server checkout,
-update the MCP entry's `args` to `<checkout>\src\server.js`, preserve existing RVS connection settings, and set
-`RVS_EXPORT_DIR` explicitly. No active MCP registration is changed automatically.
+## Safety and verification
 
-The old `smm-automation` and `windchill-mcp-server` folders remain locally as ignored compatibility copies,
-including the existing venv and live MCP entry point. They are no longer tracked in core; new product changes
-must be made in the independent repository checkout, not these compatibility copies.
-GRF's Windows/Linux remote CI is green. SMM's local cutover regression passes 173 Python tests, 50 service tests
-and 37 mock tests (5 skipped) using the published GRF Git tag, with no real-product operation.
-The independent MCP Java bridge builds successfully. Your existing live MCP registration is preserved.
+The GRF demo uses a synthetic counter and fixture and is not product evidence. Mock test reports have
+`productEvidence = false`. Generic CI verifies the core independently and runs a generated consumer; each product
+repository is responsible for its own CI. Historical split verification is summarized in
+[FRAMEWORK-SPLIT-CUTOVER.md](FRAMEWORK-SPLIT-CUTOVER.md); consult current repository CI for present results.
 
-An organization transfer is not performed: no destination organization was specified. Existing `ionut2026`
-ownership and CODEOWNERS are retained. Private-repository branch protection may depend on the account plan.
+No organization transfer or MCP registration change is implied by the repository split. Product and
+instrument-affecting test runs require authorization from the instrument owner.
