@@ -1,6 +1,6 @@
 # Windchill RV&S export
 
-Exported 2026-10-08 06:57 UTC. Items: 127.
+Exported 2026-10-08 09:39 UTC. Items: 127.
 Filters: {"types":["user story"],"states":["Tested"],"text":"PRA","textFields":["Summary"]}
 
 | # | ID | Summary | State |
