@@ -66,13 +66,13 @@ def prepare(source: Path, destination: Path) -> dict:
         raise ValueError("destination must be inside general-robot-framework/results in the source checkout")
     if destination.exists():
         raise ValueError(f"destination already exists; choose a new directory: {destination}")
-    # Check the tool before creating any output; installation is a separate explicit setup command.
-    subprocess.run([sys.executable, "-m", "git_filter_repo", "--version"], check=True, capture_output=True)
     sha = git(source, "rev-parse", "HEAD")
     original = tree(source)
     if not all(any(path.startswith(prefix) for path in original)
                for prefix in ("general-robot-framework/", "smm-automation/", "windchill-mcp-server/")):
         raise ValueError("source is not the pre-cutover monorepo; use an archived checkout at 3292490")
+    # Check the tool before creating any output; installation is a separate explicit setup command.
+    subprocess.run([sys.executable, "-m", "git_filter_repo", "--version"], check=True, capture_output=True)
     report: dict = {"source": str(source), "sourceCommit": sha, "repositories": {}}
     destination.mkdir(parents=True)
     for name, paths in LAYOUTS.items():
@@ -107,10 +107,11 @@ def main() -> int:
     source = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=source, help="archived pre-cutover monorepo checkout")
-    parser.add_argument("--destination", type=Path, default=source / "general-robot-framework/results/split")
+    parser.add_argument("--destination", type=Path)
     args = parser.parse_args()
     try:
-        result = prepare(args.source, args.destination)
+        destination = args.destination or args.source / "general-robot-framework/results/split"
+        result = prepare(args.source, destination)
     except (ValueError, RuntimeError, OSError, subprocess.CalledProcessError) as err:
         print(f"Split preparation failed: {err}", file=sys.stderr)
         if isinstance(err, subprocess.CalledProcessError) and err.stderr:

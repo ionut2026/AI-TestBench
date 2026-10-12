@@ -26,8 +26,9 @@ checkout editable; version equality is not a commit-identity check. After cutove
 Git commit/release tag and use read-only authentication for private repositories.
 
 Propose upgrades by PR: update both pins, install the proposed core, run all product gates and review the
-CHANGELOG. The automatic bump-PR workflow requires the final GitHub repository/owner and authentication policy;
-it is provided in SMMAutomationFramework as a manually dispatched release-bump workflow and never auto-merges.
+CHANGELOG. SMMAutomationFramework provides a manually dispatched release-bump PR workflow; it never auto-merges.
+Its repository permits Actions-created PRs, with read-only default workflow permissions and explicit write
+permissions scoped to that workflow.
 
 ## Review ownership
 
@@ -35,3 +36,9 @@ Core changes require a GRF maintainer review; product suites and human review le
 review. CODEOWNERS lists the current known maintainer; organization teams replace it only after their names
 and access are confirmed. CODEOWNERS alone does not enforce review: branch protection must be explicitly enabled.
 Agent review never constitutes human approval or permission to remove `review:pending`.
+
+GeneralRobotFramework main is protected with both Windows/Linux CI checks, one human approval and code-owner
+review; stale approvals are dismissed and force pushes/deletion are blocked. Administrators retain bypass
+for maintainer-authorized cutover/release operations. GitHub rejected private SMM branch protection because
+the current account plan requires an upgrade. Keep the repository private; human review there remains a
+process requirement, not an enforced GitHub gate. Organization transfer is deferred until a destination is named.
