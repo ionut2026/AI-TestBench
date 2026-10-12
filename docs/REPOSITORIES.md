@@ -26,5 +26,12 @@ The Windchill server configuration remains user-managed. After choosing the fina
 update the MCP entry's `args` to `<checkout>\src\server.js`, preserve existing RVS connection settings, and set
 `RVS_EXPORT_DIR` explicitly. No active MCP registration is changed automatically.
 
+The old `smm-automation` and `windchill-mcp-server` folders remain locally as ignored compatibility copies,
+including the existing venv and live MCP entry point. They are no longer tracked in core; new product changes
+must be made in the independent repository checkout, not these compatibility copies.
+GRF's Windows/Linux remote CI is green. SMM's local cutover regression passes 173 Python tests, 50 service tests
+and 37 mock tests (5 skipped) using the published GRF Git tag, with no real-product operation.
+The independent MCP Java bridge builds successfully. Your existing live MCP registration is preserved.
+
 An organization transfer is not performed: no destination organization was specified. Existing `ionut2026`
 ownership and CODEOWNERS are retained. Private-repository branch protection may depend on the account plan.

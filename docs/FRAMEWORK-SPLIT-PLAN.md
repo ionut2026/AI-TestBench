@@ -1,6 +1,13 @@
 # Plan: split into GeneralRobotFramework + SMMAutomationFramework (+ WindchillMcpServer)
 
-Status: approved, in progress. All work happens on D:.
+Status: GitHub cutover approved and implemented on 2026-10-12. All work happens on D:.
+
+The implementation is now at the core repository root. AI-TestBench was renamed to GeneralRobotFramework;
+private SMMAutomationFramework and WindchillMcpServer repositories retain their filtered histories.
+GRF `v0.1.0` is published and SMM pins it. See [current repository layout](REPOSITORIES.md).
+The phase notes below preserve the staged plan/history rather than current installation instructions.
+Organization transfer has no specified destination and is not performed. Offline/rig revalidation is a separate
+operator-authorized activity; the cutover regression uses the mock tier and does not touch the instrument.
 
 P0-P3 complete locally. Repository extraction and remote/governance actions remain pending.
 P2 is commit `6babd00`. Local gates: 30 standalone GRF tests, 173 SMM tests (goldens unchanged), SMM coverage above

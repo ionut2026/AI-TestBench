@@ -1,5 +1,11 @@
 # Framework split: local preparation and cutover gates
 
+**Cutover implemented:** the user approved GitHub creation, rename and pushes on 2026-10-12.
+See [REPOSITORIES.md](REPOSITORIES.md) for current locations. The instructions below document the pre-cutover
+procedure; `prepare_split.py` now accepts `--source` for an archived monorepo at `3292490` and refuses the new core.
+The active local folder remains AI-TestBench; old product/MCP files remain untracked and ignored locally to avoid
+breaking the user's existing environment or MCP registration. They are absent from the core's current Git tree.
+
 All implementation and commits remain in `D:\projects\AI-TestBench`, on main, until an explicit cutover decision.
 Do not move or delete the active checkout. Do not edit the external SMM TestBench.
 
