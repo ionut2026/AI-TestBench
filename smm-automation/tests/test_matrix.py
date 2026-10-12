@@ -1,12 +1,12 @@
 import pytest
+from grf.pipeline.drift import TestRef, check, collect_tests
+from grf.pipeline.ingest import load_catalog
+from grf.pipeline.lint import lint
+from grf.pipeline.report import build_report, render_html
 from robot.api import SkipExecution
 
 from smm_automation import FRAMEWORK_ROOT
 from smm_automation.pipeline import matrix
-from smm_automation.pipeline.drift import TestRef, check, collect_tests
-from smm_automation.pipeline.ingest import load_catalog
-from smm_automation.pipeline.lint import lint
-from smm_automation.pipeline.report import build_report, render_html
 from smm_automation.SMMTestbench import SMMTestbench, _open_part, _response_errors
 
 CATALOG = {"specifications": {
@@ -31,7 +31,7 @@ def test_repository_matrix_is_valid_and_generated_files_are_current():
     catalog = load_catalog(FRAMEWORK_ROOT / "catalog" / "pilot.json")
     tests = collect_tests([FRAMEWORK_ROOT / "robot" / "suites"])
     assert matrix.validate(model, catalog, tests) == []
-    from smm_automation.pipeline.drift import load_reviews
+    from grf.pipeline.drift import load_reviews
 
     outputs = matrix.generate(model, catalog, load_reviews(FRAMEWORK_ROOT / "catalog" / "reviews.toml"))
     paths = {"suite": FRAMEWORK_ROOT / "robot" / "suites" / "pilot" / "state_matrix.robot",

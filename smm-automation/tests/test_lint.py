@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from smm_automation.pipeline.lint import lint
+from grf.pipeline.lint import lint
 
 CATALOG = {"specifications": {"1": {"text": "If the bridge is lost, appSMM goes to the E-Stop state within 20 seconds."}}}
 
@@ -165,8 +165,9 @@ SDS-1 Broker Restart Tagged
     assert "requires:broker-restart" in by_item["SDS-1 Broker Restart Needs Its Own Tag"].message
 
 def test_pilot_suites_are_clean():
+    from grf.pipeline.ingest import load_catalog
+
     from smm_automation import FRAMEWORK_ROOT
-    from smm_automation.pipeline.ingest import load_catalog
 
     catalog = load_catalog(FRAMEWORK_ROOT / "catalog" / "pilot.json")
     assert lint([FRAMEWORK_ROOT / "robot" / "suites"], catalog) == []

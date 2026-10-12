@@ -86,6 +86,17 @@ install of the sibling GRF; CI pins a GRF release tag.
 
 ## Deviations from the plan (recorded as they happen)
 
+- **P2:**
+  - Fifteen generic modules now live in `general-robot-framework\src\grf`; old imports alias the same module
+    objects so existing callers and monkeypatches remain compatible. SMM-specific integration tests and goldens
+    stay in SMM; independent neutral tests cover GRF without importing SMM.
+  - `GrfLibrary` owns timing/operator/lifecycle helpers. Thin SMM keyword wrappers preserve original documentation
+    used by the golden briefs. The product service client stays SMM-specific.
+  - MCP is a GRF dependency. SMM coverage includes GRF to preserve its existing gate. Before GRF is published,
+    lock regeneration resolves a local wheel and excludes GRF itself from the third-party lock.
+  - Mock fault actions are configured, not hard-coded in core. The SSH compatibility module still runs;
+    its argparse program name is now `grf.rig_ssh`.
+
 - **P1:**
   - The seam is `smm_automation\project.py`, which reads `smm-automation\grf.toml` (`GRF_PROJECT` selects another
     project), and `plugin.py` (`ProductPlugin`). It still lives in `smm_automation`; P2 moves it to `grf`.

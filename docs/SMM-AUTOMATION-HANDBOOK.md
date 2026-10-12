@@ -559,6 +559,7 @@ cd D:\projects\AI-TestBench\smm-automation
 py -3.12 -m venv .venv
 .\.venv\Scripts\python -m pip install --upgrade pip
 .\.venv\Scripts\pip install -r requirements-dev.lock
+.\.venv\Scripts\pip install --no-deps -e ..\general-robot-framework
 .\.venv\Scripts\pip install --no-deps -e .
 .\.venv\Scripts\python -m pytest
 ```
@@ -567,9 +568,13 @@ py -3.12 -m venv .venv
 the list of commands.
 
 > `-e` means "editable": the venv uses the files in `src\` directly, so your changes to Python files take effect
-> without reinstalling. Re-run the two `pip install` lines only when `pyproject.toml` or `requirements-dev.lock` changes.
+> without reinstalling. Re-run the `pip install` lines when either package's `pyproject.toml` or `requirements-dev.lock` changes.
 > When you change a dependency in `pyproject.toml`, regenerate the lock and commit both:
-> `.\.venv\Scripts\pip-compile --extra dev --strip-extras --no-emit-index-url -o requirements-dev.lock pyproject.toml`.
+> GRF is currently a local editable dependency. Build its wheel, then resolve against it:
+> `.\.venv\Scripts\pip wheel --no-deps -w build\grf-wheel ..\general-robot-framework`, followed by
+> `.\.venv\Scripts\pip-compile --extra dev --strip-extras --no-emit-index-url --find-links build\grf-wheel --no-emit-find-links --unsafe-package general-robot-framework -o requirements-dev.lock pyproject.toml`.
+> The lock pins third-party packages; install the sibling GRF before SMM. Generic CLI, pipeline, rig control and
+> timing/operator library code now lives in `general-robot-framework\src\grf`; the old Python paths remain shims.
 
 ### 6.6 First run: the mock tier
 
@@ -2332,6 +2337,7 @@ findings section and in Section 16.
 
 - [ ] Node: `npm ci` everywhere, `npm run build`, `npm test`. Python: recreate the venv
   (`Remove-Item -Recurse .venv; py -3.12 -m venv .venv; .\.venv\Scripts\pip install -r requirements-dev.lock;
+  .\.venv\Scripts\pip install --no-deps -e ..\general-robot-framework;
   .\.venv\Scripts\pip install --no-deps -e .`), `pytest`. To move to newer Python packages, regenerate the lock with
   `pip-compile --upgrade` (Section 6.5) and run everything.
 - [ ] Mock and offline runs

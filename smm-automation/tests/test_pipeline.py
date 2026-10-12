@@ -1,4 +1,4 @@
-from smm_automation.pipeline.drift import (
+from grf.pipeline.drift import (
     TestRef,
     agent_reviews,
     check,
@@ -9,7 +9,7 @@ from smm_automation.pipeline.drift import (
     parse_hash_tags,
     problems,
 )
-from smm_automation.pipeline.ingest import (
+from grf.pipeline.ingest import (
     accept_changes,
     build_catalog,
     carry_baselines,
@@ -23,7 +23,7 @@ from smm_automation.pipeline.ingest import (
     scope_specifications,
     spec_hash,
 )
-from smm_automation.pipeline.report import build_report, classify, outcome, render_html
+from grf.pipeline.report import build_report, classify, outcome, render_html
 
 
 def test_spec_hash_ignores_whitespace_and_unicode_form():
@@ -257,7 +257,7 @@ def test_review_verdicts_and_agent_reviews():
 
 
 def test_review_command_appends_to_the_ledger(tmp_path, capsys):
-    from smm_automation import cli
+    from grf import cli
 
     suite = tmp_path / "s.robot"
     suite.write_text("""*** Test Cases ***

@@ -9,8 +9,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+from grf.plugin import Command, ProductPlugin
+
 from smm_automation import icd
-from smm_automation.plugin import Command, ProductPlugin
 
 
 class SmmPlugin(ProductPlugin):
@@ -42,9 +43,10 @@ class SmmPlugin(ProductPlugin):
         return {"matrix": self.cmd_matrix, "service": self.cmd_service}
 
     def cmd_matrix(self, args: argparse.Namespace) -> int:
-        from smm_automation.cli import _catalog_path, _suites
-        from smm_automation.pipeline.drift import collect_tests, load_reviews
-        from smm_automation.pipeline.ingest import load_catalog
+        from grf.cli import _catalog_path, _suites
+        from grf.pipeline.drift import collect_tests, load_reviews
+        from grf.pipeline.ingest import load_catalog
+
         from smm_automation.pipeline.matrix import MatrixError, generate, load_model, validate, write
 
         try:

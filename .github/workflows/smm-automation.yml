@@ -13,9 +13,9 @@ name: smm-automation
 
 on:
   push:
-    paths: ["smm-automation/**", ".github/workflows/smm-automation.yml"]
+    paths: ["smm-automation/**", "general-robot-framework/**", ".github/workflows/smm-automation.yml"]
   pull_request:
-    paths: ["smm-automation/**", ".github/workflows/smm-automation.yml"]
+    paths: ["smm-automation/**", "general-robot-framework/**", ".github/workflows/smm-automation.yml"]
   schedule:
     - cron: "0 2 * * 1-5"
   workflow_dispatch:
@@ -60,7 +60,14 @@ jobs:
           npm ci --prefix smm-testbench/hwsim
           npm ci --prefix smm-automation/service
           python -m pip install -r smm-automation/requirements-dev.lock
+          python -m pip install --no-deps -e general-robot-framework
           python -m pip install --no-deps -e smm-automation
+      - name: Generic framework checks (no product imports)
+        working-directory: general-robot-framework
+        run: |
+          ruff check src tests
+          mypy
+          python -m pytest -q
       - name: Service typecheck, lint, build and contract tests (with coverage floors)
         working-directory: smm-automation/service
         run: |
@@ -144,6 +151,7 @@ jobs:
           npm ci --prefix smm-automation/service
           npm run build --prefix smm-automation/service
           python -m pip install -r smm-automation/requirements-dev.lock
+          python -m pip install --no-deps -e general-robot-framework
           python -m pip install --no-deps -e smm-automation
       - name: Mutation testing (mock tier)
         working-directory: smm-automation
@@ -184,6 +192,7 @@ jobs:
           npm run build --prefix smm-automation/service
           python -m venv .venv
           .venv/Scripts/pip install -r smm-automation/requirements-dev.lock
+          .venv/Scripts/pip install --no-deps -e general-robot-framework
           .venv/Scripts/pip install --no-deps -e smm-automation
       - name: Doctor (service, pinned TestBench, appSMM/broker, rig control)
         # Fails the job early when the bundled TestBench is not the pinned commit or the tier cannot run.

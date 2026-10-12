@@ -1,7 +1,8 @@
 from pathlib import Path
 
+from grf.cli import _exit_code
+
 import robot
-from smm_automation.cli import _exit_code
 
 SUITE = """*** Test Cases ***
 Passes

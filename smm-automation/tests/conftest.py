@@ -1,6 +1,7 @@
 import pytest
+from grf import project
 
-from smm_automation import icd, project
+from smm_automation import icd
 
 # ICD messages the unit tests know about; the real list comes from the automation service (smm_automation.icd).
 FAKE_ICD = {

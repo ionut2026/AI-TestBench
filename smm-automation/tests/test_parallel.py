@@ -2,9 +2,9 @@ import importlib
 from pathlib import Path
 
 import pytest
+from grf import cli
 
 from smm_automation import SMMTestbench as lib_module
-from smm_automation import cli
 from smm_automation.client import ServiceError, claim_worker_slot, worker_broker_port, worker_url
 
 ROBOT_RUN = importlib.import_module("robot.run")  # the module, not robot.run()

@@ -1,36 +1,7 @@
-"""What a product adds to the generic framework: the hooks a project's plugin (``[project] plugin`` in ``grf.toml``)
-overrides. The defaults do nothing, so a project without a plugin gets the plain framework."""
+"""Moved to ``grf.plugin`` (General Robot Framework); this name stays for existing imports and settings."""
 
-from __future__ import annotations
+import sys
 
-import argparse
-from collections.abc import Callable
-from typing import TYPE_CHECKING
+from grf import plugin as _impl
 
-if TYPE_CHECKING:
-    from smm_automation.doctor import Doctor
-    from smm_automation.project import Project
-
-Command = Callable[[argparse.Namespace], int]
-
-
-class ProductPlugin:
-    def __init__(self, project: Project):
-        self.project = project
-
-    def known_messages(self) -> set[str] | None:
-        """Message names the catalog may mention (None: every match of ``[catalog] message_pattern`` counts)."""
-        return None
-
-    def brief_sections(self, spec: dict) -> list[str]:
-        """Extra Markdown lines of a generation brief, after the Explorative Tests (e.g. interface schemas)."""
-        return []
-
-    def doctor_class(self) -> type[Doctor]:
-        from smm_automation.doctor import Doctor
-
-        return Doctor
-
-    def add_commands(self, sub: argparse._SubParsersAction) -> dict[str, Command]:
-        """Adds product commands to the CLI; returns command name -> handler."""
-        return {}
+sys.modules[__name__] = _impl

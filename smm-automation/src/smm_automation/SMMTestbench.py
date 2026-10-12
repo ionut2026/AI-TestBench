@@ -29,16 +29,18 @@ import html
 import json
 import os
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from grf import library as _grf
+from grf.library import GrfLibrary
+from grf.rigcontrol import RigControlError
 from robot.api import logger
 from robot.api.deco import keyword, library
 from robot.libraries.BuiltIn import BuiltIn
 from robot.utils import timestr_to_secs
 
-from smm_automation import operator_prompt, sil
+from smm_automation import sil
 from smm_automation.client import (
     DEFAULT_URL,
     ServiceClient,
@@ -48,7 +50,6 @@ from smm_automation.client import (
     worker_broker_port,
     worker_url,
 )
-from smm_automation.rigcontrol import RigControl, RigControlError
 
 STATES = ("PowerOn", "NotInitialized", "Initializing", "Idle", "NormalOperation", "E-Stop", "Configuring", "Clearing")
 TRANSIENT_STATES = ("PowerOn", "Initializing", "Clearing", "Configuring")
@@ -79,31 +80,24 @@ OPERATOR_INSTRUCTIONS = {
 
 
 @library(scope="GLOBAL", auto_keywords=False)
-class SMMTestbench:
+class SMMTestbench(GrfLibrary):
     def __init__(self, url: str = DEFAULT_URL, autostart: bool = True):
+        super().__init__()
         self.client = ServiceClient(url)
         self.autostart = str(autostart).lower() not in ("false", "no", "0")
-        self._mark: int | None = None
         self._test_mark = 0
-        self._tier: str | None = None
         self._trace_mark = 0
         self._test_trace_mark = 0
-        self._test_started_ms = 0
         self._other_bridge_start = 0
-        self._in_test = False
         # Timeline ids already returned by a wait in this test, and the hidden state polls.
         self._consumed: set[int] = set()
         self._hidden: set[int] = set()
         # The Bridge's connection handshake and appSMM's answers to it: hidden from every test's waits and counts.
         self._handshake: set[int] = set()
         self._last_match: int | None = None
-        # (mark, label) of reconnections and restarts inside the test, shown in the test's timeline.
-        self._segments: list[tuple[int, str]] = []
         self._hardware_faults_set = False
         # Kinds of the running environment (from Start Test Environment): broker, appSmm, hardware.
         self._kinds: dict[str, str] = {}
-        self._rig_control: RigControl | None = None
-        self._rig_control_loaded = False
         self._log_fetches = 0
         self._log_fetched = False
         # (offset ms, uncertainty ms, when measured) of the rig's log clock against this PC's (rig control 'clock').
@@ -212,23 +206,6 @@ class SMMTestbench:
             status = self.client.environment()
             self._kinds = {p: str((status.get(p) or {}).get("kind")) for p in ("broker", "appSmm", "hardware")}
         return self._kinds[part]
-
-    def _control(self) -> RigControl | None:
-        if not self._rig_control_loaded:
-            self._rig_control = RigControl.from_env()
-            self._rig_control_loaded = True
-        return self._rig_control
-
-    def _require_control(self, subcommand: str, what: str) -> RigControl:
-        control = self._control()
-        if control is None:
-            raise AssertionError(f"Cannot {what} in tier {self._tier or '?'}: no rig control configured (SMM_RIG_CONTROL)")
-        try:
-            if not control.has(subcommand):
-                raise AssertionError(f"Cannot {what}: the rig control '{control}' has no {subcommand}")
-        except RigControlError as err:
-            raise AssertionError(f"Cannot {what}: {err}") from None
-        return control
 
     # ================================================================== Bridge session
 
@@ -678,22 +655,7 @@ class SMMTestbench:
         ``needs:operator``). Stimulus: waits after it look at what happened from the moment of the request. Fails
         if the operator reports a failure or does not confirm within ``timeout`` (default ``${OPERATOR_TIMEOUT}``).
         Mode from ``${OPERATOR}`` / ``SMM_OPERATOR``: console, dialog or none."""
-        self._set_marks()
-        return self._ask_operator(instruction, timeout)
-
-    def _operator_mode(self) -> str:
-        return operator_prompt.operator_mode(_robot_var("${OPERATOR}", "") or None)
-
-    def _ask_operator(self, instruction: str, timeout: str | None) -> str:
-        timeout = timeout or _robot_var("${OPERATOR_TIMEOUT}", "300s")
-        self._segment(f"Operator: {instruction}")
-        logger.info(f"Operator action: {instruction}")
-        try:
-            answer = operator_prompt.ask_operator(instruction, self._operator_mode(), timestr_to_secs(timeout))
-        except operator_prompt.OperatorUnavailable as err:
-            raise AssertionError(str(err)) from None
-        logger.info(f"Operator confirmed: {answer}")
-        return answer
+        return super().operator_action(instruction, timeout)
 
     @keyword
     def get_hardware_snapshot(self) -> dict:
@@ -793,29 +755,19 @@ class SMMTestbench:
     def get_time_between(self, earlier: Any, later: Any) -> float:
         """Seconds from ``earlier`` to ``later``: entries returned by Send ICD Message, Wait For Message
         (Entry), Wait For Message Sequence or Wait For Hardware Command, or times (ISO text or epoch ms)."""
-        seconds = (_epoch_ms(later) - _epoch_ms(earlier)) / 1000
-        logger.info(f"{_label(earlier)} -> {_label(later)}: {seconds:.3f} s")
-        return seconds
+        return super().get_time_between(earlier, later)
 
     @keyword
     def time_between_should_be_less_than(self, earlier: Any, later: Any, limit: str) -> float:
         """SDS timing requirements ("within 20 s"): fails unless ``later`` came less than ``limit`` after
         ``earlier``, and if it came before it. Returns the seconds."""
-        seconds = self.get_time_between(earlier, later)
-        if seconds < 0:
-            raise AssertionError(f"{_label(later)} came {-seconds:.3f} s before {_label(earlier)}")
-        if seconds >= timestr_to_secs(limit):
-            raise AssertionError(f"{_label(later)} came {seconds:.3f} s after {_label(earlier)}, limit {limit}")
-        return seconds
+        return super().time_between_should_be_less_than(earlier, later, limit)
 
     @keyword
     def time_between_should_be_at_least(self, earlier: Any, later: Any, minimum: str) -> float:
         """Fails if ``later`` came less than ``minimum`` after ``earlier`` (e.g. proves a delay fault took
         effect, or that appSMM waited as specified). Returns the seconds."""
-        seconds = self.get_time_between(earlier, later)
-        if seconds < timestr_to_secs(minimum):
-            raise AssertionError(f"{_label(later)} came {seconds:.3f} s after {_label(earlier)}, expected at least {minimum}")
-        return seconds
+        return super().time_between_should_be_at_least(earlier, later, minimum)
 
     # ================================================================== appSMM log files
 
@@ -989,9 +941,8 @@ class SMMTestbench:
     def begin_smm_test(self) -> None:
         """Test setup: remembers where the test starts on the timeline and the COP trace."""
 
-        self._test_started_ms = int(time.time() * 1000)
-        self._in_test = True
-        self._consumed, self._hidden, self._last_match, self._segments = set(), set(self._handshake), None, []
+        self._begin_test(int(time.time() * 1000))
+        self._consumed, self._hidden, self._last_match = set(), set(self._handshake), None
         try:
             self._test_mark, self._test_trace_mark = self.client.mark_all()
         except ServiceError:
@@ -1007,7 +958,7 @@ class SMMTestbench:
         """Test teardown: logs the test's timeline (and service logs when the test failed), and fails
         the test if the service dropped part of its evidence (timeline or COP trace cap reached) or another
         SMM Bridge published to appSMM during the test (shared rig broker)."""
-        self._in_test = False
+        self._end_test()
         if self._hardware_faults_set:
             self._hardware_faults_set = False
             try:
@@ -1069,10 +1020,6 @@ class SMMTestbench:
         """Marks the timeline and the COP trace: the next waits look only at what comes after."""
         self._mark, self._trace_mark = self.client.mark_all()
         return self._mark
-
-    def _segment(self, label: str) -> None:
-        if self._in_test and self._mark is not None:
-            self._segments.append((self._mark, label))
 
     def _consume(self, entries: list[dict]) -> None:
         ids = [int(e["id"]) for e in entries if "id" in e]
@@ -1173,21 +1120,14 @@ def _metadata(name: str, value: str) -> None:
         pass
 
 
-def _truthy(value: Any) -> bool:
-    return str(value).strip().lower() not in ("false", "no", "0", "off", "none", "")
-
-
-def _coerce(value: Any) -> Any:
-    """Robot passes strings: read numbers, booleans, null, lists and objects as JSON."""
-    if not isinstance(value, str):
-        return value
-    text = value.strip()
-    if text and (text[0] in '[{"-' or text[0].isdigit() or text in ("true", "false", "null")):
-        try:
-            return json.loads(text)
-        except ValueError:
-            return value
-    return value
+_truthy = _grf.truthy
+_coerce = _grf.coerce
+_as_obj = _grf.as_obj
+_canonical = _grf.canonical
+_epoch_ms = _grf.epoch_ms
+_label = _grf.label
+_put = _grf.put
+_match_from = _grf.match_from
 
 
 def _open_part(text: str) -> str:
@@ -1223,17 +1163,6 @@ def _response_errors(resp: dict | None, expected: str) -> list[str]:
         if got != want:
             errors.append(f"{resp['name']} {key} is {json.dumps(got)}, expected {json.dumps(want)}")
     return errors
-
-
-def _as_obj(value: Any) -> dict | None:
-    if value is None or value == "":
-        return None
-    if isinstance(value, dict):
-        return dict(value)
-    parsed = json.loads(value) if isinstance(value, str) else value
-    if not isinstance(parsed, dict):
-        raise ValueError(f"Expected a JSON object, got {value!r}")
-    return parsed
 
 
 def _fault_rule(rule: Any) -> dict:
@@ -1277,76 +1206,10 @@ def _match_logged(exchanged: list[dict], logged: list[sil.LoggedMessage],
     return matched, missing
 
 
-def _canonical(body: Any) -> str:
-    return json.dumps(body, sort_keys=True, separators=(",", ":"))
-
-
-def _epoch_ms(value: Any) -> float:
-    """Entry (``time`` field), epoch ms or ISO 8601 text -> epoch ms."""
-    if isinstance(value, dict):
-        if "time" not in value:
-            raise ValueError(f"Entry has no time: {value!r}")
-        value = value["time"]
-    if isinstance(value, (int, float)):
-        return float(value)
-    text = str(value).strip()
-    try:
-        return float(text)
-    except ValueError:
-        pass
-    return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp() * 1000
-
-
-def _label(value: Any) -> str:
-    if isinstance(value, dict):
-        return f"#{value.get('id', '?')} {value.get('name', '?')}"
-    return str(value)
-
-
-def _put(target: dict, dotted: str, value: Any) -> None:
-    keys = dotted.split(".")
-    for key in keys[:-1]:
-        target = target.setdefault(key, {})
-    target[keys[-1]] = value
-
-
-def _match_from(fields: dict) -> dict:
-    body: dict[str, Any] = {}
-    for key, value in fields.items():
-        _put(body, key, _coerce(value))
-    return body
-
-
 def _check_state(state: str) -> None:
     if state not in STATES:
         raise ValueError(f"Unknown system state '{state}' (ICD: {', '.join(STATES)})")
 
 
 def _timeline_html(entries: list[dict], title: str, segments: list[tuple[int, str]] | tuple = ()) -> str:
-    rows = []
-    pending = sorted(segments)
-
-    def separators(before_id: float) -> None:
-        while pending and pending[0][0] < before_id:
-            label = pending.pop(0)[1]
-            rows.append(f"<tr style='background:#e8eefc'><td colspan='6'><b>&#9472;&#9472; {html.escape(label)} &#9472;&#9472;</b></td></tr>")
-
-    for e in entries:
-        separators(float(e.get("id") or 0))
-        style = "" if e.get("valid") is not False else ' style="background:#fde2e2"'
-        arrow = "&rarr; appSMM" if e.get("way") == "tx" else "appSMM &rarr;"
-        body = html.escape(json.dumps(e.get("body"), ensure_ascii=False))
-        errors = f"<br><i>{html.escape('; '.join(e.get('errors') or []))}</i>" if e.get("valid") is False else ""
-        rows.append(
-            f"<tr{style}><td>{e.get('id')}</td><td>{html.escape(str(e.get('time', ''))[11:23])}</td><td>{arrow}</td>"
-            f"<td>{html.escape(str(e.get('topic')))}</td><td><b>{html.escape(str(e.get('name') or '?'))}</b></td>"
-            f"<td style='font-family:monospace'>{body}{errors}</td></tr>"
-        )
-    separators(float("inf"))
-    return (
-        f"<details open><summary><b>{html.escape(title)}</b> ({len(entries)} messages)</summary>"
-        "<table border='1' style='border-collapse:collapse;font-size:12px'>"
-        "<tr><th>#</th><th>Time (UTC)</th><th>Dir</th><th>Topic</th><th>Message</th><th>Body</th></tr>"
-        + "".join(rows)
-        + "</table></details>"
-    )
+    return _grf.timeline_html(entries, title, segments, peer="appSMM")

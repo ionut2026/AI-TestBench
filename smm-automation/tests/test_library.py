@@ -551,7 +551,7 @@ def test_emergency_stop_goes_to_the_twin_or_the_operator(smm, monkeypatch):
     with pytest.raises(AssertionError, match="needs an operator"):
         smm.trigger_emergency_stop()
     asked = []
-    monkeypatch.setattr("smm_automation.operator_prompt.ask_operator",
+    monkeypatch.setattr("grf.operator_prompt.ask_operator",
                         lambda instruction, mode, timeout_s: asked.append((mode, timeout_s)) or "done")
     _on_the_rig(smm, monkeypatch, operator="console")
     assert smm.hardware_action_is_possible() and not smm.hardware_action_is_possible("insertFrontIn")

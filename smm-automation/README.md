@@ -26,7 +26,7 @@ flowchart LR
 | Robot keyword library | `src/smm_automation/SMMTestbench.py` | `Connect As Bridge`, `Send ICD Message`, `Wait For Message`, `Wait For Message Sequence`, `Message Should Not Arrive`, `Wait For Hardware Command`, schema checks, timeline HTML in the log... Starts the service automatically. |
 | Robot resources / tiers | `robot/resources/smm.resource`, `robot/environments/<tier>.py` | Shared setup/teardown and the timeouts per tier. |
 | Suites | `robot/suites/<scope>/<area>.robot` | Tests tagged `SDS-<spec id>` and `spechash:<8 hex>`. Nothing else is linked in the tests: requirements, user stories and ETs come from RV&S at report time. |
-| Pipeline | `src/smm_automation/pipeline/` | `ingest` (RV&S -> catalog), `briefs` (generation input for the agent), `drift` (suites vs catalog), `report` (traceability). |
+| Generic base | `../general-robot-framework/src/grf/` | `ingest` (RV&S -> catalog), `briefs` (generation input for the agent), `drift` (suites vs catalog), `report` (traceability), CLI, capabilities, rig control and `GrfLibrary`. Old `smm_automation` module paths remain compatibility shims. SMM owns the service, keywords, ICD, state matrix and doctor checks. |
 | Catalog | `catalog/<scope>.scope.toml` -> `catalog/<scope>.json` | Which specifications are in scope, which are deferred / not testable (with the reason), area keywords. |
 
 ## Tiers
@@ -61,14 +61,27 @@ npm ci --prefix "D:\projects\SMM TestBench\simulator"; npm ci --prefix "D:\proje
 cd smm-automation\service; npm ci; npm run build; npm test
 
 # 3. Python (pinned versions from the lock file, then the package itself)
-cd ..; py -3.12 -m venv .venv; .\.venv\Scripts\pip install -r requirements-dev.lock; .\.venv\Scripts\pip install --no-deps -e .
+cd ..; py -3.12 -m venv .venv
+.\.venv\Scripts\pip install -r requirements-dev.lock
+.\.venv\Scripts\pip install --no-deps -e ..\general-robot-framework
+.\.venv\Scripts\pip install --no-deps -e .
 .\.venv\Scripts\python -m pytest
 ```
 
 Code quality checks (all in CI): `npm run lint`, `npm run typecheck`, `npm run coverage` in `service`;
 `ruff check src tests`, `mypy`, `python -m pytest --cov` (coverage floors in `pyproject.toml` and
 `service\vitest.config.ts`). After changing dependencies in `pyproject.toml`, re-create the lock:
-`.\.venv\Scripts\pip-compile --extra dev --strip-extras --no-emit-index-url -o requirements-dev.lock pyproject.toml`.
+While GRF is local (not yet published), use a wheel for dependency resolution without locking its local path:
+
+```powershell
+.\.venv\Scripts\pip wheel --no-deps -w build\grf-wheel ..\general-robot-framework
+.\.venv\Scripts\pip-compile --extra dev --strip-extras --no-emit-index-url --find-links build\grf-wheel --no-emit-find-links --unsafe-package general-robot-framework -o requirements-dev.lock pyproject.toml
+```
+
+Install GRF before SMM, as above; the lock pins third-party packages, not the editable GRF package. Generic changes
+also need `ruff check src tests`, `mypy` and `python -m pytest` in `..\general-robot-framework` (using this venv).
+Project settings live in `grf.toml`; SMM's `SmmPlugin` and `SmmDoctor` provide product extensions. The core never
+imports SMM.
 
 RV&S access (`ingest` only) uses the windchill MCP server of this repository (`windchill-mcp-server/src/server.js`,
 override with `WINDCHILL_MCP_SERVER`) with the `RVS_*` settings from the environment or `~/.copilot/mcp-config.json`.

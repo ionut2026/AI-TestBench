@@ -3,8 +3,7 @@ import sys
 from pathlib import Path
 
 import pytest
-
-from smm_automation.rigcontrol import RigControl, RigControlError, split_command
+from grf.rigcontrol import RigControl, RigControlError, split_command
 
 SCRIPT = r'''
 import pathlib, sys, time

@@ -2,12 +2,11 @@
 the generic defaults."""
 
 import pytest
-
-from smm_automation import project
-from smm_automation.capabilities import excluded_tags, tier_capabilities
-from smm_automation.doctor import Doctor, run_doctor
-from smm_automation.pipeline.drift import spec_ids
-from smm_automation.plugin import ProductPlugin
+from grf import project
+from grf.capabilities import excluded_tags, tier_capabilities
+from grf.doctor import Doctor, run_doctor
+from grf.pipeline.drift import spec_ids
+from grf.plugin import ProductPlugin
 
 OTHER = """
 [project]
@@ -93,7 +92,7 @@ def test_generic_doctor_without_plugin_checks(other):
 
 
 def test_plugin_must_be_a_product_plugin(tmp_path):
-    (tmp_path / "grf.toml").write_text('[project]\nplugin = "smm_automation.project:CONFIG_FILE"\n[tiers.a]\n', encoding="utf-8")
+    (tmp_path / "grf.toml").write_text('[project]\nplugin = "grf.project:CONFIG_FILE"\n[tiers.a]\n', encoding="utf-8")
     with pytest.raises(project.ProjectError, match="is not a ProductPlugin"):
         _ = project.Project.load(tmp_path).plugin
     (tmp_path / "grf.toml").write_text('[project]\nplugin = "no_such_module:X"\n', encoding="utf-8")

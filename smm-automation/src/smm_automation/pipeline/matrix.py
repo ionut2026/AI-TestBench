@@ -19,7 +19,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from smm_automation.pipeline.drift import PENDING_TAG, TestRef, counts_as_review
+from grf.pipeline.drift import PENDING_TAG, TestRef, counts_as_review
 
 NOSPEC_TAG = "nospec:state-matrix"
 EMPTY = "${EMPTY}"

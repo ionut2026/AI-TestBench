@@ -6,10 +6,10 @@ import os
 from pathlib import Path
 
 import pytest
+from grf.pipeline import briefs, drift, lint, report
+from grf.pipeline.ingest import load_catalog
 
 from smm_automation import FRAMEWORK_ROOT
-from smm_automation.pipeline import briefs, drift, lint, report
-from smm_automation.pipeline.ingest import load_catalog
 
 GOLDEN = Path(__file__).parent / "golden"
 UPDATE = os.environ.get("UPDATE_GOLDENS") == "1"

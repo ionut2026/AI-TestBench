@@ -3,9 +3,8 @@ import os
 import time
 
 import pytest
-
-from smm_automation import operator_prompt
-from smm_automation.operator_prompt import OperatorUnavailable, ask_operator, operator_mode
+from grf import operator_prompt
+from grf.operator_prompt import OperatorUnavailable, ask_operator, operator_mode
 
 
 class Console(io.StringIO):

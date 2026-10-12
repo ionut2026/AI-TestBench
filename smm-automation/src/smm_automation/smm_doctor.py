@@ -16,9 +16,10 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from smm_automation import project
+from grf import project
+from grf.doctor import Doctor, tcp_open
+
 from smm_automation.client import SERVICE_BUNDLE, ServiceClient, ServiceError, ensure_service
-from smm_automation.doctor import Doctor, tcp_open
 
 DEFAULT_APPSMM_EXE = Path(r"D:\smm\appSMM\appSMM.exe")
 DEFAULT_RIG_BROKER = "10.0.1.111:1883"

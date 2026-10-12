@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "general-robot-framework"
+version = "0.1.0"
+description = "General Robot Framework: the generic base of product test automation frameworks (project config, CLI, RV&S pipeline, rig control, Robot library base)"
+requires-python = ">=3.11"
+dependencies = [
+  "robotframework>=7.0",
+  "robotframework-pabot>=5",
+  "mcp>=1.2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "pytest-cov>=5",
+  "ruff>=0.6",
+  "mypy>=1.10",
+]
+
+[project.scripts]
+grf = "grf.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+grf = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["grf"]
+branch = true
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+# Bug-oriented rules; line length is not enforced (long HTML/f-strings), prefer <= 120.
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["grf"]
+mypy_path = "src"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true

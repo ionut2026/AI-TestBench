@@ -2,12 +2,9 @@ import json
 from pathlib import Path
 
 import pytest
-
-import robot
-from smm_automation import FRAMEWORK_ROOT
-from smm_automation.cli import main
-from smm_automation.pipeline.drift import TestRef, collect_tests
-from smm_automation.pipeline.mutation import (
+from grf.cli import main
+from grf.pipeline.drift import TestRef, collect_tests
+from grf.pipeline.mutation import (
     MutantError,
     load_mutants,
     mutate,
@@ -20,6 +17,9 @@ from smm_automation.pipeline.mutation import (
     verdict,
     write_report,
 )
+
+import robot
+from smm_automation import FRAMEWORK_ROOT
 
 MUTANTS = """
 [[mutant]]

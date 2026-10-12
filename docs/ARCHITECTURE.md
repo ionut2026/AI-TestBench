@@ -120,7 +120,12 @@ The first consumer of the MCP server. Full details are in `smm-automation/README
 users and maintainers (non-technical friendly: installation, running, writing tests, extending, internals,
 troubleshooting) is [`docs/SMM-AUTOMATION-HANDBOOK.md`](SMM-AUTOMATION-HANDBOOK.md).
 
-- **Ingest.** `smm-automation/src/smm_automation/pipeline/ingest.py` starts `windchill-mcp-server/src/server.js`
+- **Generic/product boundary.** `general-robot-framework/src/grf/` is the reusable Python package (`grf` CLI).
+  Each product has `grf.toml` for paths, tiers, capability tags and lint rules, plus optional `ProductPlugin` hooks.
+  SMM keeps its service, ICD, SIL reader, state matrix, product keywords and `SmmDoctor`. `SMMTestbench` subclasses
+  the generic `GrfLibrary` for timing, operator actions and per-test timeline bookkeeping. The old
+  `smm_automation` generic module paths are compatibility shims; the core has no SMM imports.
+- **Ingest.** `general-robot-framework/src/grf/pipeline/ingest.py` starts `windchill-mcp-server/src/server.js`
   as an MCP stdio client and uses `rvs_get_items` / `rvs_search_items`. It builds `catalog/<scope>.json` with:
   - the specifications in scope and a SHA-256 of each normalized text;
   - their requirements (`Satisfies`) and user stories (`Described In`);
@@ -157,6 +162,6 @@ troubleshooting) is [`docs/SMM-AUTOMATION-HANDBOOK.md`](SMM-AUTOMATION-HANDBOOK.
   logs for specifications about what appSMM logs.
 - **Capabilities and the rig.** Tests declare what they need with tags (`needs:twin`, `needs:hardware-action`,
   `needs:operator`, `needs:applog`, `requires:restart`, `requires:broker-restart`); `smm-auto run` excludes the tags
-  whose capability the tier lacks (`smm_automation/capabilities.py`). On the rig, restarts and log fetching go through
-  a site program named by `SMM_RIG_CONTROL` (`smm_automation/rigcontrol.py`) and E-Stop/other manual steps through an
+  whose capability the tier lacks (`grf/capabilities.py`). On the rig, restarts and log fetching go through
+  a site program named by `SMM_RIG_CONTROL` (`grf/rigcontrol.py`) and E-Stop/other manual steps through an
   operator (`--operator console|dialog`). `smm-auto doctor --tier <tier> [--deep]` checks an environment before a run.

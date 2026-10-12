@@ -1,6 +1,6 @@
-from smm_automation.pipeline import briefs
-from smm_automation.pipeline.drift import TestRef
-from smm_automation.pipeline.ingest import build_catalog
+from grf.pipeline import briefs
+from grf.pipeline.drift import TestRef
+from grf.pipeline.ingest import build_catalog
 
 
 def _catalog():

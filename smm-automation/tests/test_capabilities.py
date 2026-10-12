@@ -3,11 +3,10 @@ import sys
 from pathlib import Path
 
 import pytest
-
-from smm_automation import cli
-from smm_automation.capabilities import TAG_CAPABILITY, excluded_tags, tier_capabilities
-from smm_automation.doctor import format_checks, run_doctor
-from smm_automation.rigcontrol import RigControl, RigControlError
+from grf import cli
+from grf.capabilities import TAG_CAPABILITY, excluded_tags, tier_capabilities
+from grf.doctor import format_checks, run_doctor
+from grf.rigcontrol import RigControl, RigControlError
 
 ROBOT_RUN = importlib.import_module("robot.run")  # the module, not robot.run()
 

@@ -3,10 +3,10 @@ import sys
 from datetime import datetime
 
 import pytest
+from grf.rig_ssh import RigSsh, RigSshError, load_config, main
+from grf.rigcontrol import RigControl, RigControlError
 
 from smm_automation import FRAMEWORK_ROOT
-from smm_automation.rig_ssh import RigSsh, RigSshError, load_config, main
-from smm_automation.rigcontrol import RigControl, RigControlError
 
 CONFIG = {
     "host": "rig", "user": "op", "identity": "k",
@@ -199,7 +199,7 @@ def test_example_config_offers_nothing_until_filled_in():
 def test_works_as_the_rig_control_command(tmp_path):
     path = tmp_path / "rig.toml"
     path.write_text('host = "rig.invalid"\n', encoding="utf-8")
-    control = RigControl([sys.executable, "-m", "smm_automation.rig_ssh", "--config", str(path)], timeout_s=60)
+    control = RigControl([sys.executable, "-m", "grf.rig_ssh", "--config", str(path)], timeout_s=60)
     # ssh to the unresolvable host rig.invalid fails, so the rig gets no capability and doctor reports why
     with pytest.raises(RigControlError, match="capabilities' failed"):
         control.capabilities()

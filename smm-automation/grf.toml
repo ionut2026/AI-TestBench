@@ -71,6 +71,8 @@ message_pattern = '\b([A-Z][A-Za-z]+?(?:Request|Response|Notification))\b'
 
 [mutation]
 faults_env = "SMM_MOCK_FAULTS"
+# what service\src\mock\faults.ts understands
+fault_actions = ["drop", "duplicate", "delay", "reorder", "wrongTopic", "set", "unset", "invalid"]
 
 [texts]
 non_evidence = "<b>MOCK TIER:</b> these verdicts come from the scripted mock appSMM. They check the test framework and the tests themselves, they are <b>not evidence about the SMM product</b>."
