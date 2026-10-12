@@ -1,0 +1,17 @@
+name: general-robot-framework
+
+on:
+  push:
+    paths: ["general-robot-framework/**", ".github/workflows/grf-ci.yml", ".github/workflows/general-robot-framework.yml"]
+  pull_request:
+    paths: ["general-robot-framework/**", ".github/workflows/grf-ci.yml", ".github/workflows/general-robot-framework.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generic:
+    uses: ./.github/workflows/grf-ci.yml
+    with:
+      framework-path: general-robot-framework

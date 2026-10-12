@@ -2,6 +2,12 @@
 
 Status: approved, in progress. All work happens on D:.
 
+P0-P3 complete locally. Repository extraction and remote/governance actions remain pending.
+P2 is commit `6babd00`. Local gates: 30 standalone GRF tests, 173 SMM tests (goldens unchanged), SMM coverage above
+the 55% floor, clean ruff/mypy and SMM lint/drift/matrix gates. P2 mock: 37 passed / 5 skipped.
+The wheel-only demo also passes without SMM installed; its report correctly labels mock verdicts as non-evidence.
+CI workflows are wired and YAML-checked; their GitHub runs await a push.
+
 ## Goal
 
 | Repo | Content | Local checkout |
@@ -85,6 +91,17 @@ install of the sibling GRF; CI pins a GRF release tag.
 - AI-TestBench becomes GRF, and SMMAutomationFramework is a new repo.
 
 ## Deviations from the plan (recorded as they happen)
+
+- **P3:**
+  - The wheel ships the runnable starter, including generic author/reviewer agents; `grf init` can run without a
+    project and never overwrites a nonempty destination. `examples\demo` is generated from the same templates.
+  - The demo uses a synthetic counter and a fake RV&S fixture (no new SMM coverage). Its `demo-ingest` plugin
+    command uses the real catalog builder; an independent test also exercises normal `ingest` with a fake client.
+  - GRF owns the root `Tier` run metadata. Previously SMM wrote it from its library, which masked a generic bug:
+    a new product's child-suite metadata was not propagated, so its mock report was incorrectly treated as evidence.
+    The generic CLI now supplies the tier; SMM goldens are unchanged.
+  - `grf-ci.yml` is a reusable Windows/Linux core check workflow, including a wheel-only generated-product smoke
+    run. Product CI remains separate; remote release pins and private repository read tokens await P4.
 
 - **P2:**
   - Fifteen generic modules now live in `general-robot-framework\src\grf`; old imports alias the same module

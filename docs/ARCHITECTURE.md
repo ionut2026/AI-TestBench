@@ -125,6 +125,8 @@ troubleshooting) is [`docs/SMM-AUTOMATION-HANDBOOK.md`](SMM-AUTOMATION-HANDBOOK.
   SMM keeps its service, ICD, SIL reader, state matrix, product keywords and `SmmDoctor`. `SMMTestbench` subclasses
   the generic `GrfLibrary` for timing, operator actions and per-test timeline bookkeeping. The old
   `smm_automation` generic module paths are compatibility shims; the core has no SMM imports.
+  `grf init` creates a runnable product from templates shipped in the wheel; `general-robot-framework/examples/demo`
+  exercises the same boundary with a synthetic counter and fake RV&S data. Standalone CI tests GRF without SMM.
 - **Ingest.** `general-robot-framework/src/grf/pipeline/ingest.py` starts `windchill-mcp-server/src/server.js`
   as an MCP stdio client and uses `rvs_get_items` / `rvs_search_items`. It builds `catalog/<scope>.json` with:
   - the specifications in scope and a SHA-256 of each normalized text;

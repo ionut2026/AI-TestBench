@@ -246,7 +246,7 @@ def cmd_run(args, robot_args: list[str]) -> int:
         "exclude": excludes,
         "outputdir": str(out_dir),
         "name": f"{p.name} {args.tier}",
-        "metadata": [f"Run:{stamp}"],
+        "metadata": [f"Run:{stamp}", f"Tier:{args.tier}"],
     }
     argv: list[str] = []
     for key, values in options.items():
@@ -340,9 +340,16 @@ def cmd_doctor(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from grf.scaffold import add_parser, bootstrap, cmd_init
+
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "init":
+        return bootstrap(argv)
     try:
         p = project.current()
     except project.ProjectError as err:
+        if argv in (["--help"], ["-h"]):
+            return bootstrap(argv)
         print(f"grf: {err}", file=sys.stderr)
         return 2
     tiers = list(p.tiers)
@@ -353,6 +360,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--suites", action="append", help=f"suite file/directory, repeatable (default: {', '.join(p.raw_paths('suites'))})")
     parser.add_argument("--reviews", default=str(p.path("reviews")), help=f"review ledger (default: {reviews})")
     sub = parser.add_subparsers(dest="command", required=True)
+    add_parser(sub)
 
     sub.add_parser("ingest", allow_abbrev=False, help="read specifications, requirements, user stories and ETs from RV&S")
     cmd = sub.add_parser("briefs", allow_abbrev=False, help="write generation briefs for the test-authoring agent")
@@ -411,7 +419,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"unrecognized arguments: {' '.join(extra)}")
     if args.command == "run":
         return cmd_run(args, extra)
-    commands = {"ingest": cmd_ingest, "briefs": cmd_briefs, "drift": cmd_drift, "accept": cmd_accept, "migrate-hashes": cmd_migrate_hashes,
+    commands = {"init": cmd_init, "ingest": cmd_ingest, "briefs": cmd_briefs, "drift": cmd_drift, "accept": cmd_accept, "migrate-hashes": cmd_migrate_hashes,
                 "review": cmd_review, "lint": cmd_lint, "report": cmd_report, "mutate": cmd_mutate, "doctor": cmd_doctor}
     return {**commands, **plugin_commands}[args.command](args)
 

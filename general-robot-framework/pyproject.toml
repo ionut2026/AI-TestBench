@@ -28,7 +28,7 @@ grf = "grf.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-grf = ["py.typed"]
+grf = ["py.typed", "templates/*.tpl"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

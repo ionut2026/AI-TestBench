@@ -1,0 +1,23 @@
+[project]
+name = "Demo Counter"
+product = "Demo Counter"
+spec_prefix = "SPEC"
+plugin = "product_automation.plugin:DemoPlugin"
+
+[paths]
+scope = "catalog/demo.scope.toml"
+catalog_dir = "catalog"
+reviews = "catalog/reviews.toml"
+suites = ["robot/suites"]
+environments = "robot/environments"
+results = "results"
+briefs = "generated/briefs"
+brief_rules = "catalog/brief-rules.md"
+brief_target = "robot/suites/{scope}/{area}.robot"
+keyword_docs = ["product_automation.ProductLibrary"]
+mutants = "catalog/mutants.toml"
+
+[tiers.mock]
+capabilities = []
+evidence = false
+parallel = true

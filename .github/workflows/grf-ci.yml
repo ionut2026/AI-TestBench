@@ -1,0 +1,70 @@
+name: GRF reusable checks
+
+on:
+  workflow_call:
+    inputs:
+      framework-path:
+        description: GRF package directory in the checked-out caller repository
+        type: string
+        default: "."
+      python-version:
+        type: string
+        default: "3.12"
+
+permissions:
+  contents: read
+
+jobs:
+  generic:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: ${{ inputs.framework-path }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Install generic package without SMM
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          python -m pip install -e ".[dev]"
+      - name: Static checks and independent end-to-end tests
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          New-Item -ItemType Directory -Force results | Out-Null
+          ruff check src tests
+          mypy
+          python -m pytest -q --basetemp results/pytest --junitxml results/tests.xml
+      - name: Check wheel includes the starter templates
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          python -m pip wheel --no-deps -w dist .
+          python -m venv results/wheel-env
+          $python = if ($IsWindows) { "results/wheel-env/Scripts/python.exe" } else { "results/wheel-env/bin/python" }
+          $wheel = (Get-ChildItem dist -Filter general_robot_framework*.whl | Select-Object -First 1).FullName
+          & $python -m pip install $wheel
+          & $python -m grf init results/wheel-product --name "Wheel Demo"
+          & $python -m pip install --no-deps -e results/wheel-product
+          $env:GRF_PROJECT = (Resolve-Path results/wheel-product).Path
+          & $python -m grf demo-ingest
+          & $python -m grf briefs
+          & $python -m grf lint
+          & $python -m grf drift --strict
+          & $python -m grf run --tier mock --outdir results/wheel-mock
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: grf-${{ matrix.os }}-results
+          path: |
+            ${{ inputs.framework-path }}/results/tests.xml
+            ${{ inputs.framework-path }}/results/wheel-mock
+          retention-days: 7
