@@ -10,6 +10,32 @@ with git-filter-repo. It refuses existing destinations and destinations outside 
 `general-robot-framework\results`. It does not stash, reset, filter or change branches in the source.
 Uncommitted files (including the PRA export) are not copied.
 
+## Verified local state (2026-10-12)
+
+Source commit `10d6c8d` was extracted into `general-robot-framework\results\split-verified`.
+All three candidate source trees are clean and have no remotes; every HEAD blob matched the mapped source blob.
+Retained histories contain 7 GRF commits, 32 SMM commits and 4 MCP commits.
+
+| Gate at extracted root | Result |
+|---|---|
+| GRF, without SMM installed | 41 pytest tests; ruff/mypy clean |
+| SMM (goldens included) | 173 pytest tests; lint/drift/matrix/Robocop clean |
+| SMM TypeScript service | Build, typecheck and lint clean; 50 Vitest tests pass |
+| SMM mock, isolated service URL, 3 workers | 37 passed, 0 failed, 5 skipped; report has `productEvidence = false` |
+| MCP, offline only | Dependencies installed with scripts disabled; JavaScript syntax and CLI help pass |
+
+The new mock service and workers exited after the run. No real appSMM/instrument operation, live ingestion,
+MCP registration change or external TestBench modification was performed.
+MCP's Java bridge/live server verification, offline known-findings run and rig subset remain cutover gates.
+GitHub CI has not run because no push is authorized.
+
+The first fresh-checkout run exposed a test harness startup race: rig-control capability discovery shared the
+test's half-second deliberate timeout. Discovery now uses a normal startup budget, then only the restart-under-test
+uses the half-second limit. Production timeout behavior is unchanged.
+SMM pytest requires the service bundle, so build it before pytest (as setup/CI already do).
+
+Final publication must regenerate from final main, including subsequent documentation commits.
+
 Install git-filter-repo in a project-local tooling venv after a missing-tool error, then run:
 
 ```powershell

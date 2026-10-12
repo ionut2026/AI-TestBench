@@ -9,6 +9,9 @@ The wheel-only demo also passes without SMM installed; its report correctly labe
 CI workflows are wired and YAML-checked; their GitHub runs await a push.
 P4 local preparation and P6 local governance are implemented; see
 [`FRAMEWORK-SPLIT-CUTOVER.md`](FRAMEWORK-SPLIT-CUTOVER.md) for extraction and approval boundaries.
+Extraction candidates from `10d6c8d` are verified from their root layouts: GRF 41 pytest, SMM 173 pytest,
+service 50 Vitest, mock 37 passed / 5 skipped, and offline MCP syntax/help. Histories and exact HEAD contents
+are retained. P5 is only locally verified: final checkout/remote CI and real-product gates are still pending.
 
 ## Goal
 
