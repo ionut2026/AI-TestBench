@@ -10,6 +10,10 @@ rule_prefix = "SMM"                    # lint rules SMM01..
 env_prefix = "SMM"                     # SMM_RIG_CONTROL, SMM_OPERATOR, ...
 plugin = "smm_automation.product:SmmPlugin"
 
+[framework]
+# Exact approved core version; doctor rejects an unreviewed upgrade.
+version = "0.1.0"
+
 [paths]
 scope = "catalog/pilot.scope.toml"
 catalog_dir = "catalog"

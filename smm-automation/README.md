@@ -52,6 +52,11 @@ Findings) are KNOWN FAIL and keep the run green (`--fail-on any` counts them too
 
 ## Setup (Windows)
 
+For Python plus the service, `.\scripts\setup.ps1` installs the lock, editable GRF/SMM and builds the service
+without starting a product environment. It discovers GRF in this staged checkout or as a sibling
+`GeneralRobotFramework`; override with `-GrfPath <path>`. `-SkipService` is Python-only. Its scratch/cache
+directories are under this project's ignored `results\setup` (including `TMPDIR`, which Python checks first).
+
 ```powershell
 # 1. SMM TestBench at the pinned commit (default D:\projects\SMM TestBench, else set SMM_TESTBENCH_DIR)
 git -C "D:\projects\SMM TestBench" checkout <commit from testbench.lock.json>
@@ -81,7 +86,9 @@ While GRF is local (not yet published), use a wheel for dependency resolution wi
 Install GRF before SMM, as above; the lock pins third-party packages, not the editable GRF package. Generic changes
 also need `ruff check src tests`, `mypy` and `python -m pytest` in `..\general-robot-framework` (using this venv).
 Project settings live in `grf.toml`; SMM's `SmmPlugin` and `SmmDoctor` provide product extensions. The core never
-imports SMM.
+imports SMM. SMM pins GRF `0.1.0` exactly in both `pyproject.toml` and `[framework] version`; doctor rejects a
+different installed package version. A Git release/commit pin will be wired after the repository owner and
+publication are approved; the exact package version alone is not a source-commit guarantee.
 
 RV&S access (`ingest` only) uses the windchill MCP server of this repository (`windchill-mcp-server/src/server.js`,
 override with `WINDCHILL_MCP_SERVER`) with the `RVS_*` settings from the environment or `~/.copilot/mcp-config.json`.

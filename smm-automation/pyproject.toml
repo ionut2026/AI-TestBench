@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "SMM test automation: RV&S ingestion, Robot Framework keywords over the SMM automation service, traceability reports"
 requires-python = ">=3.11"
 dependencies = [
-  "general-robot-framework>=0.1",
+  "general-robot-framework==0.1.0",
   "robotframework>=7.0",
   "robotframework-pabot>=5",
   "requests>=2.31",

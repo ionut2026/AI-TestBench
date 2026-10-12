@@ -13,6 +13,7 @@ import sys
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 from grf import project
@@ -55,6 +56,7 @@ class Doctor:
         self.checks.append(Check(name, status, detail))
 
     def run(self) -> list[Check]:
+        self._framework_version()
         self.before()
         rig_control = self._rig_control() if self.project.tier(self.tier).rig_control else None
         self._operator()
@@ -73,6 +75,25 @@ class Doctor:
         self.add("deep check", "SKIP", f"the {self.project.name} project has no deep check")
 
     # ------------------------------------------------------------------ generic checks
+
+    def _framework_version(self) -> None:
+        settings = self.project.data.get("framework", {})
+        if not isinstance(settings, dict):
+            self.add("GRF version", "FAIL", "[framework] must be a table")
+            return
+        expected = settings.get("version")
+        if expected is None:
+            return
+        if not isinstance(expected, str) or not expected.strip():
+            self.add("GRF version", "FAIL", "[framework] version must be a nonempty exact package version")
+            return
+        try:
+            installed = version("general-robot-framework")
+        except PackageNotFoundError:
+            self.add("GRF version", "FAIL", "general-robot-framework is not installed")
+            return
+        self.add("GRF version", "OK" if installed == expected else "FAIL",
+                 f"installed {installed}, project requires {expected}")
 
     def _rig_control(self) -> RigControl | None:
         p = self.project

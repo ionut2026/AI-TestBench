@@ -3,3 +3,6 @@
 /smm-automation/robot/suites/        @ionut2026
 /smm-automation/catalog/reviews.toml @ionut2026
 /smm-automation/catalog/*.scope.toml @ionut2026
+/general-robot-framework/           @ionut2026
+/.github/workflows/grf-ci.yml        @ionut2026
+/.github/workflows/general-robot-framework.yml @ionut2026

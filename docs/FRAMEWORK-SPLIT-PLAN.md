@@ -7,6 +7,8 @@ P2 is commit `6babd00`. Local gates: 30 standalone GRF tests, 173 SMM tests (gol
 the 55% floor, clean ruff/mypy and SMM lint/drift/matrix gates. P2 mock: 37 passed / 5 skipped.
 The wheel-only demo also passes without SMM installed; its report correctly labels mock verdicts as non-evidence.
 CI workflows are wired and YAML-checked; their GitHub runs await a push.
+P4 local preparation and P6 local governance are implemented; see
+[`FRAMEWORK-SPLIT-CUTOVER.md`](FRAMEWORK-SPLIT-CUTOVER.md) for extraction and approval boundaries.
 
 ## Goal
 
@@ -91,6 +93,16 @@ install of the sibling GRF; CI pins a GRF release tag.
 - AI-TestBench becomes GRF, and SMMAutomationFramework is a new repo.
 
 ## Deviations from the plan (recorded as they happen)
+
+- **P4/P6 local preparation:**
+  - Fresh-clone history filtering is scripted and verifies every extracted HEAD blob against the source tree.
+    Candidates stay inside `general-robot-framework\results\split`, rather than `D:\projects\_split`, to honor
+    the instruction that all ongoing work remains inside the active D: checkout. They have no remotes.
+  - A sibling-aware SMM setup script installs the lock and editable packages, with scratch/cache paths on D:.
+    Remote dependency URLs/read tokens and final workflow/doc path rewiring await the owner/publication approval.
+  - Local SemVer/CHANGELOG/CONTRIBUTING policy and known-maintainer CODEOWNERS are present. Products pin GRF
+    `0.1.0` exactly and doctor checks installed-version equality; this is not a Git commit provenance check.
+    Release tags, bump-PR automation, organization transfer and branch protection remain gated.
 
 - **P3:**
   - The wheel ships the runnable starter, including generic author/reviewer agents; `grf init` can run without a

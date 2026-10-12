@@ -62,6 +62,11 @@ with `grf review` and removes the pending tag in the same reviewed change. Do no
 Mock tiers have `evidence = false`: a green run proves the framework wiring, not product conformance.
 Real-product and hardware runs require the owner's authorization.
 
+`[framework] version = "0.1.0"` pins the approved installed distribution; doctor reports FAIL on mismatch or
+missing installation. Keep it synchronized with the exact dependency in the product's `pyproject.toml`.
+See CONTRIBUTING and CHANGELOG for compatibility/release policy. Version equality is not a Git commit identity
+check: private Git release pins and bump-PR automation await the confirmed repository/owner at cutover.
+
 Capabilities exclude only tests that explicitly declare the missing capability. Products should configure
 lint tag rules so an undeclared need is an error. Never hide a product failure with conditional assertions.
 `grf doctor --deep` is a product hook and may affect hardware; generic doctor alone does not certify a product connection.
