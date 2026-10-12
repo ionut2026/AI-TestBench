@@ -108,9 +108,11 @@ def test_fetch_log(script, tmp_path):
 
 
 def test_timeout_and_missing_program(script):
-    control = RigControl([sys.executable, str(script)], timeout_s=0.5)
+    # Capability discovery must not depend on a cold Python startup taking less than half a second.
+    control = RigControl([sys.executable, str(script)], timeout_s=30)
     script.with_name("caps.txt").write_text("restart-broker")
     control.capabilities()
+    control.timeout_s = 0.5
     with pytest.raises(RigControlError, match="did not finish within 0.5 s"):
         control.restart("broker", 5000)
     with pytest.raises(RigControlError, match="not found"):

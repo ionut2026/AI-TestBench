@@ -15,3 +15,4 @@ htmlcov/
 service/tsconfig.testbench.json
 .service/
 .pabotsuitenames
+build/

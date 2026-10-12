@@ -80,7 +80,7 @@ While GRF is local (not yet published), use a wheel for dependency resolution wi
 
 ```powershell
 .\.venv\Scripts\pip wheel --no-deps -w build\grf-wheel ..\general-robot-framework
-.\.venv\Scripts\pip-compile --extra dev --strip-extras --no-emit-index-url --find-links build\grf-wheel --no-emit-find-links --unsafe-package general-robot-framework -o requirements-dev.lock pyproject.toml
+.\.venv\Scripts\pip-compile --extra dev --strip-extras --no-emit-index-url --find-links build\grf-wheel --no-emit-find-links --unsafe-package general-robot-framework --unsafe-package pip --unsafe-package setuptools -o requirements-dev.lock pyproject.toml
 ```
 
 Install GRF before SMM, as above; the lock pins third-party packages, not the editable GRF package. Generic changes

@@ -14,6 +14,7 @@ LAYOUTS = {
         ".github/workflows/grf-ci.yml": ".github/workflows/grf-ci.yml",
         ".github/workflows/general-robot-framework.yml": ".github/workflows/general-robot-framework.yml",
         "docs/FRAMEWORK-SPLIT-PLAN.md": "docs/FRAMEWORK-SPLIT-PLAN.md",
+        "docs/FRAMEWORK-SPLIT-CUTOVER.md": "docs/FRAMEWORK-SPLIT-CUTOVER.md",
         ".github/CODEOWNERS": ".github/CODEOWNERS",
     },
     "SMMAutomationFramework": {

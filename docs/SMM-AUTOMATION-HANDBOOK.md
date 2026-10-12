@@ -572,7 +572,7 @@ the list of commands.
 > When you change a dependency in `pyproject.toml`, regenerate the lock and commit both:
 > GRF is currently a local editable dependency. Build its wheel, then resolve against it:
 > `.\.venv\Scripts\pip wheel --no-deps -w build\grf-wheel ..\general-robot-framework`, followed by
-> `.\.venv\Scripts\pip-compile --extra dev --strip-extras --no-emit-index-url --find-links build\grf-wheel --no-emit-find-links --unsafe-package general-robot-framework -o requirements-dev.lock pyproject.toml`.
+> `.\.venv\Scripts\pip-compile --extra dev --strip-extras --no-emit-index-url --find-links build\grf-wheel --no-emit-find-links --unsafe-package general-robot-framework --unsafe-package pip --unsafe-package setuptools -o requirements-dev.lock pyproject.toml`.
 > The lock pins third-party packages; install the sibling GRF before SMM. Generic CLI, pipeline, rig control and
 > timing/operator library code now lives in `general-robot-framework\src\grf`; the old Python paths remain shims.
 
