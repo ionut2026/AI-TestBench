@@ -1,5 +1,10 @@
 # Product configuration
 
+New to GRF? Complete the [beginner walkthrough](GETTING-STARTED.md) first.
+`grf.toml` is the product's settings file: it tells GRF where the tests live and which environment to use.
+TOML is a text configuration format; `[project]` and `[paths]` are named sections, not executable code.
+This guide is the detailed reference once you have run the demo.
+
 ## Discovery and paths
 
 `grf init` and top-level help work without a product. Other commands load `grf.toml` in this order:

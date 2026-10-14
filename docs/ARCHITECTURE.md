@@ -1,5 +1,10 @@
 # Architecture
 
+For definitions of a suite, keyword, library and tier, start with [Getting started](GETTING-STARTED.md).
+This guide describes how the pieces fit together rather than teaching test syntax.
+For a plain-language example of how GRF contributes to SMM and future products, see
+[the beginner guide's purpose and reuse explanation](GETTING-STARTED.md#why-does-this-framework-exist).
+
 GRF is a product-independent Python core, not a product adapter or MCP server. See
 [Repositories](REPOSITORIES.md) for the independent integrations and [Configuration](CONFIGURATION.md)
 for how a product selects them.
@@ -12,11 +17,13 @@ GeneralRobotFramework\
     copilot-instructions.md     working and documentation-maintenance rules
     workflows\                  core/reusable Windows and Linux CI
   docs\
+    GETTING-STARTED.md           beginner concepts and first-run walkthrough
     ARCHITECTURE.md              structure and ownership (this guide)
     CONFIGURATION.md            product configuration and external integration
     TESTING.md                  authoring, evidence and validation
     REPOSITORIES.md              repository boundaries and data ownership
   examples\demo\                synthetic product generated from the starter
+  scripts\setup.ps1             explicit Windows dependency/environment setup after cloning
   src\grf\
     project.py                  TOML configuration and project discovery
     plugin.py                   product extension contract
@@ -93,6 +100,11 @@ flowchart LR
 `ProductPlugin` offers only actual extension points: known message names, extra brief sections, a doctor class
 and additional CLI commands. Static names, paths, tiers, capabilities and lint rules belong in `grf.toml`.
 Core never imports a named product package. Products may import `grf`; the reverse dependency is forbidden.
+
+Agent templates are starter files, not runtime orchestration: GRF generates briefs but does not automatically
+draft product tests or invoke a chain of author/reviewer agents. Existing product agent instructions are
+maintained in the product repository and are not overwritten by a GRF package upgrade. See
+[the beginner explanation of agents](GETTING-STARTED.md#why-are-agent-files-in-both-repositories).
 
 The CLI owns tier metadata and result paths, and forwards the selected project root to Robot workers.
 The report joins suite-qualified test identities so identical test names in different child suites do not

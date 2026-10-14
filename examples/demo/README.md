@@ -4,6 +4,19 @@ This is a **mock demo**, not product evidence. It has no SMM dependency and does
 Replace the example counter library and fake RV&S fixture with your product adapter and real specifications.
 The display name, paths, tiers, tag prefix and plugin are configured in `grf.toml`.
 
+## If you are new to Robot Framework
+
+Robot Framework executes readable steps in `.robot` files. A **keyword** is a named action or check.
+Here, `Request Increment` changes a Python counter and `Counter Should Be` checks its value.
+A **suite** groups tests; this starter's test is in `robot\suites\demo\counter.robot`.
+Its **setup**, `Reset Counter`, runs before each test so the starting value is always zero.
+
+GRF adds links between tests and specifications (written statements of required behavior), plus review
+checks and reports. A **mock tier** runs against the fake counter, not an instrument.
+The library implementing the keywords is `src\product_automation\ProductLibrary.py`.
+Robot separates keyword names and arguments with two or more spaces: `Counter Should Be    1`.
+For the complete beginner walkthrough, see `docs\GETTING-STARTED.md` in your GRF checkout.
+
 ## Run the demo (Windows)
 
 From this directory, with GRF already installed in a virtual environment:
@@ -17,6 +30,16 @@ grf drift --strict
 grf doctor --tier mock
 grf run --tier mock --outdir results\mock
 ```
+
+`demo-ingest` creates the catalog (local specification data) from the fake fixture. `briefs` creates a
+per-specification explanation for test authors. `lint` checks writing rules; expect `0 rule violation(s)`.
+`drift --strict` checks whether the tests still match the specification data; expect `0 problem(s)`.
+`doctor` checks prerequisites, and `run` executes the test; expect one pass and zero failures.
+The commands use this directory as their working directory. Set `GRF_PROJECT` explicitly if another product
+is selected in your terminal. For later runs, choose a new output directory, such as `results\mock-2`.
+
+Open `results\mock\report.html` for Robot's summary and `log.html` for individual steps.
+Open `traceability.html` to see GRF's specification links and review status.
 
 Activate your venv or use its full Python and `grf` paths. The demo builds a catalog from `fixtures\rvs.json`
 using GRF's real catalog builder; `demo-ingest` is a product plugin command, not a core fixture switch.

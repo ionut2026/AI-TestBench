@@ -1,8 +1,13 @@
 # Testing and evidence
 
+Start with [Getting started](GETTING-STARTED.md) for a small test explained line by line and a first mock run.
+Here, **evidence** means results that can support a claim about an actual product, not just the demo.
+A **gate** is a check that must succeed before you proceed; this guide describes GRF's detailed testing rules.
+
 ## Authoring contract
 
-Specifications are the oracle, not mock behavior. Each traced Robot test carries `<SPEC_PREFIX>-<id>` and
+Specifications are the oracle (the source of the expected behavior), not mock behavior.
+Each traced Robot test carries `<SPEC_PREFIX>-<id>` and
 `spechash:<hash>`; multi-specification tests use `spechash:<id>:<hash>` for each specification.
 Hashes anchor normalized specification text. Requirements, stories and explorative-test links come from the
 catalog, not duplicated tags. Use `nospec:<kind>` only for explicitly documented behavior without a specification.
@@ -51,6 +56,10 @@ gate failures return 1. Robot execution error codes above 250 are preserved.
 
 ## Mutation testing
 
+Mutation testing deliberately introduces a defect into a mock to see whether your tests notice it.
+That deliberate defect is a **mutant**; if an assertion catches it, the mutant is called **killed**.
+This is an advanced check of test effectiveness, not a prerequisite for your first demo run.
+
 Mutation runs require a configured non-evidence tier and product-supported fault rules.
 A clean baseline must execute tests and return success; skipped or failed baseline tests abort the analysis.
 Setup/teardown failures, missing output, timeouts and abnormal process exits are infrastructure errors, not killed mutants.
@@ -65,6 +74,9 @@ This prevents an empty analysis from looking successful.
 
 From `D:\projects\GeneralRobotFramework`, after installing `.[dev]`:
 
+On Windows, `.\scripts\setup.ps1` automates that installation; see the
+[beginner installation guide](GETTING-STARTED.md#4-prepare-a-safe-practice-project).
+
 ```powershell
 .\.venv\Scripts\ruff check src tests
 .\.venv\Scripts\mypy
@@ -76,6 +88,8 @@ Pytest uses synthetic fixtures and temporary products; no product service, live 
 Regression tests cover configuration, capabilities, version pins, timing boundaries, human reviews, reporting,
 mutation orchestration, nested resources, MCP response contracts and a generated product's real CLI/Robot flow,
 including parallel pabot execution and mock non-evidence metadata.
+Windows setup tests check explicit errors for missing Python, an unsupported interpreter, missing checkout
+metadata, incomplete environments and failed installation commands without downloading dependencies or running products.
 
 ## Wheel-only smoke run
 

@@ -1,19 +1,41 @@
 # General Robot Framework (GRF)
 
+**New to Robot Framework? Start with the [beginner walkthrough](docs/GETTING-STARTED.md).**
+It explains the terminology, reads a small test line by line, and guides you through a safe first run.
+
 Reusable infrastructure for specification-traced Robot Framework system tests. GRF owns configuration, CLI,
 catalog ingestion, briefs, drift/lint gates, review ledgers, reports, capability selection and timing/rig helpers.
 Each product owns its adapters, keywords, specifications, environments and suites.
+
+In plain language: Robot Framework runs readable test steps; GRF adds project organization and links those
+tests to the written behavior they should check. Product code supplies the steps that interact with your product.
+Product projects such as SMMAutomationFramework install GRF as a dependency rather than copying its code.
+See [why GRF exists and how products use it](docs/GETTING-STARTED.md#why-does-this-framework-exist)
+for an explained SMM example and the workflow for future products.
 
 This checkout is **`D:\projects\GeneralRobotFramework`**, used directly on **`main`**. Core does not contain SMM
 product code or a Windchill MCP server. The included counter demo is synthetic and does not contact either.
 
 ## Install and try the mock starter (Windows)
 
-From this checkout:
+First clone the repository (Git and Python 3.11 or newer must already be installed):
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python -m pip install -e ".[dev]"
+git clone https://github.com/ionut2026/GeneralRobotFramework.git D:\projects\GeneralRobotFramework
+Set-Location D:\projects\GeneralRobotFramework
+.\scripts\setup.ps1
+```
+
+For an existing checkout, skip `git clone` and run the setup command from its root.
+**Cloning downloads source files; setup installs the packages needed to use them.**
+Git does not execute this script automatically. Setup creates or reuses `.venv`, installs GRF,
+Robot Framework and development tools, checks dependency compatibility, and prints the installed versions
+and Robot's location. It does not install Python itself, select a product, or start tests or services.
+See [installation details and troubleshooting](docs/GETTING-STARTED.md#4-prepare-a-safe-practice-project).
+
+After setup, create and run the mock starter from this checkout:
+
+```powershell
 .\.venv\Scripts\python -m grf init results\my-product --name "My Product" --spec-prefix SPEC
 .\.venv\Scripts\python -m pip install --no-deps -e results\my-product
 $env:GRF_PROJECT = (Resolve-Path results\my-product).Path
@@ -37,6 +59,7 @@ example. Both examples use the real catalog/report pipeline with fake input; nei
 
 | Guide | Canonical topic |
 |---|---|
+| [Getting started](docs/GETTING-STARTED.md) | Beginner concepts, explained demo commands, test syntax and reading results |
 | [Architecture](docs/ARCHITECTURE.md) | Repository/product trees, component ownership and execution flow |
 | [Configuration](docs/CONFIGURATION.md) | Project discovery, paths, tiers, plugins and external Windchill integration |
 | [Testing](docs/TESTING.md) | Traceability, human review, evidence rules, mutation testing and validation commands |

@@ -1,5 +1,9 @@
 # Repository boundaries and local data
 
+Separate repositories do not mean separate copies of the framework. Product projects install GRF as a
+dependency and keep their own configuration and test code. See
+[how products use GRF](GETTING-STARTED.md#how-do-separate-repositories-use-one-framework) for a beginner explanation.
+
 | Repository | Owns |
 |---|---|
 | [GeneralRobotFramework](https://github.com/ionut2026/GeneralRobotFramework) | Generic Python core, packaged starter, synthetic demo and generic CI |

@@ -5,6 +5,17 @@ a patch release. Release tags are `vMAJOR.MINOR.PATCH`. Tags and publication are
 
 ## Unreleased
 
+- Added `scripts\setup.ps1` for explicit one-command Windows setup after cloning: creates/reuses `.venv`,
+  installs GRF/Robot Framework/development dependencies and checks compatibility and imports. Installation
+  scratch/cache paths stay under `results`; no product operations or system-policy changes are performed.
+  Explained why cloning alone does not install dependencies and documented manual installation alternatives.
+- Added a beginner walkthrough covering Robot/GRF/product responsibilities, vocabulary, a line-by-line test,
+  explained Windows setup/run commands, report reading and safe failure practice. Linked reference guides
+  and added introductory explanations to the starter. Copilot instructions now require beginner-friendly explanations.
+- Explained GRF's purpose and contribution to consumer projects, with an illustrative SMM workflow,
+  new-product adoption steps, dependency/version concepts and explicit limits of framework automation.
+- Clarified why shared infrastructure is optional, its reuse/maintenance tradeoffs, the distinction between
+  generated briefs and product tests, and the separate ownership/update paths of generic and product agent instructions.
 - Consolidated current documentation into architecture, configuration, testing and repository-boundary guides.
   Removed completed split plans and one-time migration scripts; historical versions remain in Git history.
 - Required updates to all relevant documentation after every code change. Removed the irrelevant legacy

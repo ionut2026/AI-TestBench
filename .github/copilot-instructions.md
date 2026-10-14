@@ -4,6 +4,11 @@
   repository). Never read from or write to the C: drive for task output, scratch files,
   or any other work related to this project.
 - Use this direct checkout on `main`; do not create a worktree or switch branches unless the user requests it.
+- The user is new to Robot Framework. Explain concepts in plain language, define unfamiliar terms on first
+  use, and use small examples from this project's demo. Explain what a command does, why it is needed, where
+  to run it, and what successful output looks like. Distinguish Robot Framework, GRF and product code.
+  Introduce advanced topics gradually; do not assume prior test-automation knowledge or claim mock passes
+  prove a real product works. Keep beginner explanations in `docs\GETTING-STARTED.md` and link from reference guides.
 - After every code change, update all relevant documentation in the same change: README, applicable guides
   in `docs`, CONTRIBUTING, user-visible CHANGELOG entries, and affected starter templates/example documentation.
   Document behavior, configuration, CLI, API and workflow changes, including migration notes for compatibility

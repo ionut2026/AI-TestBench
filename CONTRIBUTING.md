@@ -13,9 +13,16 @@ Update all relevant documentation in the same change: README, applicable `docs` 
 user-visible CHANGELOG entries, and affected starter/example documentation. Check unchanged guides for accuracy.
 Document behavioral, CLI, configuration and API changes and explain compatibility migrations.
 Keep topics in their [canonical guides](README.md#documentation) and use links instead of repeating instructions.
+Write for readers new to Robot Framework: define unfamiliar terms, explain the purpose and working directory
+of commands, and describe expected results. Keep beginner walkthroughs in
+[Getting started](docs/GETTING-STARTED.md), with detailed policies in their reference guides.
 When starter templates change, update `examples\demo` in the same change; the parity test enforces this.
 
 ## Gates
+
+For a Windows source checkout, `.\scripts\setup.ps1` installs the development environment before these gates.
+It is an explicit post-clone action, not a Git hook; see [installation](docs/GETTING-STARTED.md#4-prepare-a-safe-practice-project).
+Keep setup scoped to this checkout, preserve existing environments, and report install/check failures.
 
 Run the [core validation and wheel-only demo](docs/TESTING.md#core-validation-windows).
 Changes consumed by a product also need that repository's authorized regression gates.
