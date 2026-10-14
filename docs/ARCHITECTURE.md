@@ -1,56 +1,99 @@
-# GeneralRobotFramework architecture
+# Architecture
 
-GeneralRobotFramework is the reusable Python core. Product adapters live in separate repositories:
-[SMMAutomationFramework](https://github.com/ionut2026/SMMAutomationFramework) and
-[WindchillMcpServer](https://github.com/ionut2026/WindchillMcpServer).
-See [repository layout and cutover notes](REPOSITORIES.md).
+GRF is a product-independent Python core, not a product adapter or MCP server. See
+[Repositories](REPOSITORIES.md) for the independent integrations and [Configuration](CONFIGURATION.md)
+for how a product selects them.
+
+## Core repository tree
+
+```text
+GeneralRobotFramework\
+  .github\
+    copilot-instructions.md     working and documentation-maintenance rules
+    workflows\                  core/reusable Windows and Linux CI
+  docs\
+    ARCHITECTURE.md              structure and ownership (this guide)
+    CONFIGURATION.md            product configuration and external integration
+    TESTING.md                  authoring, evidence and validation
+    REPOSITORIES.md              repository boundaries and data ownership
+  examples\demo\                synthetic product generated from the starter
+  src\grf\
+    project.py                  TOML configuration and project discovery
+    plugin.py                   product extension contract
+    cli.py, __main__.py          command orchestration and exit codes
+    scaffold.py, templates\      packaged product starter
+    capabilities.py, doctor.py  selection and readiness checks
+    library.py                  timing, operator and lifecycle helpers
+    operator_prompt.py          console/dialog operator interaction
+    rigcontrol.py, rig_ssh.py    site protocol and configurable SSH implementation
+    pipeline\
+      rvs.py, ingest.py          external read-only client, catalog and hashes
+      briefs.py                 specification authoring inputs
+      drift.py, lint.py          traceability, review and Robot authoring gates
+      mutation.py               mock fault orchestration
+      report.py                 Robot result/catalog join and evidence reporting
+  tests\                        isolated unit, contract and starter end-to-end tests
+  README.md                     entry point, installation and guide index
+  CONTRIBUTING.md, CHANGELOG.md  change/release policy and history
+  pyproject.toml                package, dependency and tooling definitions
+  results\, .venv\, dist\        ignored local validation/build artifacts
+```
+
+Completed monorepo-split scripts and contradictory migration plans have been removed from the active tree.
+Their historical versions remain in Git history. Product services, catalogs and suites must not return to core.
+
+## Product tree
+
+The starter keeps each responsibility separate:
+
+```text
+MyProductAutomation\
+  grf.toml                         core configuration and plugin reference
+  pyproject.toml                    adapter package and approved GRF dependency
+  src\product_automation\
+    ProductLibrary.py              observable product keywords
+    plugin.py                      product commands and catalog/doctor extensions
+  catalog\
+    demo.scope.toml                 specification selection and area assignment
+    brief-rules.md                  product authoring constraints
+    reviews.toml                   human/agent review ledger
+    mutants.toml                   product-supported mock faults
+  fixtures\rvs.json                 synthetic input; remove for real ingestion
+  robot\
+    environments\mock.py            tier variables
+    suites\demo\counter.robot       specification-traced tests
+  .github\agents\                   author and independent reviewer instructions
+  generated\briefs\, results\       generated inputs and execution output
+```
+
+Larger products may add `robot\resources` for shared user keywords and group suites by specification area,
+not by execution tier. Declare capabilities on the tests; the selected tier determines which can run.
+Python setup/teardown, connection ownership, state reset, observable assertions and fault implementations
+belong to the product library. A product must isolate its own resources before declaring a tier parallel-safe.
+
+## Data and execution flow
 
 ```mermaid
 flowchart LR
-  MCP[External read-only Windchill MCP] --> ING[grf ingest]
-  ING --> CAT[Product catalog]
-  CAT --> BR[grf briefs]
-  BR --> AG[Product author/reviewer agents]
-  AG --> ROB[Product Robot suites]
-  CAT --> DR[grf drift and lint]
-  ROB --> DR
-  ROB --> RUN[grf run]
+  MCP[External read-only Windchill MCP] --> ING[Catalog ingestion]
+  ING --> CAT[Product catalog and hashes]
+  CAT --> BR[Generation briefs]
+  BR --> AUTHOR[Author and independent reviewer]
+  AUTHOR --> ROB[Product Robot suites]
+  CAT --> GATE[Drift and lint gates]
+  ROB --> GATE
+  GATE --> HUMAN[Current-hash human approval]
+  HUMAN --> RUN[Capability-selected execution]
   RUN --> LIB[Product library extends GrfLibrary]
-  LIB --> PRODUCT[Mock / actual product / instrument]
+  LIB --> PRODUCT[Mock or owner-authorized product]
   RUN --> REP[Traceability report]
   CAT --> REP
 ```
 
-## Boundaries
+`ProductPlugin` offers only actual extension points: known message names, extra brief sections, a doctor class
+and additional CLI commands. Static names, paths, tiers, capabilities and lint rules belong in `grf.toml`.
+Core never imports a named product package. Products may import `grf`; the reverse dependency is forbidden.
 
-| Component | Responsibility |
-|---|---|
-| `src/grf/project.py` | Names, paths, tiers, rules and plugin loading from each product's `grf.toml` |
-| `src/grf/plugin.py` | Optional product hooks: known messages, brief sections, doctor and extra commands |
-| `src/grf/pipeline/` | Catalog ingestion/hashing, briefs, drift, lint, human review ledger, reports, mutation orchestration |
-| `src/grf/library.py` | Timing assertions, operator actions, rig helper and per-test mark/segment bookkeeping |
-| `src/grf/capabilities.py` | Capability-based exclusion of explicitly tagged tests |
-| `src/grf/doctor.py` | Approved core version, generic prerequisites and optional product-specific checks |
-| `src/grf/rigcontrol.py`, `rig_ssh.py` | Site-program protocol and configurable SSH restart/log/clock operations |
-| `src/grf/scaffold.py`, `templates/` | Packaged `grf init` product starter and generic author/reviewer agents |
-| `examples/demo/` | Synthetic counter adapter and fake RV&S fixture: second consumer, not product evidence |
-
-Core never imports SMM. SMM owns its TypeScript HTTP service, ICD/COP knowledge, SmartInspect parser, state model,
-Robot keywords and suites. The external MCP repository owns Windchill's Java API bridge and tool implementation.
-Core talks to MCP over stdio; use `WINDCHILL_MCP_SERVER` to select its installed entry point.
-
-## Trust and compatibility
-
-Specification text is the oracle. Tests carry specification IDs and normalized-text hashes; requirements, stories
-and explorative-test links come from the catalog. Drift detects changed text, state, links and missing coverage.
-Agent review is informational; only current-hash human approval permits removal of `review:pending`.
-Mock tiers are `evidence = false` and their reports are not product evidence.
-The CLI supplies root-tier metadata so child suites cannot accidentally make mock verdicts appear real.
-
-GRF follows SemVer. Products pin an approved Git tag and exact `[framework] version`; doctor rejects an installed
-version mismatch. Local editable installs support coordinated development but are not source-provenance guarantees.
-Compatibility shims in the SMM repository preserve historical `smm_automation` generic imports.
-
-CI checks the generic package independently on Windows/Linux, then installs its wheel and runs a generated product.
-Product CI checks SMM separately using the pinned core release. Offline/rig execution remains an owner-authorized
-product activity, not a generic CI prerequisite. No RV&S publishing or long-term result/history subsystem is added.
+The CLI owns tier metadata and result paths, and forwards the selected project root to Robot workers.
+The report joins suite-qualified test identities so identical test names in different child suites do not
+hide missing execution. See [Testing](TESTING.md) for the distinction between PASS and VERIFIED.

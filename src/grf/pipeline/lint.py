@@ -1,24 +1,19 @@
 """Test rules the Robot suites must follow (``<cli> lint``, also part of ``<cli> drift --strict``).
 
-Rule codes carry the project's ``rule_prefix`` (SMM for the SMM project); rules 04.. are the project's tag rules
-(``[[lint.tag_rules]]`` in ``grf.toml``). For SMM:
+Rule codes carry the project's ``rule_prefix``; rules 04.. are configured tag rules
+(``[[lint.tag_rules]]`` in ``grf.toml``).
 
-* SMM01 no-sleep        - no ``Sleep``: wait for a message/state, or assert silence (`Message Should Not Arrive`)
-* SMM02 documentation   - every test has ``[Documentation]`` that quotes its specification (at least
+* GRF01 no-sleep        - no ``Sleep``: wait for observable state, or explicitly assert silence
+* GRF02 documentation   - every test has ``[Documentation]`` that quotes its specification (at least
   ``QUOTE_WORDS`` consecutive words of the spec text) or, for a variant, names the specification id. A test
   without a specification (``nospec:<kind>`` tag, e.g. robustness) needs documentation saying what it expects
-* SMM03 literal-timeout - ``timeout=`` / ``duration=`` and the `Wait Until Keyword Succeeds` timeout are
+* GRF03 literal-timeout - ``timeout=`` / ``duration=`` and the `Wait Until Keyword Succeeds` timeout are
   variables (tier timeouts from ``robot/environments``, spec limits as ``${<SPEC_PREFIX>_<id>_LIMIT}``), not literals
-* SMM04 twin-tag        - a test that drives the hardware twin unconditionally (not inside ``IF``) is tagged
-  ``needs:twin``; a ``needs:twin`` test uses at least one hardware keyword
-* SMM05 restart-tag     - same for restarting appSMM and `requires:restart`, and for restarting the MQTT broker
-  and `requires:broker-restart` (the rig may be able to do one and not the other)
-* SMM06 applog-tag      - same for reading appSMM's log files and `needs:applog` (only where the log is reachable)
-* SMM07 action-tag      - an E-Stop (`Trigger Emergency Stop`, which the operator can do on the rig) is tagged
-  ``needs:hardware-action`` (or ``needs:twin``); an `Operator Action` is tagged ``needs:operator``
+* Configured rules require capability tags for unconditional keyword use, and require corresponding keyword
+  use when a test carries the tag.
 
 Keyword use is followed through user keywords (resource files and the suite's own keywords), so
-``Restart appSMM And Wait Until NotInitialized`` counts as a restart. A templated test (``Test Template`` /
+resource wrappers count as use of their underlying keywords. A templated test (``Test Template`` /
 ``[Template]``) uses its template keyword.
 """
 
@@ -207,10 +202,14 @@ def lint(paths: list[Path], catalog: dict | None = None) -> list[Violation]:
     for f in files:
         models[f.resolve()] = get_resource_model(str(f)) if f.suffix == ".resource" else get_model(str(f))
     shared = KeywordIndex()
-    for f, m in list(models.items()):
+    pending = list(models)
+    while pending:
+        f = pending.pop()
+        m = models[f]
         for r in _resources(m, f):
             if r not in models:
                 models[r] = get_resource_model(str(r))
+                pending.append(r)
     for f, m in models.items():
         if f.suffix == ".resource":
             shared.add(m)

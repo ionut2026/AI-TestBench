@@ -15,6 +15,7 @@ erase evidence, or skip the sole meaningful assertion conditionally.
 
 Write into the brief's target suite. Preserve its specification tag and exact spechash; use per-ID hashes when
 one test covers multiple specifications. Add review:pending. Documentation must cite the specification.
+Update all relevant product documentation after code or suite changes; keep setup/teardown and isolation explicit.
 Run grf lint and grf drift --strict, then the mock. Real-product/hardware runs require the owner's authorization.
 Report which specification clauses are covered, limitations, run outcomes and any suspected product defect.
 An independent agent review is information only; never record human approval or remove review:pending.

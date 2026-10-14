@@ -35,6 +35,25 @@ def test_time_and_nested_fields():
     }
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf"), "nan", "inf", True, False])
+def test_nonfinite_times_cannot_pass_timing_assertions(value):
+    with pytest.raises(ValueError, match="finite"):
+        GrfLibrary().time_between_should_be_less_than(0, value, "1s")
+    with pytest.raises(ValueError, match="finite"):
+        GrfLibrary().time_between_should_be_at_least(0, value, "1s")
+
+
+def test_robot_helpers_only_suppress_missing_execution_context(monkeypatch):
+    def broken():
+        raise RuntimeError("unexpected keyword failure")
+
+    monkeypatch.setattr(library, "BuiltIn", broken)
+    with pytest.raises(RuntimeError, match="unexpected"):
+        library.robot_var("${VALUE}", "default")
+    with pytest.raises(RuntimeError, match="unexpected"):
+        library.metadata("Tier", "sim")
+
+
 def test_lifecycle_and_operator_marks(widget, monkeypatch):
     lib = GrfLibrary()
     lib._begin_test(1000)

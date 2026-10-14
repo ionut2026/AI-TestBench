@@ -13,12 +13,13 @@ from __future__ import annotations
 
 import html
 import json
+import math
 from datetime import datetime
 from typing import Any
 
 from robot.api import logger
 from robot.api.deco import keyword, library
-from robot.libraries.BuiltIn import BuiltIn
+from robot.libraries.BuiltIn import BuiltIn, RobotNotRunningError
 from robot.utils import timestr_to_secs
 
 from grf import operator_prompt, project
@@ -138,7 +139,7 @@ def robot_var(name: str, default: str) -> str:
     """A Robot variable, or ``default`` (also outside a Robot run)."""
     try:
         return BuiltIn().get_variable_value(name, default)
-    except Exception:  # noqa: BLE001 - outside a Robot run
+    except RobotNotRunningError:
         return default
 
 
@@ -146,7 +147,7 @@ def metadata(name: str, value: str) -> None:
     """Top-level suite metadata (ignored outside a Robot run)."""
     try:
         BuiltIn().set_suite_metadata(name, value, top=True)
-    except Exception:  # noqa: BLE001
+    except RobotNotRunningError:
         pass
 
 
@@ -190,13 +191,16 @@ def epoch_ms(value: Any) -> float:
             raise ValueError(f"Entry has no time: {value!r}")
         value = value["time"]
     if isinstance(value, (int, float)):
-        return float(value)
-    text = str(value).strip()
-    try:
-        return float(text)
-    except ValueError:
-        pass
-    return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp() * 1000
+        number = float(value)
+    else:
+        text = str(value).strip()
+        try:
+            number = float(text)
+        except ValueError:
+            number = datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp() * 1000
+    if isinstance(value, bool) or not math.isfinite(number):
+        raise ValueError(f"Time must be a finite epoch value or ISO timestamp, got {value!r}")
+    return number
 
 
 def label(value: Any) -> str:

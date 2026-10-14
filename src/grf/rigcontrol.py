@@ -24,6 +24,7 @@ from ``fetch-log``.
 from __future__ import annotations
 
 import json
+import math
 import os
 import shlex
 import subprocess
@@ -72,10 +73,13 @@ def split_command(command: str) -> list[str]:
             parts = json.loads(text)
         except ValueError as err:
             raise RigControlError(f"{env_name()} is not a valid JSON list: {err}") from err
-        if not isinstance(parts, list) or not parts or not all(isinstance(p, str) for p in parts):
+        if not isinstance(parts, list) or not parts or not all(isinstance(p, str) and p.strip() for p in parts):
             raise RigControlError(f"{env_name()} must be a non-empty JSON list of strings")
         return parts
-    parts = shlex.split(text, posix=False)
+    try:
+        parts = shlex.split(text, posix=False)
+    except ValueError as err:
+        raise RigControlError(f"{env_name()} has invalid command quoting: {err}") from err
     return [p[1:-1] if len(p) >= 2 and p[0] == p[-1] and p[0] in "\"'" else p for p in parts]
 
 
@@ -83,6 +87,8 @@ class RigControl:
     def __init__(self, command: list[str], timeout_s: float = 300.0):
         if not command:
             raise RigControlError(f"{env_name()} is empty")
+        if not math.isfinite(timeout_s) or timeout_s <= 0:
+            raise RigControlError(f"{timeout_env_name()} must be a finite positive number of seconds")
         self.command = command
         self.timeout_s = timeout_s
         self._capabilities: frozenset[str] | None = None

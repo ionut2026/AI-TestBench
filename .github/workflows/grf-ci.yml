@@ -60,6 +60,7 @@ jobs:
           & $python -m grf lint
           & $python -m grf drift --strict
           & $python -m grf run --tier mock --outdir results/wheel-mock
+          & $python -c "import importlib.util, json; from pathlib import Path; assert importlib.util.find_spec('mcp') is None; r = json.loads(Path('results/wheel-mock/traceability.json').read_text(encoding='utf-8')); assert r['totals'] == {'pass': 1, 'fail': 0, 'skip': 0}; assert r['productEvidence'] is False and r['coverage']['verified'] == 0"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

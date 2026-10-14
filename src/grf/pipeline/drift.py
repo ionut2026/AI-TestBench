@@ -71,6 +71,7 @@ class TestRef:
     specs: list[int] = field(default_factory=list)
     hash: str | None = None
     hashes: dict[int, str] = field(default_factory=dict)
+    suite_path: str | None = None
 
     def hash_for(self, spec_id: int) -> str | None:
         return hash_for(spec_id, self.specs, self.hash, self.hashes)
@@ -122,14 +123,16 @@ def check_reviews(tests: list[TestRef], reviews: list[dict]) -> list[dict]:
     for t in tests:
         if t.pending:
             continue
-        mine = [r for r in reviews if r.get("test") == t.name and is_human(r)]
-        if any(counts_as_review(r, t.review_key) for r in mine):
+        mine = [r for r in reviews if r.get("test") == t.name and is_human(r)
+                and (r.get("suite") == t.suite if r.get("suite") else sum(x.name == t.name for x in tests) == 1)]
+        matching = [r for r in mine if str(r.get("spechash", "")).lower() == t.review_key]
+        if matching and counts_as_review(matching[-1], t.review_key):
             continue
         if not mine:
             agents = [r for r in reviews if r.get("test") == t.name]
             reason = "only agent review(s) recorded, no human review" if agents else "no human review recorded"
-        elif any(str(r.get("spechash", "")).lower() == t.review_key for r in mine):
-            reason = f"the human review is {verdict_of(mine[-1])}, not approved"
+        elif matching:
+            reason = f"the human review is {verdict_of(matching[-1])}, not approved"
         else:
             reason = f"recorded review is for spechash {mine[-1].get('spechash')}, test has {t.review_key}"
         out.append({"test": t.name, "suite": t.suite, "reason": reason})
@@ -164,7 +167,7 @@ def record_review(path: Path, test: TestRef, reviewer: str, verdict: str, date: 
     if not test.review_key:
         raise ValueError(f"test '{test.name}' has no spechash: tag; nothing to review it against")
     dt.date.fromisoformat(date)
-    entry = {"test": test.name, "spechash": test.review_key, "reviewer": reviewer, "date": date, "ref": ref,
+    entry = {"test": test.name, "suite": test.suite, "spechash": test.review_key, "reviewer": reviewer, "date": date, "ref": ref,
              "verdict": verdict, "notes": notes}
     lines = ["", "[[review]]"]
     for key, value in entry.items():
@@ -185,15 +188,16 @@ def collect_tests(paths: list[Path]) -> list[TestRef]:
     suite = TestSuiteBuilder(allow_empty_suite=True).build(*[str(p) for p in paths])
     out: list[TestRef] = []
 
-    def walk(s):
+    def walk(s, relative: str = ""):
         for t in s.tests:
             tags = [str(x) for x in t.tags]
             plain, per_spec = parse_hash_tags(tags)
-            ref = TestRef(name=t.name, suite=s.longname, source=str(s.source), tags=tags, hash=plain, hashes=per_spec)
+            ref = TestRef(name=t.name, suite=s.longname, source=str(s.source), tags=tags, hash=plain, hashes=per_spec,
+                          suite_path=relative)
             ref.specs += spec_ids(tags)
             out.append(ref)
         for child in s.suites:
-            walk(child)
+            walk(child, f"{relative}.{child.name}" if relative else child.name)
 
     walk(suite)
     return out

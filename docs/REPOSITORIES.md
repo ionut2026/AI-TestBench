@@ -1,37 +1,34 @@
-# Repository split
+# Repository boundaries and local data
 
-The user approved GitHub creation, pushes and rename on 2026-10-12.
+| Repository | Owns |
+|---|---|
+| [GeneralRobotFramework](https://github.com/ionut2026/GeneralRobotFramework) | Generic Python core, packaged starter, synthetic demo and generic CI |
+| [SMMAutomationFramework](https://github.com/ionut2026/SMMAutomationFramework) | SMM service, interfaces, keywords, catalogs, suites and product CI |
+| [WindchillMcpServer](https://github.com/ionut2026/WindchillMcpServer) | Read-only RV&S MCP server, Java bridge, server tools and `rvs` CLI |
 
-| Repository | Visibility | Contents |
-|---|---|---|
-| [GeneralRobotFramework](https://github.com/ionut2026/GeneralRobotFramework) | Public (preserved) | Generic Python core, starter/demo, generic CI and agents |
-| [SMMAutomationFramework](https://github.com/ionut2026/SMMAutomationFramework) | Private | SMM service, keywords, suites, catalog, handbook, product CI and agents |
-| [WindchillMcpServer](https://github.com/ionut2026/WindchillMcpServer) | Private | Read-only RV&S MCP server and CLI |
+The split was completed on 2026-10-12. This project's active local checkout is
+`D:\projects\GeneralRobotFramework`, used directly on `main`. Historical split plans and one-time extraction
+utilities are retained only in Git history; they are not current installation instructions.
+The original repository history can still contain pre-split product files.
 
-SMM and Windchill are filtered from main at `3292490`; their original path histories are retained.
-GRF keeps the original repository history, with a normal root-layout cutover commit (no force push).
-The existing local checkout stays `D:\projects\AI-TestBench`; its origin points to GeneralRobotFramework.
-The original history still includes SMM/MCP files because the source repository was already public.
+## Data ownership
 
-Current extraction/publication candidates live in the ignored
-`general-robot-framework\results\cutover` directory inside the active checkout. Fresh independent checkouts may
-be placed as siblings on D: once the user is ready; do not move the active checkout while sessions use it.
-The user's modified `exports\pra-tested.md` is preserved and is not part of cutover commits.
+The legacy `exports` folder and its product-specific RV&S report were removed at the owner's request.
+No GRF runtime module depended on them. Raw exports belong in the product's or external server's storage
+policy, not core. `exports` remains ignored to prevent accidental reintroduction of product data.
 
-For SMM development, install the GRF sibling editable via `scripts\setup.ps1 -GrfPath <GRF checkout>`.
-CI installs GRF from its approved `v0.1.0` Git tag. Keep `[framework] version` and the dependency tag synchronized.
-The public core needs no private read token. Existing SMM-TestBench access remains separately controlled.
+An MCP tool being available in Copilot does not mean its server lives in this repository. The external server
+controls its own export destination with `RVS_EXPORT_DIR`; moving server code does not automatically move
+previous exports or rewrite that setting. GRF neither edits the user's MCP registration nor chooses that
+server's export directory. Removing the legacy core folder does not change the external server's configuration.
 
-The Windchill server configuration remains user-managed. After choosing the final local server checkout,
-update the MCP entry's `args` to `<checkout>\src\server.js`, preserve existing RVS connection settings, and set
-`RVS_EXPORT_DIR` explicitly. No active MCP registration is changed automatically.
+GRF's `grf ingest` writes a product catalog under `[paths] catalog_dir`, while execution/report output goes
+under `[paths] results` or `--outdir`. Those are separate from raw MCP/`rvs` exports.
+The Python MCP **client SDK** is available through the optional `windchill` extra; it is not a bundled server.
+See [Configuration](CONFIGURATION.md#external-windchill-integration) for setup.
 
-The old `smm-automation` and `windchill-mcp-server` folders remain locally as ignored compatibility copies,
-including the existing venv and live MCP entry point. They are no longer tracked in core; new product changes
-must be made in the independent repository checkout, not these compatibility copies.
-GRF's Windows/Linux remote CI is green. SMM's local cutover regression passes 173 Python tests, 50 service tests
-and 37 mock tests (5 skipped) using the published GRF Git tag, with no real-product operation.
-The independent MCP Java bridge builds successfully. Your existing live MCP registration is preserved.
+## Compatibility
 
-An organization transfer is not performed: no destination organization was specified. Existing `ionut2026`
-ownership and CODEOWNERS are retained. Private-repository branch protection may depend on the account plan.
+Products pin an approved GRF release independently. A sibling editable install is useful for coordinated local
+development but is not a source-provenance guarantee. Core validation does not establish product compatibility:
+the product owner must run its own authorized regression before upgrading. See [Contributing](../CONTRIBUTING.md).

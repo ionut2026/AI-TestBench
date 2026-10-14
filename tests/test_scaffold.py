@@ -61,7 +61,7 @@ def test_checked_in_demo_matches_starter(tmp_path):
 
 
 def test_generated_project_end_to_end(tmp_path):
-    root = init_project(tmp_path / "widget", 'Widget "Test"', "WID")
+    root = init_project(tmp_path / "widget", 'Widget "Test" 2.0', "WID")
     command(root, "demo-ingest")
     catalog = json.loads((root / "catalog/demo.json").read_text(encoding="utf-8"))
     assert catalog["counts"] == {"specifications": 1, "requirements": 1, "userStories": 1, "explorativeTests": 1}
@@ -83,6 +83,13 @@ def test_generated_project_end_to_end(tmp_path):
     assert not report["specifications"][0]["verified"]
     assert report["review"]["unreviewed"] == 1
     assert (root / "results/mock/traceability.html").is_file()
+    command(root, "run", "--tier", "mock", "--processes", "2", "--outdir", "results/parallel",
+            "--metadata", "Owner:synthetic", "--include", "WID-1")
+    parallel = json.loads((root / "results/parallel/traceability.json").read_text(encoding="utf-8"))
+    assert parallel["totals"] == {"pass": 1, "fail": 0, "skip": 0}
+    assert not parallel["productEvidence"] and parallel["coverage"]["verified"] == 0
+    assert parallel["metadata"]["Owner"] == "synthetic"
+    assert not (root / ".pabotsuitenames").exists()
 
     # Text drift and broken tests must fail the real CLI gates, not just the helper functions.
     catalog["specifications"]["1"]["hash"] = ingest.spec_hash("Changed specification")

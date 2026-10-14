@@ -1,18 +1,8 @@
-"""What a tier can do, and therefore which tagged tests ``<cli> run`` excludes (plan 6.2).
+"""Capability-based test selection.
 
-A test declares what it needs with a tag; a tier runs it only if it has the matching capability. Tags, tiers and
-what they can do come from the project (``[capabilities]``, ``[tiers.*]``, ``[operator]`` in ``grf.toml``). For SMM:
-
-    needs:twin               twin             the SMM hardware twin (fault injection, racks, COP trace)
-    needs:hardware-action    hardware-action  a physical action such as the emergency stop (twin or operator)
-    needs:operator           operator         an operator at the instrument (``Operator Action``)
-    needs:applog             applog           appSMM's SmartInspect log files
-    requires:restart         restart          killing and restarting appSMM
-    requires:broker-restart  broker-restart   stopping and restarting the MQTT broker
-
-mock and offline get theirs from the service; the rig gets ``restart``, ``broker-restart`` and ``applog`` from the
-site's rig control script (``SMM_RIG_CONTROL``, see rigcontrol.py) and ``operator``/``hardware-action`` from
-``--operator console|dialog``.
+Tests declare required capabilities through tags configured in ``[capabilities]``. Tiers provide their static
+capabilities through ``[tiers.*]``; site rig-control and operator modes may add capabilities. The framework
+excludes only tests explicitly tagged for a missing capability. Products must lint undeclared requirements.
 """
 
 from __future__ import annotations

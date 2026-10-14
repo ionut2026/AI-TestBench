@@ -71,12 +71,34 @@ class Project:
                 data = tomllib.load(f)
         except (OSError, tomllib.TOMLDecodeError) as err:
             raise ProjectError(f"cannot read the project configuration {file}: {err}") from err
-        return cls(file.resolve().parent, data)
+        loaded = cls(file.resolve().parent, data)
+        loaded.validate()
+        return loaded
+
+    def validate(self) -> None:
+        """Reject malformed configuration before a command can select capabilities or run tests."""
+        for section in self.data:
+            self._section(section)
+        for key in ("name", "cli", "product", "spec_prefix", "rule_prefix", "env_prefix", "plugin"):
+            value = self._section("project").get(key)
+            if value is not None and (not isinstance(value, str) or not value.strip()):
+                raise ProjectError(f"[project] {key} must be a nonempty string")
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", self.spec_prefix):
+            raise ProjectError("[project] spec_prefix must start with a letter and contain only letters, digits or underscores")
+        for key in self._section("paths"):
+            self.raw_paths(key)
+        if "tiers" in self.data:
+            _ = self.tiers
+        for key, value in self._section("capabilities").items():
+            if not key.strip() or not isinstance(value, str) or not value.strip():
+                raise ProjectError("[capabilities] must map nonempty tags to nonempty capability names")
+        if "capabilities" in self._section("operator"):
+            self._strings(self._section("operator")["capabilities"], "[operator] capabilities")
 
     # ------------------------------------------------------------------ names
 
     def _section(self, name: str) -> dict[str, Any]:
-        section = self.data.get(name) or {}
+        section = self.data.get(name, {})
         if not isinstance(section, dict):
             raise ProjectError(f"[{name}] in {CONFIG_FILE} must be a table")
         return section
@@ -134,17 +156,21 @@ class Project:
         return self.root / value
 
     def paths(self, key: str, default: list[str] | None = None) -> list[Path]:
-        value = self._section("paths").get(key, default)
-        if isinstance(value, str):
-            value = [value]
-        if not isinstance(value, list) or not value:
+        values = self.raw_paths(key, default)
+        if not values:
             raise ProjectError(f"[paths] {key} is not set in {self.root / CONFIG_FILE}")
-        return [self.root / v for v in value]
+        return [self.root / v for v in values]
 
     def raw_paths(self, key: str, default: list[str] | None = None) -> list[str]:
         """Path entries as written (module names stay module names)."""
-        value = self._section("paths").get(key, default or [])
-        return [value] if isinstance(value, str) else list(value)
+        value = self._section("paths").get(key, default if default is not None else [])
+        return self._strings([value] if isinstance(value, str) else value, f"[paths] {key}")
+
+    @staticmethod
+    def _strings(value: Any, where: str) -> list[str]:
+        if not isinstance(value, list) or not all(isinstance(v, str) and v.strip() for v in value):
+            raise ProjectError(f"{where} must be a list of nonempty strings")
+        return value
 
     # ------------------------------------------------------------------ tiers and capabilities
 
@@ -152,8 +178,14 @@ class Project:
     def tiers(self) -> dict[str, Tier]:
         out = {}
         for name, t in self._section("tiers").items():
-            out[name] = Tier(name, frozenset(t.get("capabilities", [])), bool(t.get("evidence", True)),
-                             bool(t.get("parallel", False)), bool(t.get("rig_control", False)))
+            if not name.strip() or not isinstance(t, dict):
+                raise ProjectError(f"[tiers.{name}] must be a table with a nonempty name")
+            for key in ("evidence", "parallel", "rig_control"):
+                if key in t and not isinstance(t[key], bool):
+                    raise ProjectError(f"[tiers.{name}] {key} must be a boolean")
+            caps = self._strings(t.get("capabilities", []), f"[tiers.{name}] capabilities")
+            out[name] = Tier(name, frozenset(caps), t.get("evidence", True),
+                             t.get("parallel", False), t.get("rig_control", False))
         if not out:
             raise ProjectError(f"no [tiers] in {self.root / CONFIG_FILE}")
         return out
@@ -164,9 +196,12 @@ class Project:
         return self.tiers[name]
 
     def is_evidence(self, tier: str) -> bool:
-        """Whether verdicts of ``tier`` are evidence about the product (unknown tiers count as evidence)."""
-        t = self.tiers.get(tier) or next((x for n, x in self.tiers.items() if tier.startswith(n)), None)
-        return t.evidence if t else True
+        """Only known tiers can supply product evidence; accept legacy dash/space-suffixed tier metadata."""
+        t = self.tiers.get(tier) or next(
+            (self.tiers[n] for n in sorted(self.tiers, key=len, reverse=True)
+             if tier.startswith((n + "-", n + " "))), None
+        )
+        return t.evidence if t else False
 
     @property
     def tag_capability(self) -> dict[str, str]:
@@ -260,7 +295,7 @@ def set_default_root(root: Path | str) -> None:
     """Registers the project a product package belongs to (used when ``GRF_PROJECT`` is not set); a product's
     package calls this on import so its command and Robot library find their project from any folder."""
     global _default_root
-    _default_root = Path(root)
+    _default_root = Path(root).resolve()
 
 
 def default_root() -> Path:

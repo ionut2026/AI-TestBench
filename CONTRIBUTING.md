@@ -7,12 +7,20 @@ Keep product services, interfaces/schemas, log parsers, state models, fault impl
 suites in the product repository. Use `ProductPlugin` only for actual product extension points.
 Do not add a generic abstraction based on a single hypothetical consumer; demonstrate it with the neutral demo.
 
+## Documentation is part of every code change
+
+Update all relevant documentation in the same change: README, applicable `docs` guides, this contributor guide,
+user-visible CHANGELOG entries, and affected starter/example documentation. Check unchanged guides for accuracy.
+Document behavioral, CLI, configuration and API changes and explain compatibility migrations.
+Keep topics in their [canonical guides](README.md#documentation) and use links instead of repeating instructions.
+When starter templates change, update `examples\demo` in the same change; the parity test enforces this.
+
 ## Gates
 
-Run ruff, mypy, standalone pytest and the wheel-only starter demo described in README.
-Changes used by SMM also need its pytest/goldens, lint, drift and matrix gates and mock regression.
+Run the [core validation and wheel-only demo](docs/TESTING.md#core-validation-windows).
+Changes consumed by a product also need that repository's authorized regression gates.
 Never regenerate goldens just to make a failure go away: explain and review an intentional output change.
-Hardware/offline runs need the owner's authorization; never modify the pinned SMM TestBench checkout.
+Product and hardware runs need the owner's authorization; core changes do not authorize consumer operations.
 Do not publish data to RV&S or introduce archive/history/publishing features excluded from the approved scope.
 
 ## Compatibility and releases
@@ -22,13 +30,11 @@ within a release line. Deprecate compatibility shims deliberately, with migratio
 Use SemVer (`vX.Y.Z` tags); release creation/push requires a maintainer decision.
 Products pin an approved GRF version in both `pyproject.toml` and `[framework] version` in `grf.toml`.
 `grf doctor` checks the installed distribution against the latter. During local development install the sibling
-checkout editable; version equality is not a commit-identity check. After cutover CI must also pin the approved
+checkout editable; version equality is not a commit-identity check. CI must also pin the approved
 Git commit/release tag and use read-only authentication for private repositories.
 
-Propose upgrades by PR: update both pins, install the proposed core, run all product gates and review the
-CHANGELOG. SMMAutomationFramework provides a manually dispatched release-bump PR workflow; it never auto-merges.
-Its repository permits Actions-created PRs, with read-only default workflow permissions and explicit write
-permissions scoped to that workflow.
+Propose upgrades by PR: update both pins, install the proposed core, run the owner's authorized product gates
+and review the CHANGELOG. Consumer release automation belongs to the consumer repository, not core.
 
 ## Review ownership
 
@@ -37,8 +43,6 @@ review. CODEOWNERS lists the current known maintainer; organization teams replac
 and access are confirmed. CODEOWNERS alone does not enforce review: branch protection must be explicitly enabled.
 Agent review never constitutes human approval or permission to remove `review:pending`.
 
-GeneralRobotFramework main is protected with both Windows/Linux CI checks, one human approval and code-owner
-review; stale approvals are dismissed and force pushes/deletion are blocked. Administrators retain bypass
-for maintainer-authorized cutover/release operations. GitHub rejected private SMM branch protection because
-the current account plan requires an upgrade. Keep the repository private; human review there remains a
-process requirement, not an enforced GitHub gate. Organization transfer is deferred until a destination is named.
+Maintainers should require both Windows/Linux CI checks and current human/code-owner approval, dismiss stale
+approvals and block force pushes/deletion. Live GitHub settings are administered separately; this guide does not
+assert their current state or alter repository permissions.

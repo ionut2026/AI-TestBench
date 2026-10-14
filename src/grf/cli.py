@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -36,10 +37,7 @@ from grf.operator_prompt import MODES as OPERATOR_MODES
 def _default_operator() -> str:
     from grf.operator_prompt import operator_mode
 
-    try:
-        return operator_mode()
-    except ValueError:
-        return "none"
+    return operator_mode()
 
 
 def _catalog_path(args) -> Path:
@@ -192,8 +190,11 @@ def cmd_report(args) -> int:
 
 def _exit_code(rc: int, output: Path, fail_on: str) -> int:
     """Robot's rc counts every failure; with ``--fail-on new`` only failures without ``known-issue:`` count."""
-    if rc > 250 or not output.exists():
+    if rc < 0 or rc > 250:
         return rc
+    if not output.exists():
+        print(f"Robot produced no output: {output}", file=sys.stderr)
+        return rc or 2
     from grf.pipeline.report import classify, is_product_tier, read_results
 
     tests, meta = read_results(output)
@@ -212,9 +213,19 @@ def _exit_code(rc: int, output: Path, fail_on: str) -> int:
 
 
 def cmd_run(args, robot_args: list[str]) -> int:
-    from robot.run import run_cli
+    from robot.run import RobotFramework, run_cli
 
     p = project.current()
+    forwarded, sources = RobotFramework().parse_arguments([*robot_args, "__grf_managed_suite__.robot"])
+    for key in ("outputdir", "output", "variablefile", "name"):
+        if key in forwarded:
+            raise ValueError(f"Robot option {key!r} is managed by GRF; use --outdir and tier configuration")
+    if any(value.split(":", 1)[0].lower() == "tier" for value in forwarded.get("metadata", [])):
+        raise ValueError("Tier metadata is managed by GRF")
+    if forwarded.get("dryrun") and p.tier(args.tier).evidence:
+        raise ValueError("Robot dry runs require a non-evidence tier")
+    if sources != ["__grf_managed_suite__.robot"]:
+        raise ValueError("Robot suite sources are managed by GRF; use the global --suites option")
     if args.processes < 1:
         print("--processes must be at least 1", file=sys.stderr)
         return 2
@@ -226,6 +237,8 @@ def cmd_run(args, robot_args: list[str]) -> int:
         return 2
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     out_dir = Path(args.outdir) if args.outdir else p.path("results") / f"{args.tier}-{stamp}"
+    if (out_dir / "output.xml").exists():
+        raise ValueError(f"refusing to reuse existing Robot output: {out_dir / 'output.xml'}; choose a new --outdir")
     from grf.operator_prompt import env_name as operator_env_name
     from grf.rigcontrol import RigControlError
 
@@ -287,6 +300,10 @@ def cmd_mutate(args) -> int:
         write_report,
     )
 
+    if args.tier is None:
+        raise ValueError("mutation testing requires a configured non-evidence tier")
+    if not math.isfinite(args.min_score) or not 0 <= args.min_score <= 1:
+        raise ValueError("--min-score must be a finite number between 0 and 1")
     try:
         mutants = load_mutants(Path(args.mutants))
     except MutantError as err:
@@ -324,9 +341,10 @@ def cmd_mutate(args) -> int:
             print(f"  SURVIVED {m['id']} ({', '.join(p.spec_tag(s) for s in m['specs'])}): {m['description']}")
     if result.get("specsWithoutMutants"):
         print(f"Specifications with tests but no mutant: {', '.join(map(str, result['specsWithoutMutants']))}")
-    if sc["errors"]:
+    if sc["errors"] or sc["noTests"] or sc["score"] is None:
         return 2
-    return 1 if sc["score"] is not None and sc["score"] < args.min_score else 0
+    measured = sc["killed"] / (sc["killed"] + sc["survived"])
+    return 1 if measured < args.min_score else 0
 
 
 def cmd_doctor(args) -> int:
@@ -339,7 +357,7 @@ def cmd_doctor(args) -> int:
     return 1 if failed else 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv: list[str] | None = None) -> int:
     from grf.scaffold import add_parser, bootstrap, cmd_init
 
     argv = sys.argv[1:] if argv is None else argv
@@ -354,7 +372,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     tiers = list(p.tiers)
     parser = argparse.ArgumentParser(prog=p.cli, description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, allow_abbrev=False)
-    scope, reviews = p.raw_paths("scope")[0], p.raw_paths("reviews")[0]
+    scope, reviews = str(p.path("scope")), str(p.path("reviews"))
     parser.add_argument("--scope", default=str(p.path("scope")), help=f"scope file (default: {scope})")
     parser.add_argument("--catalog", help="catalog JSON (default: catalog/<scope name>.json)")
     parser.add_argument("--suites", action="append", help=f"suite file/directory, repeatable (default: {', '.join(p.raw_paths('suites'))})")
@@ -394,7 +412,7 @@ def main(argv: list[str] | None = None) -> int:
     cmd.add_argument("--include-pending", action="store_true", help=argparse.SUPPRESS)  # pre-1.1 option, now the default
     cmd.add_argument("--no-report", action="store_true")
     cmd.add_argument("--processes", type=int, default=1,
-                     help="run suites in N parallel processes with pabot (mock tier only; each worker gets its own service and broker)")
+                     help="run suites in N parallel processes with pabot (only tiers configured with parallel = true)")
     cmd = sub.add_parser("report", allow_abbrev=False, help="traceability report for an existing output.xml")
     cmd.add_argument("--output", required=True)
     cmd.add_argument("--outdir")
@@ -422,6 +440,22 @@ def main(argv: list[str] | None = None) -> int:
     commands = {"init": cmd_init, "ingest": cmd_ingest, "briefs": cmd_briefs, "drift": cmd_drift, "accept": cmd_accept, "migrate-hashes": cmd_migrate_hashes,
                 "review": cmd_review, "lint": cmd_lint, "report": cmd_report, "mutate": cmd_mutate, "doctor": cmd_doctor}
     return {**commands, **plugin_commands}[args.command](args)
+
+
+def main(argv: list[str] | None = None) -> int:
+    from robot.errors import DataError, Information
+
+    from grf.pipeline.rvs import RvsError
+    from grf.rigcontrol import RigControlError
+
+    try:
+        return _main(argv)
+    except Information as info:
+        print(info.message)
+        return 0
+    except (OSError, ValueError, DataError, RvsError, RigControlError) as err:
+        print(f"grf: {err}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

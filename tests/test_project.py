@@ -19,7 +19,8 @@ def test_neutral_configuration(widget):
     assert widget.mutation_fault_actions == {"drop", "delay"}
     assert widget.paths("suites") == [widget.root / "robot/suites"]
     assert not widget.is_evidence("sim-parallel")
-    assert widget.is_evidence("bench") and widget.is_evidence("unknown")
+    assert widget.is_evidence("bench") and not widget.is_evidence("unknown")
+    assert not widget.is_evidence("?") and not widget.is_evidence("benchwork")
     with pytest.raises(ValueError, match="Unknown tier"):
         widget.tier("unknown")
 
@@ -90,3 +91,41 @@ def test_invalid_configuration(tmp_path):
         _ = p.tiers
     with pytest.raises(project.ProjectError, match="results is not set"):
         p.path("results")
+
+
+@pytest.mark.parametrize("text,diagnostic", [
+    ("project = false", r"\[project\].*table"),
+    ("paths = []", r"\[paths\].*table"),
+    ("[project]\nname = 42", "name.*nonempty string"),
+    ("[project]\nspec_prefix = '../BAD'", "spec_prefix"),
+    ("[paths]\nsuites = [1]", "suites.*nonempty strings"),
+    ("[paths]\nscope = ''", "scope.*nonempty strings"),
+    ("[tiers]\nsim = []", r"\[tiers.sim\].*table"),
+    ("[tiers.sim]\nevidence = 'false'", "evidence.*boolean"),
+    ("[tiers.sim]\nparallel = 1", "parallel.*boolean"),
+    ("[tiers.sim]\nrig_control = 'no'", "rig_control.*boolean"),
+    ("[tiers.sim]\ncapabilities = 'reset'", "capabilities.*nonempty strings"),
+    ("[capabilities]\n'needs:reset' = false", "capability names"),
+    ("[operator]\ncapabilities = 'operator'", "capabilities.*nonempty strings"),
+])
+def test_malformed_values_rejected_at_load(tmp_path, text, diagnostic):
+    config = tmp_path / "grf.toml"
+    config.write_text(text, encoding="utf-8")
+    with pytest.raises(project.ProjectError, match=diagnostic):
+        project.Project.load(config)
+
+
+def test_registered_relative_root_survives_directory_change(tmp_path, monkeypatch):
+    child = tmp_path / "child"
+    child.mkdir()
+    monkeypatch.chdir(tmp_path)
+    project.set_default_root("child")
+    monkeypatch.chdir(child)
+    assert project.default_root() == child
+
+
+def test_longest_evidence_tier_match(widget):
+    widget.tiers["sim-real"] = project.Tier("sim-real", frozenset(), evidence=True)
+    assert widget.is_evidence("sim-real-run")
+    assert widget.is_evidence("bench legacy")
+    assert not widget.is_evidence("simulator")

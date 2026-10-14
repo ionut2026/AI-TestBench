@@ -1,4 +1,4 @@
-"""Mutation testing of the suites against the mock product (plan 3.1-3.4).
+"""Mutation testing of the suites against the mock product.
 
 A mutant (``catalog/mutants.toml``) is a set of fault rules for the mock product (the actions it understands are
 the project's ``[mutation] fault_actions``; SMM: the service's ``faults.ts``) that breaks one or more
@@ -26,7 +26,7 @@ from grf import project
 from grf.pipeline.drift import TestRef
 
 MUTANT_ID = re.compile(r"^[a-z0-9][a-z0-9-]*$")
-SETUP_FAILURE = re.compile(r"^(Parent suite setup failed|Setup failed)", re.IGNORECASE)
+SETUP_FAILURE = re.compile(r"^(Parent suite (?:setup|teardown) failed|(?:Setup|Teardown) failed)", re.IGNORECASE)
 DEFAULT_MIN_SCORE = 0.9
 
 
@@ -76,10 +76,14 @@ def verdict(results: list[dict]) -> dict:
     """``killed`` if a selected test failed, ``survived`` if they all passed, ``noTests`` otherwise."""
     failed = [r for r in results if r["status"] == "FAIL"]
     passed = [r for r in results if r["status"] == "PASS"]
-    if failed:
+    if any(SETUP_FAILURE.match(r.get("message") or "") for r in failed):
+        status = "error"
+    elif failed:
         status = "killed"
-    elif passed:
+    elif passed and len(passed) == len(results):
         status = "survived"
+    elif passed:
+        status = "error"
     else:
         status = "noTests"
     return {
@@ -139,9 +143,12 @@ def run_once(name: str, faults: list[dict], specs: list[int], out_dir: Path, *, 
     from grf.pipeline.report import read_results
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    env = dict(os.environ, **{project.current().mutation_faults_env: json.dumps(faults)})
-    rc = runner(robot_argv(tier, variablefile, specs, excludes, out_dir, suites, f"Mutant:{name}"), env, out_dir / "console.txt", timeout_s)
+    env = dict(os.environ, **{project.current().mutation_faults_env: json.dumps(faults),
+                             project.PROJECT_ENV: str(project.current().root)})
     output = out_dir / "output.xml"
+    if output.exists():
+        raise MutantError(f"refusing to reuse existing mutation output: {output}")
+    rc = runner(robot_argv(tier, variablefile, specs, excludes, out_dir, suites, f"Mutant:{name}"), env, out_dir / "console.txt", timeout_s)
     if not output.exists():
         return rc, []
     tests, _meta = read_results(output)
@@ -152,6 +159,8 @@ def mutate(mutants: list[dict], tests: list[TestRef], out_dir: Path, *, tier: st
            suites: list[Path], baseline: bool = True, runner: Runner = _subprocess_runner,
            log: Callable[[str], None] = print) -> dict:
     """Runs every mutant; with ``baseline`` the selected tests first run once without faults and must pass."""
+    if project.current().tier(tier).evidence:
+        raise MutantError("mutation testing requires a non-evidence tier")
     selected = {m["id"]: select_tests(m, tests, excludes) for m in mutants}
     result: dict[str, Any] = {"tier": tier, "started": dt.datetime.now().isoformat(timespec="seconds"), "mutants": []}
     if baseline:
@@ -161,7 +170,7 @@ def mutate(mutants: list[dict], tests: list[TestRef], out_dir: Path, *, tier: st
         failed = [t["name"] for t in base if t["status"] == "FAIL"]
         result["baseline"] = {"rc": rc, "tests": len(base), "failed": failed}
         log(f"baseline: {len(base)} test(s), {len(failed)} failed")
-        if failed or not base:
+        if rc != 0 or not base or any(t["status"] != "PASS" for t in base):
             result["aborted"] = "the tests fail (or did not run) without faults: mutation results would be meaningless"
             return result
     for m in mutants:
@@ -174,7 +183,7 @@ def mutate(mutants: list[dict], tests: list[TestRef], out_dir: Path, *, tier: st
                                    excludes=excludes, suites=suites, runner=runner)
             entry.update(verdict(results))
             entry["rc"] = rc
-            if not results:
+            if rc < 0 or rc > 250 or not results:
                 entry["status"] = "error"
         log(f"{entry['status'].upper():8} {m['id']}")
         result["mutants"].append(entry)

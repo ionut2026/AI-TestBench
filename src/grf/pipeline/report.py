@@ -28,6 +28,7 @@ from grf.pipeline.drift import (
     TestRef,
     agent_reviews,
     check,
+    check_reviews,
     hash_for,
     parse_hash_tags,
     spec_ids,
@@ -74,13 +75,14 @@ def read_results(output_xml: Path) -> tuple[list[dict], dict]:
     result = ExecutionResult(str(output_xml))
     tests: list[dict] = []
 
-    def walk(suite):
+    def walk(suite, relative: str = ""):
         for t in suite.tests:
             tags = [str(x) for x in t.tags]
             plain, per_spec = parse_hash_tags(tags)
             tests.append({
                 "name": t.name,
                 "suite": suite.longname,
+                "suitePath": relative,
                 "status": t.status,
                 "message": t.message,
                 "elapsed": round(t.elapsedtime / 1000, 2) if hasattr(t, "elapsedtime") else round(t.elapsed_time.total_seconds(), 2),
@@ -93,7 +95,7 @@ def read_results(output_xml: Path) -> tuple[list[dict], dict]:
                 "nospec": [m[1] for x in tags if (m := NOSPEC_TAG.match(x))],
             })
         for child in suite.suites:
-            walk(child)
+            walk(child, f"{relative}.{child.name}" if relative else child.name)
 
     walk(result.suite)
     meta: dict[str, Any] = {str(k): str(v) for k, v in result.suite.metadata.items()}
@@ -111,8 +113,8 @@ def _spec_verdict(spec: dict, run: list[dict], known: list[TestRef]) -> str:
         if "FAIL" in statuses:
             return "FAIL"
         if "PASS" in statuses:
-            ran = {t["name"] for t in run}
-            not_run = [k for k in known if k.name not in ran]
+            ran = {_test_key(t) for t in run}
+            not_run = [k for k in known if _test_key(k) not in ran]
             return "PARTIAL" if "SKIP" in statuses or not_run else "PASS"
         return "SKIP"
     if known:
@@ -127,24 +129,44 @@ def _worst(verdicts: list[str]) -> str:
     return min(relevant, key=ORDER.index) if relevant else "UNCOVERED"
 
 
+def _test_key(test: TestRef | dict) -> tuple[str, str]:
+    """The CLI renames the root suite, but child suite paths and test names remain stable."""
+    if isinstance(test, TestRef):
+        name, suite, relative = test.name, test.suite, test.suite_path
+    else:
+        name, suite, relative = test["name"], test["suite"], test.get("suitePath")
+    return relative if relative is not None else suite.partition(".")[2], name
+
+
 def build_report(catalog: dict, tests: list[dict], meta: dict, known: list[TestRef], reviews: list[dict] | None = None) -> dict:
     tier = meta.get("Tier", "?")
     product = is_product_tier(tier)
     agent = {a["test"]: a for a in agent_reviews(known, reviews or [])}
+    unrecorded = {(r["suite"], r["test"]) for r in check_reviews(known, reviews or [])}
+    drift = check(catalog, known, reviews or []) if known else None
     specs_out = []
     for key, spec in catalog["specifications"].items():
         sid = int(key)
         run = [t for t in tests if sid in t["specs"]]
         defined = [k for k in known if sid in k.specs]
         verdict = _spec_verdict(spec, run, defined)
-        stale = [t["name"] for t in run if (h := hash_for(sid, t["specs"], t["hash"], t.get("hashes") or {})) and not spec["hash"].startswith(h)]
-        unreviewed = sorted({t["name"] for t in run if t.get("pending")} | {k.name for k in defined if k.pending})
+        stale = [t["name"] for t in run if not (h := hash_for(sid, t["specs"], t["hash"], t.get("hashes") or {}))
+                 or not spec["hash"].startswith(h)]
+        unreviewed = sorted({t["name"] for t in run if t.get("pending")}
+                            | {k.name for k in defined if k.pending or (k.suite, k.name) in unrecorded}
+                            | {t["name"] for t in run
+                               if _test_key(t) not in {_test_key(k) for k in defined}})
+        invalid_spec = any(
+            issue.get("spec") == sid
+            for key in ("stale", "nohash", "stateChanged", "linksChanged", "retired", "suspect")
+            for issue in (drift or {}).get(key, [])
+        )
         outcomes = [outcome(t, product) for t in run]
         specs_out.append({
             "id": sid,
             "area": spec["area"],
             "verdict": verdict,
-            "verified": verdict == "PASS" and not unreviewed,
+            "verified": product and verdict == "PASS" and bool(defined) and not unreviewed and not stale and not invalid_spec,
             "unreviewed": unreviewed,
             "failClass": ("new" if "NEW FAIL" in outcomes else "known") if verdict == "FAIL" else None,
             "text": spec["text"],
@@ -162,7 +184,8 @@ def build_report(catalog: dict, tests: list[dict], meta: dict, known: list[TestR
                  "agentReview": agent.get(t["name"])}
                 for t in run
             ],
-            "notRun": [k.name for k in defined if k.name not in {t["name"] for t in run}],
+            "notRun": [k.name for k in defined
+                       if _test_key(k) not in {_test_key(t) for t in run}],
         })
 
     def roll_up(items: dict, link: str) -> list[dict]:
@@ -191,8 +214,10 @@ def build_report(catalog: dict, tests: list[dict], meta: dict, known: list[TestR
         "summary": summary,
         "failures": classify(tests, product),
         "review": {
-            "tests": len({t["name"] for t in tests} | {k.name for k in known}),
-            "unreviewed": len({t["name"] for t in tests if t.get("pending")} | {k.name for k in known if k.pending}),
+            "tests": len({_test_key(t) for t in tests} | {_test_key(k) for k in known}),
+            "unreviewed": len({_test_key(t) for t in tests if t.get("pending")
+                               or _test_key(t) not in {_test_key(k) for k in known}}
+                              | {_test_key(k) for k in known if k.pending or (k.suite, k.name) in unrecorded}),
         },
         "coverage": {
             "testable": len(testable),
@@ -208,7 +233,7 @@ def build_report(catalog: dict, tests: list[dict], meta: dict, known: list[TestR
         ],
         "requirements": roll_up(catalog.get("requirements", {}), "satisfies"),
         "userStories": roll_up(catalog.get("userStories", {}), "userStories"),
-        "drift": check(catalog, known, reviews) if known else None,
+        "drift": drift,
     }
 
 
@@ -241,7 +266,7 @@ def render_html(report: dict) -> str:
         if s["reason"]:
             notes.append(e(s["reason"]))
         if s["stale"]:
-            notes.append("<b>STALE:</b> specification text changed after the test was written")
+            notes.append("<b>STALE:</b> current specification hash is missing or mismatched")
         if s["suspect"]:
             notes.append("<b>SUSPECT</b> in RV&amp;S")
         if s.get("failClass") == "known":
@@ -269,8 +294,8 @@ def render_html(report: dict) -> str:
     rev = report.get("review") or {}
     if rev.get("unreviewed"):
         warn += (f"<div class='warn'><b>{rev['unreviewed']} of {rev['tests']} tests have no human review</b> "
-                 "(<code>review:pending</code>). Their verdicts are shown, but a specification is only VERIFIED when "
-                 "all its tests have been reviewed.</div>")
+                 "(pending, unrecorded or unapproved). Their verdicts are shown, but a specification is only VERIFIED "
+                 "on a product-evidence tier with current hashes, approved reviews and no specification drift.</div>")
 
     def roll_table(items: list[dict], prefix: str) -> str:
         rows = "".join(

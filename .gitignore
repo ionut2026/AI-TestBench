@@ -10,16 +10,4 @@ coverage.xml
 htmlcov/
 .mypy_cache/
 .ruff_cache/
-general-robot-framework/results/
-general-robot-framework/dist/
-general-robot-framework/build/
-general-robot-framework/*.egg-info/
-general-robot-framework/.ruff_cache/
-general-robot-framework/.mypy_cache/
-general-robot-framework/.pytest_cache/
-smm-automation/
-windchill-mcp-server/
-.github/agents/smm-*.md
-.github/workflows/smm-automation.yml
-docs/SMM-AUTOMATION-HANDBOOK.md
-docs/SMM-AUTOMATION-IMPROVEMENT-PLAN.md
+exports/
