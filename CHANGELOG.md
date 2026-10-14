@@ -5,6 +5,9 @@ a patch release. Release tags are `vMAJOR.MINOR.PATCH`. Tags and publication are
 
 ## Unreleased
 
+- Checked explicit Python executable paths directly during Windows setup and disabled module auto-discovery
+  for named-command lookup, avoiding unnecessary discovery when Python is missing. Added a regression test
+  for the missing-path failure that timed out on Windows CI.
 - Added `scripts\setup.ps1` for explicit one-command Windows setup after cloning: creates/reuses `.venv`,
   installs GRF/Robot Framework/development dependencies and checks compatibility and imports. Installation
   scratch/cache paths stay under `results`; no product operations or system-policy changes are performed.

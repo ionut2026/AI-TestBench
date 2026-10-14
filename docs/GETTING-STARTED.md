@@ -287,7 +287,9 @@ If creating a new environment and `python` is not on PATH, supply the full path 
 ```
 
 That path is an example; use your actual installation. When `.venv` already exists, setup uses its Python,
-not the `-Python` argument. To verify the installation yourself:
+not the `-Python` argument. Explicit executable paths are checked directly; named commands are looked up
+without auto-importing PowerShell modules, so a missing Python path does not trigger module discovery.
+To verify the installation yourself:
 
 ```powershell
 .\.venv\Scripts\python -m robot --version

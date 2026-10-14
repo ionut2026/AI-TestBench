@@ -90,6 +90,7 @@ mutation orchestration, nested resources, MCP response contracts and a generated
 including parallel pabot execution and mock non-evidence metadata.
 Windows setup tests check explicit errors for missing Python, an unsupported interpreter, missing checkout
 metadata, incomplete environments and failed installation commands without downloading dependencies or running products.
+They also verify that a nonexistent explicit Python path fails without invoking PowerShell command discovery.
 
 ## Wheel-only smoke run
 

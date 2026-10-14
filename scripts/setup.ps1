@@ -31,7 +31,13 @@ try {
         $interpreter = $venvPython
     }
     else {
-        if (-not (Get-Command $Python -ErrorAction SilentlyContinue)) {
+        if ($Python.Contains("\") -or $Python.Contains("/") -or $Python.Contains(":")) {
+            $pythonFound = Test-Path -LiteralPath $Python -PathType Leaf
+        }
+        else {
+            $pythonFound = $null -ne (Get-Command $Python -ListImported -ErrorAction SilentlyContinue)
+        }
+        if (-not $pythonFound) {
             throw "Python was not found. Install Python 3.11 or newer, or pass -Python with its executable path."
         }
         $interpreter = $Python

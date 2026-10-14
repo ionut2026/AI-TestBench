@@ -36,6 +36,23 @@ def test_missing_python_fails_without_creating_environment(setup_checkout):
     assert not (setup_checkout / ".venv").exists()
 
 
+def test_missing_python_path_does_not_invoke_command_discovery(setup_checkout):
+    script = str(setup_checkout / "scripts" / "setup.ps1").replace("'", "''")
+    missing = str(setup_checkout / "missing-python.exe").replace("'", "''")
+    wrapper = (
+        "function Get-Command { throw 'Unexpected command discovery' };"
+        f"& '{script}' -Python '{missing}'"
+    )
+    result = subprocess.run(
+        [SHELL, "-NoProfile", "-NonInteractive", "-Command", wrapper],
+        cwd=setup_checkout.parent, capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 1
+    assert "Python was not found" in result.stderr
+    assert "Unexpected command discovery" not in result.stderr
+    assert not (setup_checkout / ".venv").exists()
+
+
 def test_incomplete_environment_is_preserved(setup_checkout):
     venv = setup_checkout / ".venv"
     venv.mkdir()
