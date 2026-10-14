@@ -29,6 +29,18 @@ TEMPLATES = {
     "author": ".github/agents/test-author.agent.md",
     "reviewer": ".github/agents/test-reviewer.agent.md",
 }
+SKILLS = (
+    "getting-started",
+    "author-test",
+    "review-test",
+    "interpret-report",
+    "spec-drift",
+    "mutation-testing",
+    "doctor-tier",
+    "product-plugin",
+    "template-upgrade",
+)
+TEMPLATES.update({f"skill-{name}": f".github/skills/grf-{name}/SKILL.md" for name in SKILLS})
 
 
 def add_parser(sub: argparse._SubParsersAction) -> None:

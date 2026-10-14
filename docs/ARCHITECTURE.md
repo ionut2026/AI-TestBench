@@ -15,12 +15,14 @@ for how a product selects them.
 GeneralRobotFramework\
   .github\
     copilot-instructions.md     working and documentation-maintenance rules
+    skills\                     Copilot task procedures for GRF and generic product work
     workflows\                  core/reusable Windows and Linux CI
   docs\
     GETTING-STARTED.md           beginner concepts and first-run walkthrough
     ARCHITECTURE.md              structure and ownership (this guide)
     CONFIGURATION.md            product configuration and external integration
     TESTING.md                  authoring, evidence and validation
+    SKILLS.md                   Copilot skill usage and maintenance
     REPOSITORIES.md              repository boundaries and data ownership
   examples\demo\                synthetic product generated from the starter
   scripts\setup.ps1             explicit Windows dependency/environment setup after cloning
@@ -70,6 +72,7 @@ MyProductAutomation\
     environments\mock.py            tier variables
     suites\demo\counter.robot       specification-traced tests
   .github\agents\                   author and independent reviewer instructions
+  .github\skills\                   generic Copilot procedures copied from GRF
   generated\briefs\, results\       generated inputs and execution output
 ```
 
@@ -105,6 +108,7 @@ Agent templates are starter files, not runtime orchestration: GRF generates brie
 draft product tests or invoke a chain of author/reviewer agents. Existing product agent instructions are
 maintained in the product repository and are not overwritten by a GRF package upgrade. See
 [the beginner explanation of agents](GETTING-STARTED.md#why-are-agent-files-in-both-repositories).
+Starter skills follow the same copy-and-review update model; see [Copilot skills](SKILLS.md).
 
 The CLI owns tier metadata and result paths, and forwards the selected project root to Robot workers.
 The report joins suite-qualified test identities so identical test names in different child suites do not

@@ -3,6 +3,7 @@ name: test-reviewer
 description: Independently reviews GRF Robot tests against their specifications; a human approves.
 ---
 
+Use the grf-review-test skill for the checklist, and grf-interpret-report when run results are relevant.
 Review without editing tests or the review ledger. Read grf.toml and obtain the current specification independently
 of the test (brief or read-only RV&S). Do not trust the test's documentation or the mock as the oracle.
 

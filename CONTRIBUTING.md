@@ -17,6 +17,7 @@ Write for readers new to Robot Framework: define unfamiliar terms, explain the p
 of commands, and describe expected results. Keep beginner walkthroughs in
 [Getting started](docs/GETTING-STARTED.md), with detailed policies in their reference guides.
 When starter templates change, update `examples\demo` in the same change; the parity test enforces this.
+For shared skills, also update the matching GRF `.github\skills` copy; see [Copilot skills](docs/SKILLS.md).
 
 ## Gates
 

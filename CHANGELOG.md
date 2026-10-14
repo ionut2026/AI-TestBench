@@ -5,6 +5,9 @@ a patch release. Release tags are `vMAJOR.MINOR.PATCH`. Tags and publication are
 
 ## Unreleased
 
+- Added Copilot skills for setup, authoring, review, report interpretation, drift, mutation testing, tier checks,
+  product plugins, template upgrades and GRF validation. `grf init` now creates nine generic skills in
+  `.github\skills`; existing products must adopt them manually. See `docs\SKILLS.md`.
 - Checked explicit Python executable paths directly during Windows setup and disabled module auto-discovery
   for named-command lookup, avoiding unnecessary discovery when Python is missing. Added a regression test
   for the missing-path failure that timed out on Windows CI.

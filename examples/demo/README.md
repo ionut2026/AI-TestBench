@@ -71,5 +71,6 @@ specification drift. Removing `review:pending` alone is not approval. New review
 legacy name-only reviews apply only to unique test names.
 
 The generic author/reviewer agents are in `.github\agents`. They preserve human sign-off and read-only RV&S access.
+Reusable Copilot skills are in `.github\skills`; see `docs\SKILLS.md` in your GRF checkout for how to use them.
 This starter's Python package is `product_automation`; rename it and the plugin/library references if multiple
 product adapters need to be installed in the same environment.

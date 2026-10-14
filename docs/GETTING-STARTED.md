@@ -116,6 +116,16 @@ incorporate them deliberately and keep product-specific guidance accurate. Link 
 rather than maintaining unnecessary copies. No agent instruction authorizes instrument use just because an
 environment is available; current owner permission is still required.
 
+### What are Copilot skills?
+
+A **skill** is a short instruction pack for one task, such as authoring a test or understanding a report.
+An agent is a role; a skill is a procedure that the role can follow. For example, `test-author` uses
+`grf-author-test` to go from a brief to a pending-review test, then run lint, drift and the mock.
+
+GRF and every new `grf init` product contain generic skills in `.github\skills`. You can ask normally, or name one:
+`Use the grf-getting-started skill and explain how to run the mock demo.` Skills do not run by themselves and do
+not grant permission. See [Copilot skills](SKILLS.md) for the full list and usage instructions.
+
 ### Example: how an SMM test would use GRF
 
 The following is an illustrative workflow, not a claim about a particular existing SMM test or keyword:

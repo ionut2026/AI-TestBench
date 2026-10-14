@@ -91,6 +91,8 @@ including parallel pabot execution and mock non-evidence metadata.
 Windows setup tests check explicit errors for missing Python, an unsupported interpreter, missing checkout
 metadata, incomplete environments and failed installation commands without downloading dependencies or running products.
 They also verify that a nonexistent explicit Python path fails without invoking PowerShell command discovery.
+Skill tests check frontmatter, required safety rules, starter registration, agent skill references and that GRF's
+shared skills match `grf init` output. See [Copilot skills](SKILLS.md#change-a-skill).
 
 ## Wheel-only smoke run
 

@@ -63,6 +63,7 @@ example. Both examples use the real catalog/report pipeline with fake input; nei
 | [Architecture](docs/ARCHITECTURE.md) | Repository/product trees, component ownership and execution flow |
 | [Configuration](docs/CONFIGURATION.md) | Project discovery, paths, tiers, plugins and external Windchill integration |
 | [Testing](docs/TESTING.md) | Traceability, human review, evidence rules, mutation testing and validation commands |
+| [Copilot skills](docs/SKILLS.md) | Available GRF skills, how to invoke them, product copies and safety limits |
 | [Repositories](docs/REPOSITORIES.md) | Independent repositories and data ownership |
 | [Contributing](CONTRIBUTING.md) | Change scope, documentation maintenance, compatibility and review policy |
 | [Changelog](CHANGELOG.md) | User-visible changes and migration notes |
