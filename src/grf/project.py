@@ -90,8 +90,12 @@ class Project:
             raise ProjectError(str(err)) from err
 
     def _validate(self) -> None:
+        from grf.acceptance import validate_policy
+
         for section in self.data:
             self._section(section)
+        acceptance = table(self._section("acceptance"), "[acceptance]", {"policy"})
+        validate_policy(acceptance.get("policy", {}))
         for section, keys in {
             "framework": {"version"},
             "operator": {"capabilities"},

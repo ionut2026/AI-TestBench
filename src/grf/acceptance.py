@@ -248,6 +248,38 @@ def load_request(path: Path, tiers: dict[str, Any] | None = None, components: li
         raise RequestError(f"{path}: {err}") from err
 
 
+def validate_policy(policy: Any) -> dict:
+    """Validate optional project-owned request restrictions independently of a request."""
+    from grf.validation import table, text
+
+    table(policy, "[acceptance.policy]", {"require_source_revision", "require_catalog_sha256", "literal_tests",
+                                        "allow_known_failures", "runtime_identity"})
+    for name in ("require_source_revision", "require_catalog_sha256", "literal_tests", "allow_known_failures"):
+        if name in policy and type(policy[name]) is not bool:
+            raise ValueError(f"[acceptance.policy] {name} must be a boolean")
+    for name, value in table(policy.get("runtime_identity", {}), "[acceptance.policy] runtime_identity").items():
+        text(name, "[acceptance.policy] runtime_identity component")
+        if type(value) is not bool:
+            raise ValueError(f"[acceptance.policy] runtime_identity {name} must be a boolean")
+    return policy
+
+
+def require_policy(request: RunRequest, policy: dict) -> None:
+    """Apply configured site restrictions at validation, run and gate boundaries."""
+    policy = validate_policy(policy)
+    if policy.get("require_source_revision") and not request.source_revision:
+        raise RequestError("acceptance policy requires source_revision")
+    if policy.get("require_catalog_sha256") and not request.catalog_sha256:
+        raise RequestError("acceptance policy requires catalog_sha256")
+    if policy.get("allow_known_failures") is False and request.allow_known_failures:
+        raise RequestError("acceptance policy forbids allow_known_failures")
+    if policy.get("literal_tests") and any(re.search(r"[*?\[\]]", name) for name in (*request.tests, *request.allowed_skips)):
+        raise RequestError("acceptance policy forbids wildcard-looking test names")
+    for component in request.components:
+        if policy.get("runtime_identity", {}).get(component.name) and not component.runtime_identity:
+            raise RequestError(f"acceptance policy requires runtime identity for {component.name}")
+
+
 def file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 

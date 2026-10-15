@@ -57,6 +57,9 @@ The starter supplies the referenced files and plugin. See `examples\demo\grf.tom
 
 ## Configuration sections
 
+Optional `[acceptance.policy]` restrictions apply consistently to request validation, requested runs and
+acceptance. See [the canonical policy schema](WORKFLOWS.md#project-acceptance-policy). sections
+
 | Section | Purpose |
 |---|---|
 | `[project]` | `name`, `product`, `cli` (default `grf`), `spec_prefix` (default `SPEC`), `rule_prefix`/`env_prefix` (default `GRF`), optional `module:attribute` plugin |

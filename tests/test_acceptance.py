@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from grf import cli
-from grf.acceptance import RequestError, evaluate, parse_request
+from grf.acceptance import RequestError, evaluate, parse_request, require_policy, validate_policy
 from grf.pipeline import drift
 from grf.reservation import ReservationError, exclusive
 
@@ -67,6 +67,35 @@ def test_valid_request():
 def test_invalid_requests_are_rejected(change, message):
     with pytest.raises(RequestError, match=message):
         parse_request(request_data(**change), TIERS, ["widgetd"])
+
+
+@pytest.mark.parametrize("policy,message", [
+    ({"require_source_revision": True}, "source_revision"),
+    ({"require_catalog_sha256": True}, "catalog_sha256"),
+    ({"allow_known_failures": False}, "known_failures"),
+    ({"literal_tests": True}, "wildcard"),
+    ({"runtime_identity": {"widgetd": True}}, "runtime identity"),
+])
+def test_acceptance_policy_cannot_be_relaxed_by_request(policy, message):
+    data = request_data(selection={"tests": ["Pattern*"]}, acceptance={"allow_known_failures": True},
+                        component=[{"name": "widgetd", "runtime_identity": False}])
+    with pytest.raises(RequestError, match=message):
+        require_policy(parse_request(data), policy)
+
+
+@pytest.mark.parametrize("policy", [[], {"typo": False}, {"literal_tests": "true"},
+                                   {"runtime_identity": []}, {"runtime_identity": {"app": 1}}])
+def test_malformed_acceptance_policy_fails_early(policy):
+    with pytest.raises(ValueError):
+        validate_policy(policy)
+
+
+def test_project_validation_checks_acceptance_policy(widget):
+    from grf.project import ProjectError
+
+    widget.data["acceptance"] = {"policy": {"require_source_revision": "true"}}
+    with pytest.raises(ProjectError, match="boolean"):
+        widget.validate()
 
 
 # ---------------------------------------------------------------- gate

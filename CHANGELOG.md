@@ -6,6 +6,9 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Add optional `[acceptance.policy]` source/catalog pin requirements, known-failure restriction,
+  wildcard-looking name rejection and per-component required runtime identity, enforced by all request commands.
+
 - Add `run --request` with exact specification/test-name selection, request snapshot and protected digest/
   version metadata. Validate expiry, tier, optional source/catalog pins and supplied deployment identities
   before capability discovery or Robot actions; reject additional Robot selectors/pre-run modifiers.

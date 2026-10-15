@@ -158,6 +158,28 @@ and records to the same execution. Without source pins, the gate cannot prove Py
 it inspects the current checkout, not an authenticated execution-time snapshot.
 Equal runtime versions cannot prove physical board, artifact-byte identity or correct functionality.
 
+## Project acceptance policy
+
+Products can tighten requests in `grf.toml`; the same policy applies to `request check`, `run --request`
+and `gate`, before execution/evaluation. For example:
+
+```toml
+[acceptance.policy]
+require_source_revision = true
+require_catalog_sha256 = true
+literal_tests = true
+allow_known_failures = false
+runtime_identity = { app = true }
+```
+
+Every option is optional. Required pins reject requests omitting them; `allow_known_failures = false`
+prevents a request from opting into known failures. `literal_tests = true` rejects wildcard-looking
+characters (`*`, `?`, brackets) in named tests/allowed skips to catch accidental pattern intent, even though
+request selection itself always matches names literally. A `runtime_identity` value of `true` requires that
+component's runtime check whenever it is requested; `false` imposes no additional restriction.
+Policies cannot authenticate an owner, protect source/configuration or establish a site reservation.
+Unknown policy fields/types fail project loading rather than being silently ignored.
+
 ## Product identity hooks
 
 `ProductPlugin` provides:

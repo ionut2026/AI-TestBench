@@ -451,10 +451,12 @@ def cmd_mutate(args) -> int:
 
 
 def _load_request(path: str):
-    from grf.acceptance import load_request
+    from grf.acceptance import load_request, require_policy
 
     p = project.current()
-    return load_request(Path(path), p.tiers, [c.name for c in p.plugin.deploy_components()])
+    request = load_request(Path(path), p.tiers, [c.name for c in p.plugin.deploy_components()])
+    require_policy(request, p.data.get("acceptance", {}).get("policy", {}))
+    return request
 
 
 def cmd_request(args) -> int:
