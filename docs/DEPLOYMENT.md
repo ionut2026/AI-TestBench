@@ -30,6 +30,13 @@ Who owns what:
 
 ## How a deployment works
 
+Lock initialization, stale takeover and release are serialized by a short-lived
+`.grf-deploy.lock.guard` directory. Release checks the operation's owner token. Missing
+or unreadable timestamps/tokens are not evidence of a stale lock: `--break-stale-lock`
+never breaks initializing or legacy locks. An abandoned guard or incomplete lock
+requires board-owner inspection and manual recovery, not another automated takeover.
+Do not mix old and new GRF lock implementations on the same board during migration.
+
 The installed version is derived from the image actually loaded on the board, never merely
 from its tarball filename. A filename/image-tag disagreement fails and restores the previous
 container rather than recording fabricated installed identity.

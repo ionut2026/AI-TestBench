@@ -6,6 +6,10 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Serialize deployment-lock initialization/takeover/release and require the matching owner token
+  on release. Incomplete/legacy metadata is never automatically stale. **Migration:** commission
+  one GRF version per board; board owners must inspect abandoned guard/legacy locks manually.
+
 - Split product identity policy into `installed_matches` (requested versus installed builds)
   and `runtime_matches` (installed build versus runtime observation). The Robot deployment binding
   now shares the runtime policy with acceptance. **Migration:** legacy `identity_matches` overrides

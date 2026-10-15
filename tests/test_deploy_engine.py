@@ -147,7 +147,7 @@ def test_a_held_lock_stops_the_deployment(board, tmp_path):
 
 
 def test_a_stale_lock_needs_break_stale_lock(board, tmp_path):
-    board.add_file(f"{WD}/.grf-deploy.lock/owner.json", text='{"user": "crashed"}')
+    board.add_file(f"{WD}/.grf-deploy.lock/owner.json", text='{"user": "crashed", "token": "old"}')
     board.lock_age = 99999
     record = deploy(board, tmp_path, local_tar=tarball(tmp_path, board=board))
     assert record.outcome == Outcome.LOCKED and "--break-stale-lock" in record.message

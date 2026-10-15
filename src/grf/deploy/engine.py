@@ -193,6 +193,7 @@ class Deployment:
             record.trigger = "rollback"
         record.dry_run = options.dry_run
         locked = False
+        owner = self.lock_owner()
         try:
             if options.sha256 is not None:
                 if not isinstance(options.sha256, str) or not _SHA.fullmatch(options.sha256):
@@ -221,7 +222,7 @@ class Deployment:
                 return record
             with self.step("lock the board"):
                 assert self.t is not None
-                lock.acquire(self.t, self.wd, self.lock_owner(), self.site.lock_ttl_s, options.break_stale_lock, self.log)
+                lock.acquire(self.t, self.wd, owner, self.site.lock_ttl_s, options.break_stale_lock, self.log)
                 locked = True
             self.change(artifact, info, options)
         except DeployError as err:
@@ -239,7 +240,7 @@ class Deployment:
         finally:
             if locked and self.t is not None:
                 try:
-                    lock.release(self.t, self.wd)
+                    lock.release(self.t, self.wd, owner["token"])
                 except Exception as err:  # noqa: BLE001 - the record must still be written
                     self.log(f"WARNING: could not release the board lock: {err}")
             if self.t is not None:

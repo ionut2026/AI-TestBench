@@ -192,6 +192,12 @@ class FakeBoard:
                 return CommandResult(1, "", "File exists")
             self.add_file(argv[1] + "/.dir", text="")
             return ok
+        if argv[0] == "rmdir":
+            path = argv[1] + "/.dir"
+            if path not in self.files:
+                return no
+            del self.files[path]
+            return ok
         if argv[:2] == ["rm", "-rf"]:
             path = argv[-1]
             self.files = {p: e for p, e in self.files.items() if p != path and not p.startswith(path + "/")}
