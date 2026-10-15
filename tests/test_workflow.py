@@ -64,12 +64,13 @@ valid_until = {dt.date.today() + dt.timedelta(days=1)}
 
         def __init__(self, project, component, site, target, **kwargs):
             self.name, self.target, self.component, self.site = component.name, target, component, site
+            self.trigger = kwargs["trigger"]
 
         def deploy(self, options):
             calls.append(("plan" if options.dry_run else "deploy", options.build, options.sha256))
             self.order.append(("plan" if options.dry_run else "deploy", self.name))
             self.options.append((self.name, options))
-            return DeployRecord("Widget", self.name, self.target.name, self.target.host, "manual", dry_run=options.dry_run,
+            return DeployRecord("Widget", self.name, self.target.name, self.target.host, self.trigger, dry_run=options.dry_run,
                                 outcome=Outcome.DRY_RUN if options.dry_run else
                                     Outcome.PREFLIGHT_FAILED if self.fail_deploy else Outcome.DEPLOYED,
                                 artifact=ArtifactRef(self.name, "jenkins", "app_1.2.3.tar.gz", version="1.2.3",
@@ -104,6 +105,60 @@ def test_bounded_workflow_pins_every_stage_and_keeps_exact_snapshot(flow):
     journal = [json.loads(line) for line in (args.outdir / "workflow.jsonl").read_text(encoding="utf-8").splitlines()]
     assert journal[-1]["stage"] == "evaluated" and journal[-1]["gateCode"] == 0
     assert next(item for item in journal if item["stage"] == "promoted")["artifacts"][0]["build"] == 7
+    assert all(item["trigger"] == "manual" for item in journal)
+
+
+@pytest.mark.parametrize("trigger", ["cli", "manual", "nightly"])
+def test_workflow_trigger_is_preserved_in_plans_records_and_journal(flow, trigger):
+    args = flow[1]
+    args.trigger = trigger
+    assert execute(flow) == 0
+    for stage in ("plan", "deploy"):
+        record = json.loads((args.outdir / stage / "app" / "deployment.json").read_text(encoding="utf-8"))
+        assert record["trigger"] == trigger
+    journal = [json.loads(line) for line in (args.outdir / "workflow.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert journal and all(item["trigger"] == trigger for item in journal)
+
+
+@pytest.mark.parametrize("trigger", ["", "scheduled", "NIGHTLY", None])
+def test_invalid_workflow_trigger_fails_before_side_effects(flow, trigger):
+    flow[1].trigger = trigger
+    with pytest.raises(ValueError, match="workflow trigger"):
+        execute(flow)
+    assert not flow[4] and not flow[1].outdir.exists()
+
+
+@pytest.mark.parametrize("stage", ["plan", "deploy"])
+def test_workflow_rejects_mislabeled_trigger_records(flow, stage):
+    flow[1].trigger = "nightly"
+    deployment = flow[2]
+    original = deployment.deploy
+
+    def deploy(self, options):
+        record = original(self, options)
+        if options.dry_run == (stage == "plan"):
+            record.trigger = "manual"
+        return record
+
+    deployment.deploy = deploy
+    with pytest.raises(ValueError, match="trigger differs"):
+        execute(flow)
+    assert all(call[0] not in ("run", "gate") for call in flow[4])
+
+
+def test_workflow_trigger_parser_uses_deploy_choices_and_manual_default():
+    from grf.deploy.cli import TRIGGERS
+
+    parser = argparse.ArgumentParser()
+    workflow.add_parser(parser.add_subparsers())
+    argv = ["workflow", "deploy-and-test", "--request", "request.toml",
+            "--request-sha256", SHA, "--outdir", "new"]
+    assert parser.parse_args(argv).trigger == "manual"
+    for trigger in TRIGGERS:
+        assert parser.parse_args([*argv, "--trigger", trigger]).trigger == trigger
+    with pytest.raises(SystemExit) as err:
+        parser.parse_args([*argv, "--trigger", "invalid"])
+    assert err.value.code == 2
 
 
 @pytest.mark.parametrize("run_code", [1, 2, 252])

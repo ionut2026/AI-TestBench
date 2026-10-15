@@ -28,9 +28,7 @@ from grf.deploy.branches import resolve_branches
 from grf.deploy.config import SiteConfig, config_env, load
 from grf.deploy.engine import Deployment, Options
 from grf.deploy.jenkins import Jenkins
-from grf.deploy.model import EXIT_CODES, Component, DeployError, Outcome
-
-TRIGGERS = ("cli", "manual", "nightly")
+from grf.deploy.model import EXIT_CODES, TRIGGERS, Component, DeployError, Outcome
 
 
 def add_parser(sub: argparse._SubParsersAction, env_prefix: str) -> None:

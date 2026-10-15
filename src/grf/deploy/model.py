@@ -10,6 +10,8 @@ from typing import Any
 
 from grf.validation import integer, number
 
+TRIGGERS = ("cli", "manual", "nightly")
+
 
 class Outcome(StrEnum):
     DEPLOYED = "DEPLOYED"  # the new build runs and passed health, version and configuration checks

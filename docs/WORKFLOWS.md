@@ -234,6 +234,12 @@ Run from the pinned product checkout only after site commissioning and owner aut
 grf workflow deploy-and-test --yes --request <protected-request-file> --request-sha256 <approved-digest> --config <external-site-config> --outdir results\workflow-<unique-run-id>
 ```
 
+Append `--trigger nightly` for a scheduled nightly invocation. The validated choices are `cli`, `manual`
+and `nightly`, shared with `deploy run`; the workflow defaults to `manual` for compatibility.
+The resolved value is passed to every planning and deployment stage, retained as `trigger` in both sets
+of deployment records and every `workflow.jsonl` event, and checked against returned records before proceeding.
+This is a recorded launch category, not authentication, scheduling or owner authorization.
+
 Components can use different Jenkins branches. Configure `[deploy.branches]` in `grf.toml`, with the existing
 `[deploy] default_branch` as fallback, or append repeatable overrides such as
 `--branch app=release/app --branch controller=release/controller`. Selection is resolved once before planning

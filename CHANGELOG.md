@@ -4,6 +4,12 @@ GRF uses Semantic Versioning. Additive public APIs use a minor release; compatib
 Before 1.0, incompatible API changes also require a minor release. Release tags are `vMAJOR.MINOR.PATCH`.
 Tags and publication are explicit maintainer actions.
 
+## 0.4.2
+
+- Fix nightly workflow provenance: `workflow deploy-and-test --trigger cli|manual|nightly` uses the same
+  validated choices as `deploy run`, defaulting to `manual` for compatibility. Preserve the selected trigger
+  in all plan/deployment records and journal events; reject mislabeled records before proceeding.
+
 ## 0.4.1
 
 - Fix deployment/workflow branch selection for independent Jenkins component jobs. Add optional

@@ -18,7 +18,7 @@ from grf.deploy.branches import resolve_branches
 from grf.deploy.config import load as load_site
 from grf.deploy.engine import Deployment, Options
 from grf.deploy.jenkins import job_url
-from grf.deploy.model import EXIT_CODES, DeployError, Outcome
+from grf.deploy.model import EXIT_CODES, TRIGGERS, DeployError, Outcome
 from grf.deploy.record import load_records
 from grf.selection import select
 
@@ -37,12 +37,17 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
                      help="repeatable per-component Jenkins branch override")
     cmd.add_argument("--outdir", type=Path, required=True, help="new workflow directory; must not exist")
     cmd.add_argument("--operator", choices=("none", "console", "dialog"), default="none")
+    cmd.add_argument("--trigger", choices=TRIGGERS, default="manual",
+                     help="recorded launch category (default: manual); not authorization")
     cmd.add_argument("--yes", action="store_true", help="confirm owner authorization; never grants it")
 
 
 def deploy_and_test(args: argparse.Namespace, project: Project, invoke: Callable[[list[str]], int], *,
                     deployment_factory=Deployment) -> int:
     """Plan all pinned artifacts, deploy, verify records, run the exact request and always attempt its gate."""
+    trigger = getattr(args, "trigger", "manual")
+    if trigger not in TRIGGERS:
+        raise ValueError(f"workflow trigger must be one of {', '.join(TRIGGERS)}")
     if not args.yes:
         raise ValueError("workflow changes the instrument; --yes requires the instrument owner's authorization")
     project.require_framework()
@@ -90,7 +95,7 @@ def deploy_and_test(args: argparse.Namespace, project: Project, invoke: Callable
     with (root / "workflow.jsonl").open("x", encoding="utf-8") as journal:
         def event(stage: str, **values) -> None:
             journal.write(json.dumps({"stage": stage, "at": dt.datetime.now(dt.UTC).isoformat(),
-                                      "requestSha256": request.sha256, **values}) + "\n")
+                                      "requestSha256": request.sha256, "trigger": trigger, **values}) + "\n")
             journal.flush()
             os.fsync(journal.fileno())
 
@@ -109,11 +114,13 @@ def deploy_and_test(args: argparse.Namespace, project: Project, invoke: Callable
                 out = root / ("plan" if dry_run else "deploy") / name
                 event("planning" if dry_run else "deploying", component=name, branch=branches[name], jobUrl=jobs[name])
                 deployment = deployment_factory(project.name, components[name], site, targets[name], work_dir=out,
-                                                trigger="manual")
+                                                trigger=trigger)
                 record = deployment.deploy(Options(build=str(component_request.build), sha256=component_request.sha256,
                                                    branch=branches[name], dry_run=dry_run))
                 path = record.write(out, site.audit_log)
                 data = load_records([path])[0]
+                if data.get("trigger") != trigger:
+                    raise ValueError(f"deployment {name}: trigger differs from the resolved workflow trigger")
                 code = EXIT_CODES[record.outcome or Outcome.FAILED]
                 if code or (dry_run and record.outcome != Outcome.DRY_RUN):
                     event("stopped", component=name, outcome=str(record.outcome), code=code or 2)
