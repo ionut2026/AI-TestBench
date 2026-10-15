@@ -122,6 +122,9 @@ The reusable workflow's optional `python-version` input selects one version when
 Regression tests cover configuration, capabilities, version pins, timing boundaries, human reviews, reporting,
 mutation orchestration, nested resources, MCP response contracts and a generated product's real CLI/Robot flow,
 including parallel pabot execution and mock non-evidence metadata.
+Neutral catalog/brief/drift/hash-migration contracts are owned here (`test_pipeline.py`, `test_briefs.py`),
+not in a consuming product. Product doctor checks, protocol schema sections and product keyword documentation
+remain product-owned; generic tests inject a neutral plugin/project instead.
 Windows setup tests check explicit errors for missing Python, an unsupported interpreter, missing checkout
 metadata, incomplete environments and failed installation commands without downloading dependencies or running products.
 They also verify that a nonexistent explicit Python path fails without invoking PowerShell command discovery.

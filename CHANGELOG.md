@@ -6,6 +6,9 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Own neutral catalog/brief/drift/hash-migration regressions in GRF rather than relying on consumer tests;
+  use synthetic project/plugin fixtures with no product protocols, service or instrument dependencies.
+
 - Replace product-specific examples in reusable Python docstrings/starter guidance with neutral application
   and site concepts. Product protocols, states, adapters and the state/request matrix remain product-owned.
 
