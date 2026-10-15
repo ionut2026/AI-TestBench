@@ -265,6 +265,50 @@ An instrument used from several computers needs the site's central controller lo
 testing. Neither a request file nor a local lock grants permission to use it.
 These are advanced product workflows, not prerequisites for the demo. See [Workflows](WORKFLOWS.md).
 
+### What do the 0.4 changes mean for a new user?
+
+You can still begin with the mock counter below; you do not need an instrument, Jenkins or a run request.
+For real product testing, a **run request** says which tests and software are intended, while the
+**acceptance gate** checks the saved run against that request. In 0.4, a passing test alone is not enough:
+the product adapter must also supply evidence that setup, cleanup, the intended target and all required
+assertions were checked, alongside current human review. Missing evidence must not silently count as success.
+See [run requests and acceptance](WORKFLOWS.md) for the maintained commands and product-owner responsibilities;
+a mock PASS never proves a real product works.
+
+### Why choose a Jenkins branch for each component?
+
+A **component** is one separately deployable application. Two components may take their builds from
+different source branches in Jenkins. Product maintainers can set `[deploy.branches]` in `grf.toml`, or
+override one invocation with `--branch component=branch`, for example `--branch app=release/app`.
+An override selects the source of the build; it does not switch your local Git branch. These deployment
+options belong to an owner-authorized product workflow, not the counter demo.
+See [branch selection and fallback rules](CONFIGURATION.md#deployment-branch-selection-041).
+
+### What does the workflow trigger mean?
+
+`--trigger manual` labels a workflow started manually; `--trigger nightly` labels one started by a nightly
+controller job. The workflow defaults to `manual` and also accepts `cli` for a command-line launch.
+The label is saved in planning, deployment and workflow records so readers know how the run was started.
+It does **not** schedule a job or grant instrument permission. Maintainers append it to
+`grf workflow deploy-and-test` from the product checkout, only for an already authorized run.
+See [the workflow reference](WORKFLOWS.md#maintained-deploy-and-test-workflow) for the complete command.
+
+### Why can a machine-wide resource lock refuse a run?
+
+A **resource** is something runs must not use at the same time, such as a network port, broker or service.
+The optional machine-wide lock lets product controllers reserve a named set across different checkouts
+on one computer. `[hostlock]` selects their shared directory; product code must explicitly use the API.
+It is separate from the automatic per-tier lock and is not needed for the counter demo.
+
+A refusal can look like `resources are owned by a live process: ... run 'run-1', lease ..., heartbeat ...`;
+the diagnostic includes the owner's host, user, PID (process identifier) and creation time.
+Wait for that run to finish or ask its owner to investigate. Do not delete lock files or kill a process
+just to clear the message: even after a crash, leftover services may need owner-approved cleanup.
+An inaccessible owner also blocks reuse rather than guessing. Site maintainers handle shared-directory
+permissions and uncertain ownership; an old heartbeat alone does not mean it is safe to take over.
+See [directory configuration](CONFIGURATION.md#host-wide-resource-directory) and
+[ownership and recovery rules](WORKFLOWS.md#host-wide-named-resources-043).
+
 ### What GRF does not do
 
 GRF does not invent specifications, automatically guarantee test coverage, understand every product's

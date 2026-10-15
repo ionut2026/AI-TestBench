@@ -4,7 +4,7 @@ GRF uses Semantic Versioning. Additive public APIs use a minor release; compatib
 Before 1.0, incompatible API changes also require a minor release. Release tags are `vMAJOR.MINOR.PATCH`.
 Tags and publication are explicit maintainer actions.
 
-## 0.4.3
+## 0.4.3 - 2026-10-15
 
 - Add opt-in public `grf.hostlock.acquire` for atomic same-machine resource sets, owner/run/lease identities,
   explicit monotonic heartbeat and owner-checked idempotent release. Stale recovery requires a provably
@@ -14,13 +14,13 @@ Tags and publication are explicit maintainer actions.
   directory permissions separately. No automatic tier/workflow adoption, distributed leasing, process
   cleanup or instrument authorization is implied. See Workflows and Configuration.
 
-## 0.4.2
+## 0.4.2 - 2026-10-15
 
 - Fix nightly workflow provenance: `workflow deploy-and-test --trigger cli|manual|nightly` uses the same
   validated choices as `deploy run`, defaulting to `manual` for compatibility. Preserve the selected trigger
   in all plan/deployment records and journal events; reject mislabeled records before proceeding.
 
-## 0.4.1
+## 0.4.1 - 2026-10-15
 
 - Fix deployment/workflow branch selection for independent Jenkins component jobs. Add optional
   `[deploy.branches]` and repeatable `--branch COMPONENT=BRANCH`, falling back to the existing global
@@ -33,7 +33,7 @@ Tags and publication are explicit maintainer actions.
   request schema 1 does not itself authorize a branch. See Configuration and Workflows.
 - Include core-owned operator console done/fail/timeout/stale-input/closed-input regression scenarios.
 
-## 0.4.0
+## 0.4.0 - 2026-10-15
 
 - Add owner-authorized `workflow deploy-and-test` with protected request digest, immutable source/catalog pins,
   all-component planning before promotion, exact build/SHA/target record checks, fresh evidence and acceptance
@@ -162,7 +162,7 @@ Tags and publication are explicit maintainer actions.
   Rename ambiguous tests before recording human reviews; one approval cannot cover different test bodies.
 - Derive deployment identity from the loaded image and roll back filename/image-version contradictions.
 
-## 0.3.0 - Unreleased
+## 0.3.0 - 2026-10-15
 
 - Added the opt-in `integration-coordinator` custom agent and `grf-coordinate-integration` shared skill,
   shipped in core, starter templates and demo. They guide affected-repository-only delegation, exact contracts,

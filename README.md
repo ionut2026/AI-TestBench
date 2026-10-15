@@ -1,5 +1,7 @@
 # General Robot Framework (GRF)
 
+Current release: **v0.4.3**. See the [changelog](CHANGELOG.md) for release dates and changes.
+
 **New to Robot Framework? Start with the [beginner walkthrough](docs/GETTING-STARTED.md).**
 It explains the terminology, reads a small test line by line, and guides you through a safe first run.
 
@@ -32,6 +34,9 @@ Set-Location D:\projects\GeneralRobotFramework
 ```
 
 For an existing checkout, skip `git clone` and run the setup command from its root.
+These source-install instructions use the checked-out `main` code, currently v0.4.3; they do not require a
+remote release tag. Setup should print GRF `0.4.3`. Starter products pin `general-robot-framework==0.4.3`;
+that pin requires an approved package source or supplied wheel, not merely a Git tag.
 **Cloning downloads source files; setup installs the packages needed to use them.**
 Git does not execute this script automatically. Setup creates or reuses `.venv`, installs GRF,
 Robot Framework and development tools, checks dependency compatibility, and prints the installed versions
