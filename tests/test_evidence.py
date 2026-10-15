@@ -100,8 +100,9 @@ def test_development_preflight_failure_is_not_ignored(widget, monkeypatch):
     assert cli.main(["run", "--tier", "sim", "--operator", "none"]) == 2
 
 
+@pytest.mark.parametrize("robot_code,expected", [(0, 2), (252, 252)])
 def test_missing_final_integrity_cannot_be_suppressed_by_fail_on_none(
-    widget, tmp_path, monkeypatch, capsys, synthetic_evidence,
+    widget, tmp_path, monkeypatch, capsys, synthetic_evidence, robot_code, expected,
 ):
     suite = tmp_path / "robot" / "suites" / "integrity.robot"
     suite.parent.mkdir(parents=True)
@@ -110,7 +111,14 @@ def test_missing_final_integrity_cannot_be_suppressed_by_fail_on_none(
     env.parent.mkdir()
     env.write_text('TIER = "bench"\n', encoding="utf-8")
     monkeypatch.setattr(widget.plugin, "evidence_checks", lambda *args: checks(failed=FINAL[0]))
+    robot = cli._robot
+
+    def execute(argv, processes):
+        assert robot(argv, processes) == 0
+        return robot_code
+
+    monkeypatch.setattr(cli, "_robot", execute)
     monkeypatch.delenv("WIDGET_RIG_CONTROL", raising=False)
     assert cli.main(["run", "--tier", "bench", "--operator", "none", "--no-report", "--fail-on", "none",
-                     "--outdir", str(tmp_path / "results" / "run")]) == 2
+                     "--outdir", str(tmp_path / "results" / "run")]) == expected
     assert "INVALID EVIDENCE" in capsys.readouterr().err

@@ -2,8 +2,8 @@
 
 Per specification: PASS (every test of the spec ran and passed) / PARTIAL (some passed, others were not run or
 skipped on this tier) / FAIL / SKIP / NOT RUN (tests exist but were excluded from this run) / UNCOVERED /
-DEFERRED / NOT TESTABLE, plus stale-hash warnings. A PASS is only VERIFIED when every test of the spec has had a
-human review (no ``review:pending`` tag). Per requirement and user story: the worst verdict of their in-scope
+DEFERRED / NOT TESTABLE, plus stale-hash warnings. VERIFIED also requires current-content human review,
+validated product integrity/provenance/cleanup and explicit complete assertion coverage. Per requirement and user story: the worst verdict of their in-scope
 specifications.
 
 Per test: failures of tests tagged ``known-issue:<id>`` are KNOWN FAIL, other failures NEW FAIL, and a passing

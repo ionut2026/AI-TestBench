@@ -16,6 +16,7 @@ Tags and publication are explicit maintainer actions.
 - Require product-owned typed evidence preflight before real-tier capability discovery and pure persisted-result
   integrity assessment afterward, including startup, completeness, cleanup, provenance and actual targets.
   Missing checks fail closed even with `--no-report`/`--fail-on none`; old adapters must adopt the evidence hooks.
+- Preserve abnormal Robot execution/cancellation return codes even when persisted evidence is also incomplete.
 - Require explicit required/observed assertion clauses for acceptance and VERIFIED reports; skipped/undeclared
   clauses make coverage PARTIAL. VERIFIED now also requires the current test/dependency fingerprint, not legacy
   hash-only human review. See WORKFLOWS for 0.4 migration and product-owned observability responsibilities.

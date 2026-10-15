@@ -386,7 +386,7 @@ def cmd_run(args, robot_args: list[str]) -> int:
             problems.append("Robot output tier differs from validated run tier")
         if problems:
             print("INVALID EVIDENCE: " + "; ".join(problems), file=sys.stderr)
-            return 2  # --fail-on none/known failures cannot suppress missing integrity or mandatory assertions.
+            return rc if rc < 0 or rc > 250 else 2
     return _exit_code(rc, output, args.fail_on)
 
 
