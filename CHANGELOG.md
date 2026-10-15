@@ -6,6 +6,10 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Validate nested project rig/lint/catalog/mutation settings during load instead of raising late
+  `AttributeError`/`KeyError`. Reject misspelled core fields, including evidence-tier flags.
+  Product-specific settings belong in separate product-owned top-level tables.
+
 - Expose `ProductPlugin.context` / `grf.commands.CommandContext` for command-local scope/catalog,
   suite and review resolution. Core parser construction no longer requires unrelated feature paths
   or registers optional product commands for core commands.

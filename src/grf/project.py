@@ -22,6 +22,8 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from grf.validation import integer, table, text
+
 if TYPE_CHECKING:
     from grf.plugin import ProductPlugin
 
@@ -82,8 +84,23 @@ class Project:
 
     def validate(self) -> None:
         """Reject malformed configuration before a command can select capabilities or run tests."""
+        try:
+            self._validate()
+        except ValueError as err:
+            raise ProjectError(str(err)) from err
+
+    def _validate(self) -> None:
         for section in self.data:
             self._section(section)
+        for section, keys in {
+            "framework": {"version"},
+            "operator": {"capabilities"},
+            "lint": {"tag_rules"},
+            "catalog": {"message_pattern"},
+            "mutation": {"faults_env", "fault_actions"},
+            "deploy": {"order", "default_branch"},
+        }.items():
+            table(self._section(section), f"[{section}]", keys)
         for key in ("name", "cli", "product", "spec_prefix", "rule_prefix", "env_prefix", "plugin"):
             value = self._section("project").get(key)
             if value is not None and (not isinstance(value, str) or not value.strip()):
@@ -101,6 +118,52 @@ class Project:
             self._strings(self._section("operator")["capabilities"], "[operator] capabilities")
         if "deploy" in self.data:
             _ = self.deploy_order, self.deploy_branch
+        for key, value in self._section("framework").items():
+            if key == "version":
+                text(value, "[framework] version")
+        rig = table(self._section("rig"), "[rig]",
+                    {"targets", "ready_ports", "log_capability", "log_files", "log_pattern"})
+        self._string_map(rig.get("targets", {}), "[rig] targets")
+        for name, port in table(rig.get("ready_ports", {}), "[rig] ready_ports").items():
+            text(name, "[rig] ready_ports target")
+            integer(port, f"[rig] ready_ports {name}", minimum=1, maximum=65535)
+        for key in ("log_capability", "log_files", "log_pattern"):
+            if key in rig:
+                text(rig[key], f"[rig] {key}")
+        rules = self._section("lint").get("tag_rules", [])
+        if not isinstance(rules, list):
+            raise ProjectError("[lint] tag_rules must be a list of tables")
+        for index, rule in enumerate(rules):
+            where = f"[lint] tag_rules[{index}]"
+            table(rule, where, {"rule", "tag", "keywords", "also", "satisfied_by", "what"})
+            integer(rule.get("rule"), f"{where} rule", minimum=1)
+            text(rule.get("tag"), f"{where} tag")
+            for key in ("keywords", "also", "satisfied_by"):
+                self._strings(rule.get(key, []), f"{where} {key}")
+            if "what" in rule:
+                text(rule["what"], f"{where} what")
+        pattern = self._section("catalog").get("message_pattern")
+        if pattern is not None:
+            text(pattern, "[catalog] message_pattern")
+            try:
+                re.compile(pattern)
+            except re.error as err:
+                raise ProjectError(f"[catalog] message_pattern is invalid: {err}") from err
+        mutation = self._section("mutation")
+        if "fault_actions" in mutation:
+            self._strings(mutation["fault_actions"], "[mutation] fault_actions")
+        if "faults_env" in mutation:
+            text(mutation["faults_env"], "[mutation] faults_env")
+        if not all(isinstance(value, str) for value in self._section("texts").values()):
+            raise ProjectError("[texts] values must be strings")
+
+    @staticmethod
+    def _string_map(value: Any, where: str) -> dict[str, str]:
+        mapping = table(value, where)
+        for key, item in mapping.items():
+            text(key, where + " key")
+            text(item, f"{where} {key}")
+        return mapping
 
     def require_framework(self) -> None:
         """Fail before evidence execution/acceptance when the installed distribution violates its pin."""
@@ -202,6 +265,7 @@ class Project:
         for name, t in self._section("tiers").items():
             if not name.strip() or not isinstance(t, dict):
                 raise ProjectError(f"[tiers.{name}] must be a table with a nonempty name")
+            table(t, f"[tiers.{name}]", {"capabilities", "evidence", "parallel", "rig_control", "lock"})
             for key in ("evidence", "parallel", "rig_control"):
                 if key in t and not isinstance(t[key], bool):
                     raise ProjectError(f"[tiers.{name}] {key} must be a boolean")
@@ -241,7 +305,7 @@ class Project:
     @property
     def rig_targets(self) -> dict[str, str]:
         """Rig control restart targets -> the capability they give (``appsmm`` -> ``restart``)."""
-        return {str(k): str(v) for k, v in (self._section("rig").get("targets") or {}).items()}
+        return self._string_map(self._section("rig").get("targets", {}), "[rig] targets")
 
     @property
     def rig_ready_ports(self) -> dict[str, int]:

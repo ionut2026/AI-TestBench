@@ -107,6 +107,21 @@ def test_invalid_configuration(tmp_path):
     ("[tiers.sim]\ncapabilities = 'reset'", "capabilities.*nonempty strings"),
     ("[capabilities]\n'needs:reset' = false", "capability names"),
     ("[operator]\ncapabilities = 'operator'", "capabilities.*nonempty strings"),
+    ("[rig]\ntargets = []", "targets.*table"),
+    ("[rig.targets]\nwidgetd = false", "widgetd.*nonempty"),
+    ("[rig.ready_ports]\nwidgetd = true", "widgetd.*integer"),
+    ("[rig.ready_ports]\nwidgetd = 65536", "widgetd.*integer"),
+    ("[rig]\nlog_files = 1", "log_files.*nonempty"),
+    ("[[lint.tag_rules]]\ntag = 'needs:reset'", "rule.*integer"),
+    ("[[lint.tag_rules]]\nrule = true\ntag = 'x'", "rule.*integer"),
+    ("[[lint.tag_rules]]\nrule = 1", "tag.*nonempty"),
+    ("[[lint.tag_rules]]\nrule=1\ntag='x'\nkeywords=2", "keywords.*nonempty strings"),
+    ("[lint]\ntag_rules = false", "tag_rules.*list"),
+    ("[catalog]\nmessage_pattern = '['", "message_pattern.*invalid"),
+    ("[mutation]\nfault_actions = 'drop'", "fault_actions.*nonempty strings"),
+    ("[tiers.bench]\nevidnce=false", "unknown.*evidnce"),
+    ("[texts]\nnon_evidence = []", "values.*strings"),
+    ("[framework]\nversion = 42", "version.*nonempty"),
 ])
 def test_malformed_values_rejected_at_load(tmp_path, text, diagnostic):
     config = tmp_path / "grf.toml"

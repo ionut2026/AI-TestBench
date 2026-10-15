@@ -138,6 +138,12 @@ lock TTL must be positive integers. Component stability time cannot exceed its r
 **Migration:** correct misspelled fields or put product-only settings in the product's own configuration;
 GRF no longer silently ignores unknown deployment/SSH rig keys.
 
+Project loading also validates nested rig targets/ports, lint rule tables and required fields,
+catalog regular expressions, mutation settings and exact framework pins. Unknown fields in core
+tier/rig/lint/operator/catalog/mutation/deploy/framework tables are errors (a typo such as
+`evidnce=false` must not accidentally enable evidence). Product-only configuration may use a
+separate top-level table; GRF does not interpret it.
+
 Rig restart validates downtime before stopping anything and always attempts the configured start
 after a failed stop, cancelled wait or other downtime error. If start recovery also fails, both errors
 are reported and the target may need owner recovery. `fetch-log` uses a fresh staging folder for each
