@@ -6,6 +6,12 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Always attempt rig restart recovery after stop/downtime failure or cancellation; report both errors
+  if recovery fails. Reject invalid downtime before stop.
+- Stage each log fetch separately and return only freshly delivered files; reject destination collisions.
+  **Migration:** use a fresh log evidence destination on retries.
+- Require complete finite clock offset/uncertainty and reject contradictory clock samples.
+
 - Validate deployment/rig numeric ranges before operations: finite positive timeouts/load limits,
   nonnegative downtime/stability/free space, valid integer ports/retention/TTL, and correctly typed schema.
   Component stability must fit readiness budget. Reject unknown deployment and SSH rig fields.

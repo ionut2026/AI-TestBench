@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import math
 import os
 import socket
 import subprocess
@@ -159,9 +160,19 @@ class RigSsh:
         if not (section.get("stop") and section.get("start")):
             raise RigSshError(f"restart-{target} is not configured in the rig ssh config")
         port = section.get("port", project.current().rig_ready_ports.get(target))
-        self.remote(section["stop"])
-        self.sleep(down_ms / 1000)
-        self.remote(section["start"])
+        failure: BaseException | None = None
+        try:
+            self.remote(section["stop"])
+            self.sleep(down_ms / 1000)
+        except BaseException as err:
+            failure = err
+        try:
+            self.remote(section["start"])
+        except BaseException as err:
+            prior = f"; stop/downtime also failed: {type(failure).__name__}: {failure}" if failure else ""
+            raise RigSshError(f"recovery start of {target} failed; target may be down: {err}{prior}") from err
+        if failure is not None:
+            raise failure
         if section.get("running"):
             self._until(lambda: self.remote(section["running"], check=False).returncode == 0, f"{target} to run again")
         if port:
@@ -185,6 +196,8 @@ class RigSsh:
             before = self.wall_ms()
             text = self.remote(command, timeout_s=30).stdout.strip()
             after = self.wall_ms()
+            if not math.isfinite(before) or not math.isfinite(after) or after < before:
+                raise RigSshError("local wall clock moved backwards or returned a nonfinite sample")
             try:
                 stamp = dt.datetime.fromisoformat(text.replace(",", "."))
             except ValueError:
@@ -193,7 +206,7 @@ class RigSsh:
             resolution = 1 if "." in text or "," in text else 1000
             low, high = max(low, board - after), min(high, board + resolution - before)
         if low > high:
-            low, high = high, low
+            raise RigSshError("clock sample bounds contradict each other; clock synchronization is unavailable")
         return (low + high) / 2, (high - low) / 2
 
     def remote(self, command: str, check: bool = True, timeout_s: float = 120) -> subprocess.CompletedProcess[str]:

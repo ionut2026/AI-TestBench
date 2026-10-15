@@ -123,6 +123,13 @@ lock TTL must be positive integers. Component stability time cannot exceed its r
 **Migration:** correct misspelled fields or put product-only settings in the product's own configuration;
 GRF no longer silently ignores unknown deployment/SSH rig keys.
 
+Rig restart validates downtime before stopping anything and always attempts the configured start
+after a failed stop, cancelled wait or other downtime error. If start recovery also fails, both errors
+are reported and the target may need owner recovery. `fetch-log` uses a fresh staging folder for each
+invocation and never returns pre-existing destination files or overwrites earlier evidence.
+The `clock` response must contain exactly two finite numbers with nonnegative uncertainty;
+contradictory SSH clock samples are unavailable, not repaired by swapping bounds.
+
 Deployment reads its site config from `<ENV_PREFIX>_DEPLOY_CONFIG` (a file outside the repository), the optional
 Jenkins login from `JENKINS_USER`/`JENKINS_TOKEN` and records for reports from `GRF_DEPLOYMENT_RECORD`; see
 [Deploying builds](DEPLOYMENT.md#environment-variables). Install `general-robot-framework[deploy]` for the default

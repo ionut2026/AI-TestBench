@@ -24,9 +24,11 @@ from ``fetch-log``.
 from __future__ import annotations
 
 import json
+import math
 import os
 import shlex
 import subprocess
+import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -140,23 +142,32 @@ class RigControl:
         """Copies the product's log files into ``dest``; returns the files found there (``[rig] log_files``)."""
         self._require("fetch-log")
         dest.mkdir(parents=True, exist_ok=True)
-        self._run("fetch-log", str(dest))
         pattern = project.current().rig_log_files
-        files = sorted(dest.glob(pattern))
-        if not files:
-            what = pattern.removeprefix("*") if pattern.startswith("*.") else pattern
-            raise RigControlError(f"'{self} fetch-log' copied no {what} file into {dest}")
-        return files
+        with tempfile.TemporaryDirectory(prefix=".grf-fetch-", dir=dest) as directory:
+            stage = Path(directory)
+            self._run("fetch-log", str(stage))
+            files = sorted(file for file in stage.glob(pattern) if file.is_file())
+            if not files:
+                raise RigControlError(f"'{self} fetch-log' copied no fresh {pattern} file into {dest}")
+            targets = [dest / file.relative_to(stage) for file in files]
+            if any(target.exists() for target in targets):
+                raise RigControlError(f"fetch-log refuses to overwrite existing evidence in {dest}; use a fresh destination")
+            for file, target in zip(files, targets, strict=True):
+                target.parent.mkdir(parents=True, exist_ok=True)
+                file.replace(target)
+        return targets
 
     def log_clock_offset(self) -> tuple[float, float]:
         """(offset, uncertainty) in ms of the rig's log clock against this PC's clock (``clock``)."""
         self._require("clock")
         words = self._run("clock", timeout_s=min(self.timeout_s, 60)).split()
         try:
-            offset, uncertainty = float(words[0]), float(words[1]) if len(words) > 1 else 0.0
-        except (IndexError, ValueError):
+            offset, uncertainty = map(float, words)
+            if not math.isfinite(offset) or not math.isfinite(uncertainty) or uncertainty < 0:
+                raise ValueError("nonfinite or negative clock bound")
+        except ValueError:
             raise RigControlError(f"'{self} clock' printed {' '.join(words)!r}, not '<offset_ms> <uncertainty_ms>'") from None
-        return offset, abs(uncertainty)
+        return offset, uncertainty
 
     def _require(self, subcommand: str) -> None:
         if not self.has(subcommand):
