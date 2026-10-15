@@ -4,7 +4,7 @@ GRF uses Semantic Versioning. Additive public APIs use a minor release; compatib
 Before 1.0, incompatible API changes also require a minor release. Release tags are `vMAJOR.MINOR.PATCH`.
 Tags and publication are explicit maintainer actions.
 
-## 0.4.0 - Unreleased
+## 0.4.0
 
 - Add owner-authorized `workflow deploy-and-test` with protected request digest, immutable source/catalog pins,
   all-component planning before promotion, exact build/SHA/target record checks, fresh evidence and acceptance
