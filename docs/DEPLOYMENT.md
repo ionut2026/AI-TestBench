@@ -2,6 +2,7 @@
 
 New to this? Read [What does deploying a build mean?](GETTING-STARTED.md#what-does-deploying-a-build-mean) first.
 This is the reference guide for `<cli> deploy` (`grf deploy` in GRF and the starter, `smm-auto deploy` in SMM).
+Deployment and rig control share [SSH clients, connection settings and host-key policy](CONFIGURATION.md#shared-ssh-transport-and-04-migration).
 
 **Deploying changes the instrument.** A real `deploy run` or `deploy rollback` needs the instrument owner's
 authorization. In Jenkins, *starting the authorized deployment job is that authorization* (only the instrument

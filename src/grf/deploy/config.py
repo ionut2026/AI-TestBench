@@ -16,11 +16,10 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from grf.deploy.model import DeployError
+from grf.ssh import CLIENTS, HOST_KEY_POLICIES, SshConfig, SshError
 from grf.validation import integer, number, table, text
 
 SCHEMA = 1
-HOST_KEY_POLICIES = ("accept-new", "pinned")
-CLIENTS = ("paramiko", "openssh")
 _FORBIDDEN = {"password", "token", "secret", "passphrase"}
 
 
@@ -44,43 +43,18 @@ class JenkinsSettings:
 
 
 @dataclass(frozen=True)
-class Target:
-    name: str
-    host: str
-    user: str
-    port: int = 22
-    client: str = "paramiko"
-    password_env: str | None = None
-    password_file: str | None = None
-    identity: str | None = None
-    known_hosts: str = ""
-    host_key_policy: str = "accept-new"
+class Target(SshConfig):
     workdir: str = "/home/root"
-    connect_timeout_s: float = 15.0
 
     def __post_init__(self) -> None:
-        integer(self.port, f"target {self.name} port", minimum=1, maximum=65535)
-        number(self.connect_timeout_s, f"target {self.name} connect_timeout_s", positive=True)
-        for key in ("name", "host", "user", "known_hosts", "workdir"):
-            text(getattr(self, key), f"target {self.name} {key}")
-        for key in ("password_env", "password_file", "identity"):
-            if getattr(self, key) is not None:
-                text(getattr(self, key), f"target {self.name} {key}")
-        if self.client not in CLIENTS or self.host_key_policy not in HOST_KEY_POLICIES:
-            raise ValueError("target client or host_key_policy is invalid")
+        super().__post_init__()
+        text(self.workdir, f"target {self.name} workdir")
 
     def password(self, env: Mapping[str, str]) -> str | None:
-        if self.password_env:
-            value = env.get(self.password_env)
-            if not value:
-                raise DeployError(f"target {self.name}: the environment variable {self.password_env} (password_env) is not set")
-            return value
-        if self.password_file:
-            try:
-                return Path(self.password_file).read_text(encoding="utf-8").strip()
-            except OSError as err:
-                raise DeployError(f"target {self.name}: cannot read password_file: {err.strerror}") from None
-        return None
+        try:
+            return super().password(env)
+        except SshError as err:
+            raise DeployError(str(err)) from err
 
 
 @dataclass(frozen=True)

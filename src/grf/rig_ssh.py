@@ -6,9 +6,10 @@ it on the board, with its readiness (a
 ``running`` command that exits 0, and/or a ``port`` that accepts connections), and where the product writes its logs
 (with an optional board command that first stages them, e.g. out of a container). Only the parts present in the file
 are offered as capabilities; ``clock`` (the board's log
-clock against this PC's) is always offered and reads the board's time with ``[clock] command``. Two clients: OpenSSH (``client = "openssh"``, the default; ssh and scp with ``BatchMode=yes``, key
-authentication only) and PuTTY (``client = "plink"``; plink and pscp with ``-batch``, a key or a password read from
-``password_file``, a file outside the repository that only the site's operator writes). Neither ever prompts::
+clock against this PC's) is always offered and reads the board's time with ``[clock] command``.
+OpenSSH (default, keys only) and Paramiko (key or external password source) share deployment's
+``grf.ssh`` transport, explicit ``known_hosts`` and host-key policy. PuTTY configs require migration.
+Neither client prompts::
 
     $env:PRODUCT_RIG_CONTROL = '"<project>\\.venv\\Scripts\\python.exe" -m grf.rig_ssh --config D:\\rig\\rig_ssh.toml'
 """
@@ -19,18 +20,21 @@ import argparse
 import datetime as dt
 import math
 import os
+import shlex
 import socket
 import subprocess
 import sys
 import time
 import tomllib
 from collections.abc import Callable, Sequence
-from pathlib import Path
+from dataclasses import fields
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from grf import project
 from grf.deadline import Deadline
 from grf.process import run as run_process
+from grf.ssh import OpenSshTransport, SshConfig, SshError, Transport, open_transport
 from grf.validation import integer, number, table, text
 
 
@@ -68,56 +72,38 @@ def _port_open(host: str, port: int, timeout_s: float) -> bool:
 class RigSsh:
     def __init__(self, config: dict[str, Any], run: Runner = _run, sleep: Callable[[float], None] = time.sleep,
                  port_open: Callable[[str, int, float], bool] = _port_open, clock: Callable[[], float] = time.monotonic,
-                 wall_ms: Callable[[], float] = lambda: time.time() * 1000):
+                 wall_ms: Callable[[], float] = lambda: time.time() * 1000, connection: Transport | None = None):
         try:
             self._validate(config)
-        except ValueError as err:
+            connection_keys = {field.name for field in fields(SshConfig)} - {"name"}
+            settings = {key: value for key, value in config.items() if key in connection_keys}
+            settings.setdefault("client", "openssh")
+            settings.setdefault("host_key_policy", "pinned")
+            target = SshConfig(name="rig", **settings)
+            for key in ("known_hosts", "identity", "password_file"):
+                value = getattr(target, key)
+                if value and Path(value).resolve().is_relative_to(project.current().root.resolve()):
+                    raise ValueError(f"{key} must be outside the product repository")
+            self.transport = connection or (OpenSshTransport(target, runner=run) if target.client == "openssh"
+                                           else open_transport(target, os.environ))
+        except (ValueError, SshError) as err:
             raise RigSshError(str(err)) from err
         self.config = config
-        self.host = str(config.get("host") or "")
-        if not self.host:
-            raise RigSshError("the rig ssh config needs 'host'")
-        user = str(config.get("user") or "")
-        self.client = str(config.get("client", "openssh"))
-        if self.client == "openssh":
-            self.target = f"{user}@{self.host}" if user else self.host
-            self.options = ["-o", "BatchMode=yes", "-o", f"ConnectTimeout={int(config.get('connect_timeout_s', 10))}"]
-            if config.get("port"):
-                self.options += ["-o", f"Port={int(config['port'])}"]
-            if config.get("identity"):
-                self.options += ["-i", str(config["identity"])]
-            self.ssh = str(config.get("ssh", "ssh"))
-            self.scp = str(config.get("scp", "scp"))
-        elif self.client == "plink":
-            self.target = self.host
-            self.options = ["-batch"]
-            if user:
-                self.options += ["-l", user]
-            if config.get("port"):
-                self.options += ["-P", str(int(config["port"]))]
-            if config.get("identity"):
-                self.options += ["-i", str(config["identity"])]
-            if config.get("hostkey"):
-                self.options += ["-hostkey", str(config["hostkey"])]
-            if config.get("password_file"):
-                password_file = Path(str(config["password_file"]))
-                if not password_file.is_file():
-                    raise RigSshError(f"password_file {password_file} does not exist")
-                self.options += ["-pwfile", str(password_file)]
-            self.ssh = str(config.get("ssh", "plink"))
-            self.scp = str(config.get("scp", "pscp"))
-        else:
-            raise RigSshError(f"client must be 'openssh' or 'plink', not {self.client!r}")
+        self.host = target.host
         self.ready_timeout_s = float(config.get("ready_timeout_s", 180))
         self.run, self.sleep, self.port_open, self.clock, self.wall_ms = run, sleep, port_open, clock, wall_ms
 
     @staticmethod
     def _validate(config: dict) -> None:
         targets = set(project.current().rig_targets)
-        scalar = {"host", "user", "client", "connect_timeout_s", "ready_timeout_s", "port",
-                  "identity", "ssh", "scp", "hostkey", "password_file"}
+        if config.get("client") == "plink" or set(config).intersection({"ssh", "scp", "hostkey"}):
+            raise ValueError("GRF 0.4 SSH migration: use openssh or paramiko, explicit user/known_hosts and "
+                             "host_key_policy; remove plink/ssh/scp/hostkey settings (see docs/CONFIGURATION.md)")
+        scalar = {field.name for field in fields(SshConfig)} - {"name"} | {"ready_timeout_s"}
         table(config, "rig SSH config", scalar | targets | {"log", "clock"})
         text(config.get("host"), "host")
+        text(config.get("user"), "user")
+        text(config.get("known_hosts"), "known_hosts")
         for key in scalar - {"connect_timeout_s", "ready_timeout_s", "port"}:
             if key in config:
                 text(config[key], key)
@@ -186,11 +172,35 @@ class RigSsh:
     def fetch_log(self, dest: Path) -> None:
         section = self._section("log")
         dest.mkdir(parents=True, exist_ok=True)
+        deadline = Deadline(120)
         if section.get("prepare"):
-            self.remote(section["prepare"])
+            self.remote(section["prepare"], timeout_s=deadline.remaining())
         pattern = section.get("pattern", project.current().rig_log_pattern)
-        source = f"{self.target}:{str(section['dir']).rstrip('/')}/{pattern}"
-        self._call([self.scp, *self.options, "-q", source, str(dest)], f"{self.scp} {source}")
+        directory = str(section["dir"]).rstrip("/")
+        if not directory.startswith("/") and directory:
+            raise RigSshError("log dir must be an absolute board path")
+        listing = self.remote(f"find {shlex.quote(directory or '/')} -maxdepth 1 -type f "
+                              f"-name {shlex.quote(pattern)} -print0", timeout_s=deadline.remaining()).stdout
+        if listing and not listing.endswith("\0"):
+            raise RigSshError("log listing is incomplete (missing final NUL separator)")
+        files = listing.split("\0")
+        paths = [path for path in files if path]
+        if not paths:
+            raise RigSshError(f"no board logs match {pattern!r} in {directory}")
+        if len(set(paths)) != len(paths) or any(
+            not path.startswith(directory + "/") or "/" in path[len(directory) + 1:]
+            or path.rsplit("/", 1)[-1] in {"", ".", ".."}
+            or PureWindowsPath(path.rsplit("/", 1)[-1]).is_reserved()
+            or path.endswith((".", " ")) or any(c in path.rsplit("/", 1)[-1] for c in '<>:"\\|?*')
+            or any(ord(c) < 32 for c in path) for path in paths
+        ):
+            raise RigSshError("log listing returned an unsafe or duplicate filename")
+        for path in paths:
+            try:
+                self.transport.get(path, dest / path.rsplit("/", 1)[-1], deadline.remaining())
+            except (SshError, OSError) as err:
+                raise RigSshError(str(err)) from err
+        deadline.remaining()
 
     def clock_offset(self, samples: int = 3) -> tuple[float, float]:
         """(offset, uncertainty) in ms of the board's wall clock, read as this PC's local time (as the log reader
@@ -215,20 +225,14 @@ class RigSsh:
         return (low + high) / 2, (high - low) / 2
 
     def remote(self, command: str, check: bool = True, timeout_s: float = 120) -> subprocess.CompletedProcess[str]:
-        ssh = [self.ssh, *self.options, *(["-ssh"] if self.client == "plink" else []), self.target, command]
-        return self._call(ssh, f"{self.ssh} {self.target} {command!r}", check, timeout_s)
-
-    def _call(self, argv: list[str], what: str, check: bool = True, timeout_s: float = 120) -> subprocess.CompletedProcess[str]:
         try:
-            done = self.run(argv, timeout_s)
-        except FileNotFoundError as err:
-            raise RigSshError(f"{argv[0]} not found: {err}") from err
-        except subprocess.TimeoutExpired as err:
-            raise RigSshError(f"{what} did not finish within {timeout_s:g} s") from err
-        if check and done.returncode != 0:
-            detail = (done.stderr or done.stdout or "").strip()
-            raise RigSshError(f"{what} failed with exit code {done.returncode}" + (f": {detail}" if detail else ""))
-        return done
+            done = self.transport.run(command, timeout_s, check)
+        except (SshError, OSError) as err:
+            raise RigSshError(str(err)) from err
+        return subprocess.CompletedProcess(command, done.returncode, done.stdout, done.stderr)
+
+    def close(self) -> None:
+        self.transport.close()
 
     def _until(self, ready: Callable[[float], bool], what: str, deadline: Deadline) -> None:
         try:
@@ -284,9 +288,12 @@ def main(argv: Sequence[str] | None = None, rig: RigSsh | None = None) -> int:
                 rig.fetch_log(args.dir)
             else:
                 rig.restart(args.command.removeprefix("restart-"), args.down_ms)
-    except RigSshError as err:
+    except (RigSshError, TimeoutError) as err:
         print(err, file=sys.stderr)
         return 1
+    finally:
+        if rig is not None:
+            rig.close()
     return 0
 
 

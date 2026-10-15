@@ -178,6 +178,54 @@ Jenkins login from `JENKINS_USER`/`JENKINS_TOKEN` and records for reports from `
 [Deploying builds](DEPLOYMENT.md#environment-variables). Install `general-robot-framework[deploy]` for the default
 SSH client.
 
+## Shared SSH transport and 0.4 migration
+
+Deployment and `grf.rig_ssh` now use the public `grf.ssh` module: `SshConfig`, `open_transport`,
+`Transport`, `CommandResult`, `Redactor` and `SshError`. A transport provides `run`, `put`, `get` (one exact
+file) and `close`. Close owned connections in `finally`. Deployment translates shared SSH failures into
+its existing `DeployError`/outcome contract; consumer integrations should import SSH classes from
+`grf.ssh`, not the internal `grf.deploy.transport` implementation.
+
+Both clients require explicit `user` and `known_hosts`. `openssh` uses system `ssh`/`scp`, noninteractive
+key authentication and the owned-process timeout helper. `paramiko` supports one of `identity`,
+`password_env` or `password_file` and requires the optional `[deploy]` package extra.
+`host_key_policy = "pinned"` rejects unknown and changed keys; `"accept-new"` can record a first-seen key,
+but still rejects changed keys. Trust a first-seen board only under the owner's approved site process.
+Neither client disables checking or prompts for credentials. Secrets, including short/overlapping passwords,
+are redacted from command diagnostics. Passwords never belong directly in TOML.
+
+The deployment target schema is unchanged. For a rig SSH file outside the repository, use the same
+connection fields at its top level, followed by product-owned stop/start/log/clock sections:
+
+```toml
+host = "board.example.invalid"
+user = "root"
+client = "openssh"
+known_hosts = 'D:\site\known_hosts'
+host_key_policy = "pinned"
+identity = 'D:\site\board_key'
+ready_timeout_s = 180
+
+[log]
+dir = "/var/log/product"
+pattern = "*.txt"
+```
+
+The rig defaults to OpenSSH and **pinned** host keys; deployment retains its existing explicit/site-config
+defaults. Rig `known_hosts`, keys and password files must be outside the product repository.
+For old PuTTY configurations, replace `client = "plink"` with `"paramiko"` for password authentication or
+`"openssh"` for keys. Provision the authorized host key in `known_hosts`, add `user`, remove `hostkey`,
+`ssh` and `scp`, and use a key format accepted by the chosen client. There is no insecure compatibility
+fallback or automatic key conversion. Missing user/known_hosts and obsolete fields fail before rig commands.
+
+Rig log fetch now lists exact files with the board's `find -maxdepth 1 -type f -name ... -print0` and
+downloads each through the shared transport under one total budget. The board must support these options.
+OpenSSH file transfers explicitly use its legacy SCP protocol (`scp -O`, OpenSSH 8.7 or newer), making
+remote path quoting deterministic and avoiding a silent requirement for an SFTP server on the board.
+Empty, incomplete, duplicate, traversing or nonportable filenames fail; downloads never overwrite existing
+local files, and failed transfers remove their owned partial output. Paramiko uses SCP without requiring SFTP.
+These are file-transfer/connection checks, not proof that product logs are complete or a board is safe.
+
 ## External Windchill integration
 
 The server must be installed separately; GRF does not implement or bundle it.

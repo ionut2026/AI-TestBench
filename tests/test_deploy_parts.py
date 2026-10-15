@@ -22,9 +22,9 @@ from grf.deploy.config import JenkinsSettings, load, parse
 from grf.deploy.jenkins import Jenkins, local_artifact
 from grf.deploy.model import ArtifactRef, ContainerRecipe, DeployError, Mount, Outcome
 from grf.deploy.record import DeployRecord, load_records
-from grf.deploy.transport import CommandResult, OpenSshTransport, ParamikoTransport, Redactor
 from grf.pipeline.report import _deployments_html
 from grf.scaffold import init_project
+from grf.ssh import CommandResult, OpenSshTransport, ParamikoTransport, Redactor, SshError
 
 # ------------------------------------------------------------------ site config
 
@@ -254,7 +254,7 @@ def test_local_artifact_checks_the_pattern(tmp_path):
 def test_redactor_hides_secrets():
     redact = Redactor(["s3cret", "", "ab"])
     redact.add("t0ken")
-    assert redact("s3cret and t0ken and ab") == "*** and *** and ab"
+    assert redact("s3cret and t0ken and ab") == "*** and *** and ***"
 
 
 def test_openssh_uses_batch_mode_and_known_hosts(tmp_path):
@@ -274,11 +274,11 @@ def test_openssh_uses_batch_mode_and_known_hosts(tmp_path):
 
 
 def test_openssh_pinned_needs_known_hosts_and_reports_failures(tmp_path):
-    with pytest.raises(DeployError, match="does not exist"):
+    with pytest.raises(SshError, match="does not exist"):
         OpenSshTransport(target(client="openssh", host_key_policy="pinned", known_hosts=str(tmp_path / "none")))
     ssh = OpenSshTransport(target(client="openssh", known_hosts=str(tmp_path / "kh")),
                            runner=lambda argv, timeout: subprocess.CompletedProcess(argv, 255, "", "Host key verification failed"))
-    with pytest.raises(DeployError, match="Host key verification failed"):
+    with pytest.raises(SshError, match="Host key verification failed"):
         ssh.run("true")
 
 
@@ -312,13 +312,13 @@ def test_paramiko_policies_and_password(tmp_path):
     fake = FakeSsh()
     ParamikoTransport(target(host_key_policy="pinned", known_hosts=str(tmp_path / "ssh" / "kh")), {}, client_factory=lambda: fake)
     assert ("policy", "RejectPolicy") in fake.calls
-    with pytest.raises(DeployError, match="does not exist"):
+    with pytest.raises(SshError, match="does not exist"):
         ParamikoTransport(target(host_key_policy="pinned", known_hosts=str(tmp_path / "none")), {}, client_factory=FakeSsh)
     changed = FakeSsh(paramiko.BadHostKeyException("10.0.0.1", paramiko.RSAKey.generate(1024), paramiko.RSAKey.generate(1024)))
-    with pytest.raises(DeployError, match="CHANGED"):
+    with pytest.raises(SshError, match="CHANGED"):
         ParamikoTransport(target(known_hosts=str(tmp_path / "kh")), {}, client_factory=lambda: changed)
     refused = FakeSsh(paramiko.AuthenticationException("bad password pw123"))
-    with pytest.raises(DeployError) as err:
+    with pytest.raises(SshError) as err:
         ParamikoTransport(t, {"BOARD_PW": "pw123"}, client_factory=lambda: refused)
     assert "pw123" not in str(err.value) and "***" in str(err.value)
 
@@ -367,7 +367,7 @@ def test_scp_total_deadline_cannot_reset_per_chunk(tmp_path, monkeypatch):
     from deploy_fakes import Clock
 
     from grf import deadline
-    from grf.deploy import transport
+    from grf import ssh as transport
 
     clock = Clock()
     timeouts = []
@@ -399,7 +399,7 @@ def test_scp_total_deadline_cannot_reset_per_chunk(tmp_path, monkeypatch):
     ssh.client = SimpleNamespace(get_transport=lambda: SimpleNamespace(open_session=lambda **kwargs: channel))
     local = tmp_path / "large.tar"
     local.write_bytes(b"x" * (3 << 16))
-    with pytest.raises(DeployError, match="deadline"):
+    with pytest.raises(SshError, match="deadline"):
         ssh.put(local, "/tmp/large.tar", timeout_s=1)
     assert channel.closed and timeouts[-1] < timeouts[0]
 

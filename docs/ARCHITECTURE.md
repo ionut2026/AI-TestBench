@@ -43,6 +43,7 @@ GeneralRobotFramework\
     deadline.py, process.py      monotonic budgets and owned local subprocess trees
     operator_prompt.py          console/dialog operator interaction
     rigcontrol.py, rig_ssh.py    site protocol and configurable SSH implementation
+    ssh.py                      shared SSH configuration, host-key/redaction policy and file transfers
     pipeline\
       rvs.py, ingest.py          external read-only client, catalog and hashes
       briefs.py                 specification authoring inputs

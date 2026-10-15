@@ -6,6 +6,11 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Consolidate rig control and deployment on public `grf.ssh` configuration, clients, redaction and bounded
+  transfers. Rig SSH now requires explicit user/known_hosts, defaults to pinned keys and downloads exact
+  safely listed files. **Migration:** PuTTY/hostkey/custom executable configurations require OpenSSH or
+  Paramiko plus an authorized external known_hosts file; see Configuration.
+
 - Expose public Robot-library lifecycle/rig/operator Python methods and a strict current-content review
   decision API, preserving legacy overrides without requiring consumer imports of private helpers.
 - Add `CleanupGuard`: attempt all owned cleanup actions plus a final-state probe, aggregate failures,
