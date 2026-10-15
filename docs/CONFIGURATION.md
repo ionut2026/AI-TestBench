@@ -32,7 +32,7 @@ spec_prefix = "SPEC"
 plugin = "product_automation.plugin:DemoPlugin"
 
 [framework]
-version = "0.2.0"
+version = "0.3.0"
 
 [paths]
 scope = "catalog/demo.scope.toml"
@@ -62,7 +62,7 @@ The starter supplies the referenced files and plugin. See `examples\demo\grf.tom
 | `[project]` | `name`, `product`, `cli` (default `grf`), `spec_prefix` (default `SPEC`), `rule_prefix`/`env_prefix` (default `GRF`), optional `module:attribute` plugin |
 | `[framework]` | Approved exact installed distribution `version`, checked by doctor |
 | `[paths]` | Scope/catalog, reviews, suites, environment files, results, briefs, `brief_target`, keyword docs and mutants |
-| `[tiers.<name>]` | String-list `capabilities`; boolean `evidence` (default true), `parallel` and `rig_control` (default false) |
+| `[tiers.<name>]` | String-list `capabilities`; boolean `evidence` (default true), `parallel` and `rig_control` (default false); optional `lock` (local reservation name, default: the tier name for non-parallel tiers) |
 | `[capabilities]` | Required test tag to capability, e.g. `"needs:reset" = "reset"` |
 | `[operator]` | Capabilities supplied by console/dialog modes (default `["operator"]`) |
 | `[rig]` | Restart `targets` mapped to capabilities, `ready_ports`, `log_capability`, `log_files` and `log_pattern` |
@@ -78,6 +78,13 @@ tier, with the longest matching name first. An arbitrary prefix such as `benchwo
 
 Only tiers marked `parallel = true` can use `grf run --processes N`. This flag is a product-owner assertion of
 resource isolation, not something GRF can prove. Do not mark an instrument-sharing tier parallel-safe.
+
+`grf run` on a non-parallel tier holds an operating-system file lock `<results>/.locks/<lock>.lock` for the whole
+run; a second run on the same machine stops with "in use by another run". Give two tiers the same `lock` when they
+share a resource (for example one local installation of the product). The lock covers one machine only; several
+machines sharing an instrument need the controller's reservation ([Workflows](WORKFLOWS.md#reservation)).
+The local lock is shared only when the configured results root is shared; different checkouts do not automatically
+reserve the same resource. It covers Robot execution, not separate deployments or an entire pipeline.
 
 Lint tag rules bind capability selection to actual keyword use. For example:
 
@@ -96,6 +103,8 @@ what = "resets the product"
 
 `ProductPlugin` subclasses may implement `known_messages`, `brief_sections`, `doctor_class`, `add_commands` and
 `deploy_components` (the deployable applications; see [Deploying builds](DEPLOYMENT.md)).
+The acceptance gate also uses `runtime_identity(meta)` and `identity_matches(component, expected, observed)`;
+see their [exact contract and limits](WORKFLOWS.md#product-identity-hooks).
 Use hooks for product behavior, not static configuration. Product keyword libraries extend `GrfLibrary` and
 own their connections, lifecycle, state isolation and assertions. Timing keywords require finite timestamps;
 invalid values such as NaN cannot silently satisfy a timing requirement.

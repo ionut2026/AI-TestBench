@@ -17,6 +17,10 @@
   grf report   --output results/.../output.xml [--deployment deployment.json]
                                                             traceability report for an existing run
   grf mutate   [--mutant <id> ...] [--min-score 0.9]          mutation testing of the suites on the mock product
+  grf request  check <request.toml>                         validate a run request (no contact with anything)
+  grf gate     --request <request.toml> --output .../output.xml [--deployment ...]
+                                                            acceptance gate: does the finished run satisfy the request?
+                                                            (exit code 0 ACCEPTED, 1 REJECTED; docs/WORKFLOWS.md)
   grf deploy   components|builds|plan|run|status|rollback   put a Jenkins build of a product component on its board
                                                             (only products whose plugin defines components; docs/DEPLOYMENT.md)
   (plus the commands of the project's plugin, e.g. SMM: matrix, service)
@@ -27,6 +31,7 @@ The project is the nearest grf.toml (or GRF_PROJECT); see grf.project.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
 import json
 import math
@@ -228,7 +233,7 @@ def _exit_code(rc: int, output: Path, fail_on: str) -> int:
 
 
 def cmd_run(args, robot_args: list[str]) -> int:
-    from robot.run import RobotFramework, run_cli
+    from robot.run import RobotFramework
 
     p = project.current()
     forwarded, sources = RobotFramework().parse_arguments([*robot_args, "__grf_managed_suite__.robot"])
@@ -281,11 +286,32 @@ def cmd_run(args, robot_args: list[str]) -> int:
         for value in values if isinstance(values, list) else [values]:
             argv += [f"--{key}", str(value)]
     argv += robot_args + [str(suite) for suite in _suites(args)]
-    if args.processes > 1:
+    from grf.reservation import ReservationError, exclusive
+
+    lock = p.tier(args.tier).lock
+    try:
+        with exclusive(lock, p.path("results") / ".locks", f"{p.cli} run --tier {args.tier} -> {out_dir}") if lock \
+                else contextlib.nullcontext():
+            if lock:
+                print(f"Reserved '{lock}' on this machine for the run")
+            rc = _robot(argv, args.processes)
+    except ReservationError as err:
+        print(f"Reservation: {err}", file=sys.stderr)
+        return 2
+    output = out_dir / "output.xml"
+    if output.exists() and not args.no_report:
+        _report(_catalog_path(args), output, out_dir, _suites(args), Path(args.reviews), args.deployment)
+    return _exit_code(rc, output, args.fail_on)
+
+
+def _robot(argv: list[str], processes: int) -> int:
+    from robot.run import run_cli
+
+    if processes > 1:
         from pabot.pabot import main_program
 
         # One robot process per suite, with this Python (the venv need not be on PATH); PabotLib (port 8270) is not used.
-        argv = ["--processes", str(args.processes), "--no-pabotlib",
+        argv = ["--processes", str(processes), "--no-pabotlib",
                 "--command", sys.executable, "-m", "robot", "--end-command", *argv]
         print("pabot " + " ".join(argv))
         cache = Path(".pabotsuitenames")  # pabot's suite-name cache, always in the current directory
@@ -298,10 +324,7 @@ def cmd_run(args, robot_args: list[str]) -> int:
     else:
         print("robot " + " ".join(argv))
         rc = run_cli(argv, exit=False)
-    output = out_dir / "output.xml"
-    if output.exists() and not args.no_report:
-        _report(_catalog_path(args), output, out_dir, _suites(args), Path(args.reviews), args.deployment)
-    return _exit_code(rc, output, args.fail_on)
+    return rc
 
 
 def cmd_mutate(args) -> int:
@@ -360,6 +383,64 @@ def cmd_mutate(args) -> int:
         return 2
     measured = sc["killed"] / (sc["killed"] + sc["survived"])
     return 1 if measured < args.min_score else 0
+
+
+def _load_request(path: str):
+    from grf.acceptance import load_request
+
+    p = project.current()
+    return load_request(Path(path), p.tiers, [c.name for c in p.plugin.deploy_components()])
+
+
+def cmd_request(args) -> int:
+    from grf.acceptance import RequestError
+
+    try:
+        request = _load_request(args.file)
+    except RequestError as err:
+        print(f"INVALID: {err}", file=sys.stderr)
+        return 1
+    print("\n".join(request.summary()))
+    if request.valid_until and dt.date.today() > request.valid_until:
+        print(f"INVALID: the authorization expired on {request.valid_until}", file=sys.stderr)
+        return 1
+    print("Request is valid (this checks the file only; nothing was contacted).")
+    if args.json:
+        target = Path(args.json)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(request.as_dict(), indent=1), encoding="utf-8")
+    return 0
+
+
+def cmd_gate(args) -> int:
+    from grf.acceptance import RequestError, evaluate, format_result, write_result
+    from grf.deploy.cli import record_paths
+    from grf.deploy.record import load_records
+    from grf.pipeline.drift import collect_tests, load_reviews
+    from grf.pipeline.ingest import load_catalog
+    from grf.pipeline.report import read_results
+
+    p = project.current()
+    try:
+        request = _load_request(args.request)
+    except RequestError as err:
+        print(f"INVALID request: {err}", file=sys.stderr)
+        return 2
+    output = Path(args.output)
+    if not output.is_file():
+        print(f"no Robot output: {output}", file=sys.stderr)
+        return 2
+    tests, meta = read_results(output)
+    catalog_path = _catalog_path(args)
+    result = evaluate(request, tests=tests, meta=meta, known=collect_tests(_suites(args)), reviews=load_reviews(Path(args.reviews)),
+                      catalog=load_catalog(catalog_path), catalog_path=catalog_path, records=load_records(record_paths(args.deployment)),
+                      observed=p.plugin.runtime_identity(meta), matches=p.plugin.identity_matches, root=p.root,
+                      evidence=p.is_evidence(meta.get("Tier", "?")), project_name=p.name)
+    target = Path(args.json) if args.json else output.parent / "acceptance.json"
+    write_result(result, target)
+    print(format_result(result))
+    print(f"Acceptance record: {target}")
+    return 0 if result["status"] == "ACCEPTED" else 1
 
 
 def cmd_doctor(args) -> int:
@@ -449,6 +530,15 @@ def _main(argv: list[str] | None = None) -> int:
     cmd.add_argument("--outdir")
     cmd.add_argument("--min-score", type=float, default=0.9, help="exit code 1 when the share of killed mutants is lower (default 0.9)")
     cmd.add_argument("--no-baseline", action="store_true", help="skip the run without faults (the selected tests must pass without faults)")
+    cmd = sub.add_parser("request", allow_abbrev=False, help="validate a run request file (docs/WORKFLOWS.md); contacts nothing")
+    cmd.add_argument("action", choices=["check"])
+    cmd.add_argument("file", help="the request (TOML)")
+    cmd.add_argument("--json", help="write the validated request as normalized JSON (only on success)")
+    cmd = sub.add_parser("gate", allow_abbrev=False, help="acceptance gate: does a finished run satisfy its request? (exit code 0 ACCEPTED, 1 REJECTED)")
+    cmd.add_argument("--request", required=True, help="the run request (TOML)")
+    cmd.add_argument("--output", required=True, help="the run's Robot output.xml")
+    cmd.add_argument("--deployment", action="append", help="deployment record(s) of the run (repeatable; also GRF_DEPLOYMENT_RECORD)")
+    cmd.add_argument("--json", help="where to write the acceptance record (default: acceptance.json next to output.xml)")
     cmd = sub.add_parser("doctor", allow_abbrev=False, help="check that a tier can run before a long run (exit code 1 on FAIL)")
     cmd.add_argument("--tier", choices=tiers, default=tiers[0])
     cmd.add_argument("--operator", choices=OPERATOR_MODES, default=_default_operator())
@@ -470,6 +560,7 @@ def _main(argv: list[str] | None = None) -> int:
         return cmd_run(args, extra)
     commands = {"init": cmd_init, "ingest": cmd_ingest, "briefs": cmd_briefs, "drift": cmd_drift, "accept": cmd_accept, "migrate-hashes": cmd_migrate_hashes,
                 "review": cmd_review, "lint": cmd_lint, "report": cmd_report, "mutate": cmd_mutate, "doctor": cmd_doctor,
+                "request": cmd_request, "gate": cmd_gate,
                 "deploy": lambda a: cmd_deploy(a, p)}
     return {**commands, **plugin_commands}[args.command](args)
 

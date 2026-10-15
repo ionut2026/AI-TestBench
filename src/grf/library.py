@@ -23,6 +23,8 @@ from robot.libraries.BuiltIn import BuiltIn, RobotNotRunningError
 from robot.utils import timestr_to_secs
 
 from grf import operator_prompt, project
+from grf.deploy.binding import assert_product_version
+from grf.project import current as current_project
 from grf.rigcontrol import RigControl, RigControlError
 
 
@@ -37,6 +39,19 @@ class GrfLibrary:
         self._segments: list[tuple[int, str]] = []
         self._rig_control: RigControl | None = None
         self._rig_control_loaded = False
+
+    @keyword
+    def deployment_record_should_match_product_version(
+        self, record: str, component: str, actual_version: str, target: str, project: str = "",
+    ) -> dict[str, Any]:
+        """Check one deployment file against a fresh product-owned version observation.
+
+        Target is an expected record label, not proof of board identity. The product
+        owns endpoint mapping and version acquisition. Project defaults to the current
+        GRF project. No deployment or network operation is performed.
+        """
+        expected_project = project or current_project().name
+        return assert_product_version(record, component, actual_version, target=target, project=expected_project)
 
     # ================================================================== test bookkeeping
 

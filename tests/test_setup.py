@@ -69,7 +69,7 @@ def test_missing_manifest_is_diagnostic(setup_checkout):
     (setup_checkout / "pyproject.toml").unlink()
     result = run_setup(setup_checkout, "-Python", sys.executable)
     assert result.returncode == 1
-    assert "complete GeneralRobotFramework checkout" in result.stderr
+    assert "complete GeneralRobotFramework checkout" in " ".join(result.stderr.split())
     assert not (setup_checkout / ".venv").exists()
 
 
@@ -77,7 +77,7 @@ def test_unsupported_python_stops_before_install(setup_checkout):
     script = str(setup_checkout / "scripts" / "setup.ps1").replace("'", "''")
     python = sys.executable.replace("'", "''")
     wrapper = (
-        f"function oldpython {{ & '{python}' -c 'import sys; sys.exit(\"Python 3.11 or newer is required.\")' }};"
+        f"function oldpython {{ & '{python}' -c 'import sys; sys.exit(''Python 3.11 or newer is required.'')' }};"
         f"& '{script}' -Python oldpython"
     )
     result = subprocess.run(
@@ -85,7 +85,7 @@ def test_unsupported_python_stops_before_install(setup_checkout):
         cwd=setup_checkout.parent, capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == 1
-    assert "Python 3.11 or newer is required" in result.stderr
+    assert "Python 3.11 or newer is required" in " ".join(result.stderr.split())
     assert "Setup complete" not in result.stdout
     assert not (setup_checkout / ".venv").exists()
 

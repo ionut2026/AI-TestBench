@@ -9,7 +9,7 @@ import pytest
 from grf import project
 from grf.cli import main
 from grf.pipeline import ingest
-from grf.scaffold import TEMPLATES, init_project
+from grf.scaffold import DEPLOY_TEMPLATES, TEMPLATES, init_project
 
 
 def command(root: Path, *args: str, expected: int = 0) -> subprocess.CompletedProcess:
@@ -54,9 +54,9 @@ def test_init_refuses_existing_files(tmp_path, capsys):
 
 
 def test_checked_in_demo_matches_starter(tmp_path):
-    generated = init_project(tmp_path / "demo", "Demo Counter", "SPEC")
+    generated = init_project(tmp_path / "demo", "Demo Counter", "SPEC", with_deploy=True)
     example = Path(__file__).resolve().parents[1] / "examples/demo"
-    for relative in TEMPLATES.values():
+    for relative in {**TEMPLATES, **DEPLOY_TEMPLATES}.values():
         assert (example / relative).read_text(encoding="utf-8") == (generated / relative).read_text(encoding="utf-8")
 
 

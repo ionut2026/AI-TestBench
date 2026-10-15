@@ -1,5 +1,7 @@
 """The deployment step machine against a simulated board (tests/deploy_fakes.py). No network, no instrument."""
 
+import hashlib
+
 import pytest
 from deploy_fakes import PREV, WD, Clock, FakeBoard, component, image_id, site, tar_name
 
@@ -39,6 +41,49 @@ def step_names(record):
 
 def lock_free(board):
     return not any(".grf-deploy.lock" in p for p in board.files)
+
+
+def test_expected_sha256_accepts_exact_bytes(board, tmp_path):
+    tar = tarball(tmp_path, board=board)
+    digest = hashlib.sha256(tar.read_bytes()).hexdigest()
+    record = deploy(board, tmp_path, local_tar=tar, sha256=digest)
+    assert record.outcome == Outcome.DEPLOYED and record.artifact.sha256 == digest
+
+
+@pytest.mark.parametrize("digest", ["0" * 64, "bad", "A" * 64, "", 123])
+def test_bad_expected_sha256_never_connects(board, tmp_path, digest):
+    tar = tarball(tmp_path, board=board)
+    contacted = []
+
+    def transport(*args):
+        contacted.append(True)
+        return board
+
+    d = Deployment("Widget", component(), site(), site().targets["board"], work_dir=tmp_path,
+                   transport_factory=transport, echo=lambda _: None)
+    result = d.deploy(Options(local_tar=tar, sha256=digest))
+    assert result.outcome == Outcome.ARTIFACT_FAILED
+    assert not contacted and not board.commands
+
+
+def test_jenkins_changed_bytes_fail_before_board_connection(board, tmp_path):
+    from grf.deploy.model import ArtifactRef
+
+    class Jenkins:
+        def resolve(self, *args):
+            return ArtifactRef("app", "jenkins", "app.tar.gz", build_number=7)
+
+        def download(self, ref, destination):
+            ref.sha256 = "b" * 64
+            return ref
+
+    contacted = []
+    d = Deployment("Widget", component(), site(), site().targets["board"], work_dir=tmp_path,
+                   jenkins_factory=lambda *args: Jenkins(),
+                   transport_factory=lambda *args: contacted.append(True),
+                   echo=lambda _: None)
+    result = d.deploy(Options(build="7", sha256="a" * 64))
+    assert result.outcome == Outcome.ARTIFACT_FAILED and not contacted
 
 
 def test_success_replaces_the_container_and_keeps_the_previous_build(board, tmp_path):

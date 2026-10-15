@@ -18,6 +18,13 @@ the suite as well as the test name. Legacy name-only reviews count only when tha
 the selected suites; otherwise re-record suite-qualified reviews. The latest human verdict for the current
 hash wins, so an old approval cannot override a later rejection. Never auto-update stale hashes to turn gates green.
 
+Since GRF 0.3, `grf review` also records the test's content `fingerprint`: a SHA-256 over the test (without
+`review:pending`, `spechash:` tags and line numbers), its suite's settings, keywords and variables, and every Robot
+resource it imports (transitively). Editing the test or a resource it imports after the review makes the review
+count no more (`drift --strict` reports "changed after the human review"). Reviews recorded before 0.3 have no
+fingerprint: `drift` still counts them, the acceptance gate (`grf gate`) does not; the reviewer records them again.
+No command creates or migrates an approval automatically. See [Workflows](WORKFLOWS.md).
+
 `lint` checks documentation, forbidden sleeps, literal timing values and configured capability/keyword rules,
 following nested resource imports with cycle protection. `drift --strict` checks hashes, missing coverage,
 orphan/untagged tests, changed state/links, retired specifications, missing human approval and lint violations.
@@ -53,6 +60,10 @@ The report preserves raw verdicts, review warnings, drift details and `productEv
 Every mock failure is new. `--fail-on any` preserves Robot's failure count; `none` ignores test verdict failures
 but not execution errors. CLI input/configuration/integration errors return 2 with a diagnostic; drift/lint
 gate failures return 1. Robot execution error codes above 250 are preserved.
+
+A finished run is not yet an accepted result. `grf gate --request <request.toml> --output <output.xml>` checks the
+run against a run request (tier, required tests and specifications, skips/failures, current content-bound human
+reviews, drift, exact deployed builds and runtime versions) and writes `acceptance.json`; see [Workflows](WORKFLOWS.md).
 
 ## Mutation testing
 
@@ -91,6 +102,8 @@ including parallel pabot execution and mock non-evidence metadata.
 Windows setup tests check explicit errors for missing Python, an unsupported interpreter, missing checkout
 metadata, incomplete environments and failed installation commands without downloading dependencies or running products.
 They also verify that a nonexistent explicit Python path fails without invoking PowerShell command discovery.
+Diagnostic assertions tolerate PowerShell's line wrapping in long worktree paths; the unsupported-interpreter
+fixture preserves native Python string quoting on Windows PowerShell 5.1.
 Skill tests check frontmatter, required safety rules, starter registration, agent skill references and that GRF's
 shared skills match `grf init` output. See [Copilot skills](SKILLS.md#change-a-skill).
 Deployment tests (`test_deploy_engine.py`, `test_deploy_parts.py`) use a simulated board (`tests\deploy_fakes.py`),
@@ -98,6 +111,12 @@ a local HTTP server instead of Jenkins and a fake SSH client: success, unchanged
 checksum, every rollback point, rollback failure, restore, redaction, config validation, CLI exit codes, report and
 starter. They need no board, Jenkins or network, and passing them is not evidence that a real board deploys.
 See [Deploying builds](DEPLOYMENT.md).
+
+`test_deploy_binding.py` exercises strict local record/version assertions, including real Robot execution
+of the inherited keyword. These are synthetic checks, not deployments or product observations.
+Attaching a deployment record to a report is not a runtime check; products may opt into the
+[observed-version assertion](DEPLOYMENT.md#checking-the-observed-product-version) and own fresh version
+acquisition and endpoint mapping.
 
 ## Wheel-only smoke run
 

@@ -17,6 +17,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import re
 import signal
 import sys
 from collections.abc import Callable
@@ -44,6 +45,8 @@ def add_parser(sub: argparse._SubParsersAction, env_prefix: str) -> None:
         p.add_argument("--build", default="lastSuccessfulBuild", help="Jenkins build number or lastSuccessfulBuild (default)")
         p.add_argument("--branch", help="branch of a multibranch Jenkins job (default: [deploy] default_branch)")
         p.add_argument("--local-tar", type=Path, help="deploy this image tarball instead of a Jenkins build")
+        p.add_argument("--sha256", help="expected artifact SHA-256 (64 lowercase hex characters); single component, "
+                                       "checked before connecting to the board")
         p.add_argument("--outdir", type=Path, help="where the record and the downloaded artifact go "
                                                     "(default: results/deploy/<time>-<component>)")
         p.add_argument("--trigger", choices=TRIGGERS, default="cli", help="recorded as who/what started it")
@@ -208,12 +211,17 @@ def _deploy(site: SiteConfig, components: list[Component], args: argparse.Namesp
         raise DeployError("rollback takes one component")
     build = getattr(args, "build", "lastSuccessfulBuild")
     local_tar = getattr(args, "local_tar", None)
+    sha256 = getattr(args, "sha256", None)
+    if sha256 is not None and (not isinstance(sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", sha256)):
+        raise DeployError("--sha256 must be 64 lowercase hex characters")
+    if sha256 is not None and len(chosen) != 1:
+        raise DeployError("--sha256 needs a single --component")
     if len(chosen) > 1 and (local_tar or build.isdigit()):
         raise DeployError("--local-tar and a build number need a single --component (every component has its own job)")
     targets = [site.target_for(c.name, args.target) for c in chosen]
     options = Options(build=build, branch=getattr(args, "branch", None) or project.deploy_branch, local_tar=local_tar,
                       dry_run=command == "plan", force=getattr(args, "force", False), ignore_hold=args.ignore_hold,
-                      break_stale_lock=getattr(args, "break_stale_lock", False), restore=restore)
+                      break_stale_lock=getattr(args, "break_stale_lock", False), restore=restore, sha256=sha256)
     if command in ("run", "rollback") and not args.yes:
         what = (f"roll back {chosen[0].name} to its newest retained build" if restore else
                 f"deploy {', '.join(c.name for c in chosen)} ({local_tar or f'Jenkins {build}'})")

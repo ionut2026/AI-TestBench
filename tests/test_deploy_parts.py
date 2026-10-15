@@ -371,6 +371,20 @@ def test_cli_plan_is_a_dry_run(tmp_path, site_file):
     assert FakeDeployment.options[0].dry_run
 
 
+def test_cli_sha256_is_validated_and_forwarded(tmp_path, site_file, capsys):
+    FakeDeployment.outcomes, FakeDeployment.options = [Outcome.DEPLOYED], []
+    args = args_for("run", outdir=tmp_path / "rec", sha256="a" * 64)
+    assert deploy_cli.cmd_deploy(args, fake_project(tmp_path), deployment_factory=FakeDeployment) == 0
+    assert FakeDeployment.options[0].sha256 == "a" * 64
+    args.sha256 = "not-a-digest"
+    assert deploy_cli.cmd_deploy(args, fake_project(tmp_path), deployment_factory=FakeDeployment) == 2
+    assert "64 lowercase" in capsys.readouterr().err
+    args.sha256, args.component = "a" * 64, "app,other"
+    product = fake_project(tmp_path, [component(), component(name="other")])
+    assert deploy_cli.cmd_deploy(args, product, deployment_factory=FakeDeployment) == 2
+    assert "single --component" in capsys.readouterr().err
+
+
 def test_cli_stops_after_the_first_failing_component(tmp_path, site_file):
     other = component(name="other", recipe=ContainerRecipe(image="vendor/other", name="other"))
     project = fake_project(tmp_path, [component(), other])
@@ -480,6 +494,10 @@ def test_starter_deploy_files_only_with_the_flag(tmp_path):
     root = init_project(tmp_path / "deploy", "Widget", "WID", with_deploy=True)
     jenkinsfile = (root / "jenkins" / "Jenkinsfile.deploy").read_text(encoding="utf-8")
     assert "withCredentials" in jenkinsfile and "'run --yes'" in jenkinsfile and "grf deploy ${action}" in jenkinsfile
+    assert "grf request check" in jenkinsfile and "grf gate --request" in jenkinsfile
+    assert "--sha256" in jenkinsfile and "acceptance.json" in jenkinsfile
+    assert jenkinsfile.index("grf request check") < jenkinsfile.index("grf deploy ${action}")
+    assert jenkinsfile.index("grf run --tier") < jenkinsfile.index("grf gate --request")
     example = (root / "robot" / "environments" / "deploy.example.toml").read_text(encoding="utf-8")
     with pytest.raises(DeployError, match="placeholder"):
         parse(tomllib.loads(example), Path("deploy.example.toml"))

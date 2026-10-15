@@ -197,6 +197,37 @@ site's Jenkins agent holds the board addresses and passwords, never a repository
 instrument, so it needs the instrument owner's authorization**; normally the owner starts the Jenkins
 deployment job. Agents only explain and plan. See [Deploying builds](DEPLOYMENT.md).
 
+Attaching that file with `--deployment` only displays its contents: it does not ask the running application
+which version it is. A product adapter can read the version and use GRF's
+`Deployment Record Should Match Product Version` keyword to compare it with the installed version in the file.
+For example, a synthetic record saying `1.2.3.4` matches an observed `1.2.3.4`, but fails for `1.2.3.5`.
+This is an **assertion** (a check that fails on a mismatch), not a deployment. The counter demo has no
+deployed application, so you need not add this check to run it. The product owner must still establish that
+the test connection reaches the intended board; equal version strings do not prove board identity.
+See the [version-check API and opt-in setup example](DEPLOYMENT.md#checking-the-observed-product-version).
+
+### What is an accepted run?
+
+Robot Framework's PASS says its checks passed. GRF's **acceptance gate** asks a different question:
+did the intended tests actually run, with current human approval and the requested software?
+A **run request** is a small saved settings file describing that intention, not a command or permission.
+`grf request check <request-file>` validates the file locally; successful output says `Request is valid`.
+After an owner-authorized run, `grf gate --request <request-file> --output <output-file>` reads saved results
+and writes `acceptance.json` with ACCEPTED or REJECTED and explanations. Run these from the product checkout.
+The mock counter cannot become accepted product evidence: it checks framework wiring, not a real application.
+
+A **content fingerprint** is a digest (a compact identifier calculated from text) of the test and imported
+Robot resources. GRF 0.3.0 records it when a human reviews the test, so changing the reviewed logic invalidates
+that approval. Old approvals remain visible but need actual human re-review before the strict gate accepts them.
+Python code and external configuration also need protected source/version controls; fingerprints are not
+complete proof of everything executed.
+
+A **lock** reserves a shared resource for one run at a time. GRF automatically locks non-parallel tiers while
+Robot executes, but only runs sharing the same configured results folder use the same local lock.
+An instrument used from several computers needs the site's central controller lock, held over deployment and
+testing. Neither a request file nor a local lock grants permission to use it.
+These are advanced product workflows, not prerequisites for the demo. See [Workflows](WORKFLOWS.md).
+
 ### What GRF does not do
 
 GRF does not invent specifications, automatically guarantee test coverage, understand every product's

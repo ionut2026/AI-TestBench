@@ -71,6 +71,17 @@ check that it runs and roll back automatically: `grf deploy`. The plugin declare
 Deploying changes the instrument and needs the instrument owner's authorization. See `docs\DEPLOYMENT.md` in
 your GRF checkout.
 
+`--deployment` attaches a record to the report only. To check a real application's version, the product
+must obtain a fresh observation and call the inherited `Deployment Record Should Match Product Version`
+keyword with one explicit record file, component, observed version and target label. The label is not
+proof of board identity. See `docs\DEPLOYMENT.md#checking-the-observed-product-version` in your GRF checkout.
+The synthetic counter has no deployment or product version and does not call this assertion.
+
+For controlled product workflows, GRF 0.3.0 adds `request check` (validate a saved intention), `gate` (evaluate
+finished evidence) and content-aware human reviews. See `docs\WORKFLOWS.md` in your GRF checkout.
+The gate never accepts the mock counter as product evidence. Local tier locks only coordinate runs sharing
+the same configured results root; a real instrument needs the site's authoritative controller reservation.
+
 ## Maintain the project
 
 Update all relevant README, authoring rules and configuration documentation after every code or suite change.

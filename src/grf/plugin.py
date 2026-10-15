@@ -39,3 +39,12 @@ class ProductPlugin:
     def deploy_components(self) -> list[Component]:
         """What ``<cli> deploy`` can put on the product's boards (docs/DEPLOYMENT.md). Default: nothing."""
         return []
+
+    def runtime_identity(self, meta: dict[str, str]) -> dict[str, str]:
+        """Component -> version that the product reported during a run, read from the Robot run metadata
+        (``<cli> gate``). Default: nothing (a gate that needs runtime identity fails closed)."""
+        return {}
+
+    def identity_matches(self, component: str, expected: str, observed: str) -> bool:
+        """Whether the runtime version ``observed`` is the expected build version. Default: equal text."""
+        return expected.strip() == observed.strip()

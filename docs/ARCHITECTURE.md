@@ -25,6 +25,7 @@ GeneralRobotFramework\
     SKILLS.md                   Copilot skill usage and maintenance
     REPOSITORIES.md              repository boundaries and data ownership
     DEPLOYMENT.md               deploying Jenkins builds to instrument boards
+    WORKFLOWS.md                run requests, acceptance, review fingerprints and reservation limits
   examples\demo\                synthetic product generated from the starter
   scripts\setup.ps1             explicit Windows dependency/environment setup after cloning
   src\grf\
@@ -34,12 +35,15 @@ GeneralRobotFramework\
     scaffold.py, templates\      packaged product starter
     capabilities.py, doctor.py  selection and readiness checks
     library.py                  timing, operator and lifecycle helpers
+    acceptance.py               strict local requests and post-run acceptance evaluation
+    reservation.py              OS file locks for runs sharing a results root
     operator_prompt.py          console/dialog operator interaction
     rigcontrol.py, rig_ssh.py    site protocol and configurable SSH implementation
     pipeline\
       rvs.py, ingest.py          external read-only client, catalog and hashes
       briefs.py                 specification authoring inputs
       drift.py, lint.py          traceability, review and Robot authoring gates
+      fingerprint.py            reviewed test and transitive Robot resource content
       mutation.py               mock fault orchestration
       report.py                 Robot result/catalog join and evidence reporting
     deploy\                     generic build deployment (docs\DEPLOYMENT.md)
@@ -48,6 +52,7 @@ GeneralRobotFramework\
       transport.py, docker.py    SSH (paramiko/OpenSSH), docker commands and drift
       engine.py, lock.py         deployment steps, rollback, board lock/hold
       record.py, checks.py, cli.py  deployment record, doctor --deploy, `deploy` command
+      binding.py                opt-in local record/observed-version diagnostic assertion
   tests\                        isolated unit, contract and starter end-to-end tests
   README.md                     entry point, installation and guide index
   CONTRIBUTING.md, CHANGELOG.md  change/release policy and history
@@ -110,7 +115,9 @@ flowchart LR
 ```
 
 `ProductPlugin` offers only actual extension points: known message names, extra brief sections, a doctor class,
-additional CLI commands and deployable components (`deploy_components`, see [Deploying builds](DEPLOYMENT.md)). Static names, paths, tiers, capabilities and lint rules belong in `grf.toml`.
+additional CLI commands, deployable components (`deploy_components`, see [Deploying builds](DEPLOYMENT.md)),
+and runtime identity extraction/comparison (`runtime_identity`, `identity_matches`, see [Workflows](WORKFLOWS.md)).
+Static names, paths, tiers, capabilities and lint rules belong in `grf.toml`.
 Core never imports a named product package. Products may import `grf`; the reverse dependency is forbidden.
 
 Agent templates are starter files, not runtime orchestration: GRF generates briefs but does not automatically
@@ -122,3 +129,9 @@ Starter skills follow the same copy-and-review update model; see [Copilot skills
 The CLI owns tier metadata and result paths, and forwards the selected project root to Robot workers.
 The report joins suite-qualified test identities so identical test names in different child suites do not
 hide missing execution. See [Testing](TESTING.md) for the distinction between PASS and VERIFIED.
+
+A protected product controller validates the request before product actions, holds the authoritative instrument
+reservation, then calls deploy/run/gate. GRF's gate evaluates supplied local artifacts after execution and writes
+`acceptance.json`; it is not an authenticated approval service or distributed workflow controller.
+Local tier locks cover only runs using the same configured results root. A product depends on GRF;
+GRF never imports product-specific identity code. See [workflow boundaries](WORKFLOWS.md#supported-boundary).

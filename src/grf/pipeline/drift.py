@@ -72,6 +72,7 @@ class TestRef:
     hash: str | None = None
     hashes: dict[int, str] = field(default_factory=dict)
     suite_path: str | None = None
+    fingerprint: str | None = None  # content fingerprint (grf.pipeline.fingerprint); None for hand-made references
 
     def hash_for(self, spec_id: int) -> str | None:
         return hash_for(spec_id, self.specs, self.hash, self.hashes)
@@ -118,24 +119,38 @@ def counts_as_review(entry: dict, key: str) -> bool:
     return is_human(entry) and verdict_of(entry) in APPROVING and str(entry.get("spechash", "")).lower() == key
 
 
+def review_problem(t: TestRef, tests: list[TestRef], reviews: list[dict], content: bool = False) -> str | None:
+    """Why ``t`` has no valid human approval, or None when it has one.
+
+    An entry recorded with a ``fingerprint`` only counts while the test content still has that fingerprint. With
+    ``content=True`` (the acceptance gate) an entry without a fingerprint (recorded before GRF 0.3) does not count
+    either: the reviewer has to record the review again for the current content."""
+    mine = [r for r in reviews if r.get("test") == t.name and is_human(r)
+            and (r.get("suite") == t.suite if r.get("suite") else sum(x.name == t.name for x in tests) == 1)]
+    matching = [r for r in mine if str(r.get("spechash", "")).lower() == t.review_key]
+    if matching and counts_as_review(matching[-1], t.review_key):
+        recorded = str(matching[-1].get("fingerprint") or "")
+        if not recorded:
+            return "the human review has no content fingerprint (recorded before GRF 0.3); record it again" if content else None
+        if t.fingerprint and recorded != t.fingerprint:
+            return "the test or a resource it imports changed after the human review"
+        return None
+    if not mine:
+        agents = [r for r in reviews if r.get("test") == t.name]
+        return "only agent review(s) recorded, no human review" if agents else "no human review recorded"
+    if matching:
+        return f"the human review is {verdict_of(matching[-1])}, not approved"
+    return f"recorded review is for spechash {mine[-1].get('spechash')}, test has {t.review_key}"
+
+
 def check_reviews(tests: list[TestRef], reviews: list[dict]) -> list[dict]:
     out = []
     for t in tests:
         if t.pending:
             continue
-        mine = [r for r in reviews if r.get("test") == t.name and is_human(r)
-                and (r.get("suite") == t.suite if r.get("suite") else sum(x.name == t.name for x in tests) == 1)]
-        matching = [r for r in mine if str(r.get("spechash", "")).lower() == t.review_key]
-        if matching and counts_as_review(matching[-1], t.review_key):
-            continue
-        if not mine:
-            agents = [r for r in reviews if r.get("test") == t.name]
-            reason = "only agent review(s) recorded, no human review" if agents else "no human review recorded"
-        elif matching:
-            reason = f"the human review is {verdict_of(matching[-1])}, not approved"
-        else:
-            reason = f"recorded review is for spechash {mine[-1].get('spechash')}, test has {t.review_key}"
-        out.append({"test": t.name, "suite": t.suite, "reason": reason})
+        reason = review_problem(t, tests, reviews)
+        if reason:
+            out.append({"test": t.name, "suite": t.suite, "reason": reason})
     return out
 
 
@@ -167,8 +182,8 @@ def record_review(path: Path, test: TestRef, reviewer: str, verdict: str, date: 
     if not test.review_key:
         raise ValueError(f"test '{test.name}' has no spechash: tag; nothing to review it against")
     dt.date.fromisoformat(date)
-    entry = {"test": test.name, "suite": test.suite, "spechash": test.review_key, "reviewer": reviewer, "date": date, "ref": ref,
-             "verdict": verdict, "notes": notes}
+    entry = {"test": test.name, "suite": test.suite, "spechash": test.review_key, "fingerprint": test.fingerprint or "",
+             "reviewer": reviewer, "date": date, "ref": ref, "verdict": verdict, "notes": notes}
     lines = ["", "[[review]]"]
     for key, value in entry.items():
         if key == "date":
@@ -185,15 +200,18 @@ def record_review(path: Path, test: TestRef, reviewer: str, verdict: str, date: 
 def collect_tests(paths: list[Path]) -> list[TestRef]:
     from robot.api import TestSuiteBuilder
 
+    from grf.pipeline.fingerprint import fingerprint_of, suite_context
+
     suite = TestSuiteBuilder(allow_empty_suite=True).build(*[str(p) for p in paths])
     out: list[TestRef] = []
 
     def walk(s, relative: str = ""):
+        context = suite_context(s) if s.tests else None
         for t in s.tests:
             tags = [str(x) for x in t.tags]
             plain, per_spec = parse_hash_tags(tags)
             ref = TestRef(name=t.name, suite=s.longname, source=str(s.source), tags=tags, hash=plain, hashes=per_spec,
-                          suite_path=relative)
+                          suite_path=relative, fingerprint=fingerprint_of(t, context or {}))
             ref.specs += spec_ids(tags)
             out.append(ref)
         for child in s.suites:
