@@ -1,7 +1,7 @@
 """Mutation testing of the suites against the mock product.
 
 A mutant (``catalog/mutants.toml``) is a set of fault rules for the mock product (the actions it understands are
-the project's ``[mutation] fault_actions``; SMM: the service's ``faults.ts``) that breaks one or more
+the project's ``[mutation] fault_actions``) that breaks one or more
 specifications. For each mutant the tests tagged ``<spec_prefix>-<spec>`` for those specifications run
 on the mock tier with the faults active: if at least one fails, the mutant is *killed*; if all
 pass, it *survived* and the tests would not notice that defect in the product. This measures the

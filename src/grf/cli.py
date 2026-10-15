@@ -1,4 +1,4 @@
-"""grf: command line of a General Robot Framework project (a product's command, e.g. smm-auto, is the same CLI).
+"""grf: command line of a General Robot Framework project (a product command uses the same CLI).
 
   grf ingest   [--scope catalog/pilot.scope.toml]          RV&S -> catalog/<scope>.json
   grf briefs   [--spec <id> ...]                            catalog -> generated/briefs/<spec_prefix>-<id>.md
@@ -23,7 +23,7 @@
                                                             (exit code 0 ACCEPTED, 1 REJECTED; docs/WORKFLOWS.md)
   grf deploy   components|builds|plan|run|status|rollback   put a Jenkins build of a product component on its board
                                                             (only products whose plugin defines components; docs/DEPLOYMENT.md)
-  (plus the commands of the project's plugin, e.g. SMM: matrix, service)
+  (plus product-owned commands registered by the project's plugin)
 
 The project is the nearest grf.toml (or GRF_PROJECT); see grf.project.
 """

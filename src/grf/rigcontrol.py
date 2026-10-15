@@ -1,23 +1,21 @@
 """Remote control of the automation rig through a site-specific script (plan 6.1).
 
-How appSMM, the broker and the log files on the instrument's RTC board can be reached differs per site (ssh,
+How the application, supporting services and log files on an instrument board can be reached differs per site (ssh,
 a service on the board, a power switch...), so the framework does not assume one: the site provides a command
-in the environment variable ``<ENV_PREFIX>_RIG_CONTROL`` (``SMM_RIG_CONTROL`` for SMM; e.g. ``python D:\\rig\\rig_control.py`` or
+in the environment variable ``<ENV_PREFIX>_RIG_CONTROL`` (e.g. ``python D:\\rig\\rig_control.py`` or
 ``powershell -NoProfile -File D:\\rig\\rig_control.ps1``; run without a shell, or a JSON list of arguments) that
-implements these subcommands (the restart targets come from the project's ``[rig] targets``; for SMM):
+implements these subcommands (the restart targets come from the project's ``[rig] targets``):
 
     capabilities                     print the supported subcommands (whitespace separated)
     restart-<target> --down-ms <ms>  stop the target, wait <ms>, start it again; return once it runs
-                                     (SMM: restart-appsmm kills appSMM, no goodbye; restart-broker the MQTT broker)
-    fetch-log <dir>                  copy the product's log files (``[rig] log_files``; SMM: appSMM*.sil) into <dir>
-    clock                            print "<offset_ms> <uncertainty_ms>": how far the time appSMM stamps its log
+    fetch-log <dir>                  copy the product's log files (``[rig] log_files``) into <dir>
+    clock                            print "<offset_ms> <uncertainty_ms>": how far the time the product stamps its log
                                      lines with (the board's wall-clock time, read as this PC's local time) is
                                      ahead of this PC's clock (optional; without it log times are taken as is)
 
 Exit code 0 means done; anything else is a failure whose stderr is reported. ``<ENV_PREFIX>_RIG_CONTROL_TIMEOUT``
 (seconds, default 300) bounds every call. Only the subcommands listed by ``capabilities`` are used: the rig
-tier gets the capability of a target (SMM: ``restart-appsmm`` -> ``requires:restart``, ``restart-broker`` ->
-``requires:broker-restart``) only from its restart subcommand, and the log capability (``needs:applog``) only
+tier gets the configured capability of a target only from its restart subcommand, and the log capability only
 from ``fetch-log``.
 """
 

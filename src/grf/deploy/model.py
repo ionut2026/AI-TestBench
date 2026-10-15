@@ -82,9 +82,9 @@ class ContainerRecipe:
 class Component:
     """One deployable application of a product."""
 
-    name: str  # CLI name, e.g. appsmm
+    name: str  # CLI name, e.g. app
     description: str
-    jenkins_job: str  # path below the Jenkins base URL, e.g. view/SMM/job/SMMApplication
+    jenkins_job: str  # path below the Jenkins base URL, e.g. view/Product/job/Application
     artifact_pattern: str  # regex over the artifact file name; exactly one artifact of a build must match
     recipe: ContainerRecipe
     # regex with a group "version" over the file name; None: the version is the tag of the loaded image

@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -10,6 +11,13 @@ from grf import project
 from grf.cli import main
 from grf.pipeline import ingest
 from grf.scaffold import DEPLOY_TEMPLATES, TEMPLATES, init_project
+
+
+def test_reusable_source_and_templates_use_product_neutral_examples():
+    root = Path(__file__).resolve().parents[1] / "src" / "grf"
+    for pattern in ("*.py", "*.tpl"):
+        for path in root.rglob(pattern):
+            assert not re.search(r"\b(?:SMM|appSMM|smm-auto)\b", path.read_text(encoding="utf-8"), re.I), path
 
 
 def command(root: Path, *args: str, expected: int = 0) -> subprocess.CompletedProcess:

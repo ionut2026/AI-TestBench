@@ -6,6 +6,9 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Replace product-specific examples in reusable Python docstrings/starter guidance with neutral application
+  and site concepts. Product protocols, states, adapters and the state/request matrix remain product-owned.
+
 - Add optional `[acceptance.policy]` source/catalog pin requirements, known-failure restriction,
   wildcard-looking name rejection and per-component required runtime identity, enforced by all request commands.
 

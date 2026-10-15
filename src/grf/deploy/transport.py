@@ -3,7 +3,7 @@
 Two clients (``[targets.<name>] client``):
 
 * ``paramiko`` (default; needs ``pip install general-robot-framework[deploy]``): password (``password_env`` or
-  ``password_file``) or key (``identity``) login, as EST's DeploymentLibrary does; files are copied with the scp
+  ``password_file``) or key (``identity``) login; files are copied with the scp
   protocol.
 * ``openssh``: the system ``ssh``/``scp`` with ``BatchMode=yes``, keys only.
 

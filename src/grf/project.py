@@ -223,7 +223,7 @@ class Project:
         return self._project("env_prefix", "GRF")
 
     def env(self, name: str) -> str:
-        """The project's name of a framework environment variable, e.g. ``env("RIG_CONTROL")`` -> ``SMM_RIG_CONTROL``."""
+        """The project's name of a framework environment variable, e.g. ``PRODUCT_RIG_CONTROL``."""
         return f"{self.env_prefix}_{name}"
 
     def spec_tag(self, spec_id: int | str) -> str:
@@ -308,7 +308,7 @@ class Project:
 
     @property
     def rig_targets(self) -> dict[str, str]:
-        """Rig control restart targets -> the capability they give (``appsmm`` -> ``restart``)."""
+        """Rig control restart targets -> the capability they give (``app`` -> ``restart``)."""
         return self._string_map(self._section("rig").get("targets", {}), "[rig] targets")
 
     @property

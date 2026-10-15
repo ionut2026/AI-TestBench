@@ -1,6 +1,6 @@
 """Manual steps done by an operator at the instrument (plan 6.3): ``Operator Action``.
 
-Modes (``${OPERATOR}`` or the environment variable ``<ENV_PREFIX>_OPERATOR``, e.g. ``SMM_OPERATOR``;
+Modes (``${OPERATOR}`` or the environment variable ``<ENV_PREFIX>_OPERATOR``, e.g. ``PRODUCT_OPERATOR``;
 ``<cli> run --operator <mode>`` sets it):
     none      no operator: the step fails as unavailable (tests needing one are excluded by ``<cli> run``)
     console   the instruction is printed on the console; the operator types ``done`` (or ``fail <reason>``)
@@ -25,7 +25,7 @@ MODES = ("none", "console", "dialog")
 
 
 def env_name() -> str:
-    """The environment variable of the operator mode (``SMM_OPERATOR`` for SMM)."""
+    """The environment variable of the operator mode (e.g. ``PRODUCT_OPERATOR``)."""
     return project.current().env("OPERATOR")
 
 

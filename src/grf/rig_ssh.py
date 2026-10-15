@@ -1,8 +1,8 @@
 """A rig control (``<ENV_PREFIX>_RIG_CONTROL``, see ``rigcontrol.py``) that reaches the instrument's board over ssh.
 
-The site describes the board in a TOML file (``--config <file>`` or ``<ENV_PREFIX>_RIG_SSH_CONFIG``; SMM example in
-``robot\\environments\\rig_ssh.example.toml``): host, user, and for each restart target of the project (``[rig] targets``;
-SMM: ``[appsmm]`` and ``[broker]``) the shell commands that stop and start it on the board, with its readiness (a
+The site describes the board in a TOML file (``--config <file>`` or ``<ENV_PREFIX>_RIG_SSH_CONFIG``):
+host, user, and for each restart target of the project (``[rig] targets``) the shell commands that stop and start
+it on the board, with its readiness (a
 ``running`` command that exits 0, and/or a ``port`` that accepts connections), and where the product writes its logs
 (with an optional board command that first stages them, e.g. out of a container). Only the parts present in the file
 are offered as capabilities; ``clock`` (the board's log
@@ -10,7 +10,7 @@ clock against this PC's) is always offered and reads the board's time with ``[cl
 authentication only) and PuTTY (``client = "plink"``; plink and pscp with ``-batch``, a key or a password read from
 ``password_file``, a file outside the repository that only the site's operator writes). Neither ever prompts::
 
-    $env:SMM_RIG_CONTROL = '"<project>\\.venv\\Scripts\\python.exe" -m grf.rig_ssh --config D:\\rig\\rig_ssh.toml'
+    $env:PRODUCT_RIG_CONTROL = '"<project>\\.venv\\Scripts\\python.exe" -m grf.rig_ssh --config D:\\rig\\rig_ssh.toml'
 """
 
 from __future__ import annotations
