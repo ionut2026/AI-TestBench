@@ -39,6 +39,7 @@ GeneralRobotFramework\
     library.py                  timing, operator and lifecycle helpers
     cleanup.py                  aggregated owned-resource cleanup and final-state/quarantine outcomes
     evidence.py                 fail-closed preflight/result checks and explicit assertion coverage
+    workflow.py                 bounded all-plan/promotion/deploy/requested-run/acceptance orchestration
     acceptance.py               strict local requests and post-run acceptance evaluation
     reservation.py              OS file locks for runs sharing a results root
     deadline.py, process.py      monotonic budgets and owned local subprocess trees

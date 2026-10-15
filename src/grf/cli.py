@@ -241,7 +241,9 @@ def cmd_run(args, robot_args: list[str]) -> int:
     from robot.run import RobotFramework
 
     p = project.current()
-    request = _load_request(args.request) if args.request else None
+    request = _load_request(args.request, args.request_sha256) if args.request else None
+    if args.request_sha256 and request is None:
+        raise ValueError("--request-sha256 requires --request")
     if request:
         if args.tier is not None and args.tier != request.tier:
             raise ValueError("--tier does not match the request")
@@ -469,11 +471,13 @@ def cmd_mutate(args) -> int:
     return 1 if measured < args.min_score else 0
 
 
-def _load_request(path: str):
-    from grf.acceptance import load_request, require_policy
+def _load_request(path: str, expected_sha256: str | None = None):
+    from grf.acceptance import RequestError, load_request, require_policy
 
     p = project.current()
     request = load_request(Path(path), p.tiers, [c.name for c in p.plugin.deploy_components()])
+    if expected_sha256 is not None and request.sha256 != expected_sha256:
+        raise RequestError("protected request digest does not match")
     require_policy(request, p.data.get("acceptance", {}).get("policy", {}))
     return request
 
@@ -510,7 +514,7 @@ def cmd_gate(args) -> int:
     p = project.current()
     p.require_framework()
     try:
-        request = _load_request(args.request)
+        request = _load_request(args.request, args.request_sha256)
     except RequestError as err:
         print(f"INVALID request: {err}", file=sys.stderr)
         return 2
@@ -598,6 +602,7 @@ def _main(argv: list[str] | None = None) -> int:
     cmd = sub.add_parser("run", allow_abbrev=False, help="run suites against a tier and write the traceability report (extra args go to robot)")
     cmd.add_argument("--tier", choices=tiers or None, default=None)
     cmd.add_argument("--request", help="validated run request; applies exact selection and binds run metadata to its digest")
+    cmd.add_argument("--request-sha256", help="protected expected digest; checked against the exact bytes parsed")
     cmd.add_argument("--operator", choices=OPERATOR_MODES, default=_default_operator(),
                      help=f"who does manual steps at the instrument (default: ${p.env('OPERATOR')} or none); console/dialog also run "
                           "needs:operator and needs:hardware-action tests")
@@ -631,6 +636,7 @@ def _main(argv: list[str] | None = None) -> int:
     cmd.add_argument("--json", help="write the validated request as normalized JSON (only on success)")
     cmd = sub.add_parser("gate", allow_abbrev=False, help="acceptance gate: does a finished run satisfy its request? (exit code 0 ACCEPTED, 1 REJECTED)")
     cmd.add_argument("--request", required=True, help="the run request (TOML)")
+    cmd.add_argument("--request-sha256", help="protected expected digest; checked against the exact bytes parsed")
     cmd.add_argument("--output", required=True, help="the run's Robot output.xml")
     cmd.add_argument("--deployment", action="append", help="deployment record(s) of the run (repeatable; also GRF_DEPLOYMENT_RECORD)")
     cmd.add_argument("--json", help="where to write the acceptance record (default: acceptance.json next to output.xml)")
@@ -646,6 +652,10 @@ def _main(argv: list[str] | None = None) -> int:
     from grf.deploy.cli import cmd_deploy
 
     add_deploy_parser(sub, p.env_prefix)
+    from grf.workflow import add_parser as add_workflow_parser
+    from grf.workflow import command as workflow_command
+
+    add_workflow_parser(sub)
     _, requested = common.parse_known_args(argv)
     core_commands = set(sub.choices)
     plugin_commands = p.plugin.add_commands(sub) if not requested or requested[0] not in core_commands else {}
@@ -658,7 +668,7 @@ def _main(argv: list[str] | None = None) -> int:
     commands = {"init": cmd_init, "ingest": cmd_ingest, "briefs": cmd_briefs, "drift": cmd_drift, "accept": cmd_accept, "migrate-hashes": cmd_migrate_hashes,
                 "review": cmd_review, "lint": cmd_lint, "report": cmd_report, "mutate": cmd_mutate, "doctor": cmd_doctor,
                 "request": cmd_request, "gate": cmd_gate, "scaffold": cmd_scaffold,
-                "deploy": lambda a: cmd_deploy(a, p)}
+                "deploy": lambda a: cmd_deploy(a, p), "workflow": lambda a: workflow_command(a, p, main)}
     return {**commands, **plugin_commands}[args.command](args)
 
 

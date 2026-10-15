@@ -6,6 +6,13 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Add owner-authorized `workflow deploy-and-test` with protected request digest, immutable source/catalog pins,
+  all-component planning before promotion, exact build/SHA/target record checks, fresh evidence and acceptance
+  even after failed/cancelled tests. `run`/`gate --request-sha256` bind the exact bytes parsed.
+- Replace duplicated Jenkins scripting/floating build parameters/static-directory deletion with the maintained
+  workflow and enforced site reservation. Site approval, permissions, endpoint mapping and credential setup
+  remain external; see WORKFLOWS for migration.
+
 - Require product-owned typed evidence preflight before real-tier capability discovery and pure persisted-result
   integrity assessment afterward, including startup, completeness, cleanup, provenance and actual targets.
   Missing checks fail closed even with `--no-report`/`--fail-on none`; old adapters must adopt the evidence hooks.

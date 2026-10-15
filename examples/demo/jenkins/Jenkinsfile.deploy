@@ -1,106 +1,54 @@
-// Jenkins pipeline TEMPLATE: deploy Jenkins builds to the instrument boards, then run the tests against them.
-// Guide: docs/DEPLOYMENT.md in GeneralRobotFramework. Replace every <placeholder> before use.
-//
-// Starting this job IS the instrument owner's authorization to change the instrument: give the Jenkins "Build"
-// permission of this job only to the instrument owners. Agents never start it.
-//
-// Prerequisites on the site agent (<agent-label>): Python 3.11+, this repository installed with
-// `pip install -e .` and GRF's deploy extra (`general-robot-framework[deploy]`), network access to Jenkins and the
-// boards, and the site config (deploy.example.toml filled in) OUTSIDE the workspace.
-// Acceptance additionally needs Pipeline Utility Steps (readJSON), protected approved requests,
-// product runtime_identity hooks, current human content reviews and the authoritative instrument lock.
-// This is NOT a commissioned controller: bind source/catalog/targets/approval to the exact request before use.
-
-def runCommand(String command) {
-    if (isUnix()) { sh command } else { bat command }
-}
+// OWNER-COMMISSIONED TEMPLATE, not an operational controller.
+// Replace every <placeholder>. Starting this job authorizes instrument changes; restrict Build permission
+// to instrument owners. Agents never start it. See GRF docs/WORKFLOWS.md and docs/DEPLOYMENT.md.
+// Protected job configuration must bind source, catalog, request bytes/digest, endpoints and approval.
+// Do not replace these fixed approval inputs with unrestricted build parameters or floating build aliases.
+// Requires Python 3.11+, installed product/GRF deploy extra, Lockable Resources and external site credentials.
 
 pipeline {
     agent { label '<agent-label>' }
-
-    parameters {
-        string(name: 'COMPONENTS', defaultValue: '<component>', description: 'Component(s) to deploy, separated by commas')
-        string(name: 'BUILD', defaultValue: 'lastSuccessfulBuild', description: 'Jenkins build number or lastSuccessfulBuild')
-        string(name: 'BRANCH', defaultValue: '', description: 'Branch of a multibranch job (empty: [deploy] default_branch)')
-        string(name: 'SHA256', defaultValue: '', description: 'Expected lowercase artifact digest (single component)')
-        booleanParam(name: 'PLAN_ONLY', defaultValue: false, description: 'Dry run: download and check, change nothing')
-        booleanParam(name: 'RUN_TESTS', defaultValue: true, description: 'Run the tests after a successful deployment')
-        string(name: 'TIER', defaultValue: '<tier>', description: 'grf run --tier after the deployment')
-        string(name: 'REQUEST', defaultValue: '<protected-request-file>', description: 'Owner-approved deploy-and-test request')
-    }
-
-    // Enable schedules/downstream triggers only after owner/admin commissioning of bounded approval policy.
-
     options {
         timeout(time: 3, unit: 'HOURS')
         timestamps()
         disableConcurrentBuilds()
-        // With the Lockable Resources plugin, also serialise every job that touches the instrument:
-        // lock(resource: '<instrument-name>')
+        lock(resource: '<authoritative-instrument-resource>')
     }
-
     environment {
-        GRF_DEPLOY_CONFIG = '<path to the site config outside the workspace>'
+        GRF_APPROVED_REQUEST = '<protected-absolute-request-file>'
+        GRF_APPROVED_REQUEST_SHA256 = '<owner-approved-64-lowercase-hex-digest>'
+        GRF_SITE_CONFIG = '<external-site-config>'
+        GRF_WORKFLOW_OUT = "results/workflow-${BUILD_NUMBER}"
     }
-
     stages {
-        stage('Validate request') {
-            when { expression { params.RUN_TESTS && !params.PLAN_ONLY } }
+        stage('Bounded deployment and acceptance') {
             steps {
-                script {
-                    runCommand("grf request check \"${params.REQUEST}\" --json results/request-${env.BUILD_NUMBER}.json")
-                    def request = readJSON file: "results/request-${env.BUILD_NUMBER}.json"
-                    if (request.action != 'deploy-and-test' || request.tier != params.TIER ||
-                        request.component.size() != 1 || request.component[0].name != params.COMPONENTS ||
-                        request.component[0].build.toString() != params.BUILD ||
-                        request.component[0].sha256 != params.SHA256) {
-                        error('Request must match the exact single component, numeric build, digest and tier')
-                    }
-                    // Site controller must also enforce protected source/catalog/approval/target policy here.
-                    // run --request applies the approved specification/test selection.
-                }
-            }
-        }
-        stage('Deploy') {
-            steps {
-                script {
-                    dir('results/deploy') { deleteDir() }  // no stale records from an earlier run in the report
-                    def trigger = currentBuild.getBuildCauses('hudson.triggers.TimerTrigger$TimerTriggerCause') ? 'nightly' : 'manual'
-                    def branch = params.BRANCH ? "--branch \"${params.BRANCH}\"" : ''
-                    def action = params.PLAN_ONLY ? 'plan' : 'run --yes'
-                    def digest = params.SHA256 ? "--sha256 \"${params.SHA256}\"" : ''
-                    withCredentials([
-                        usernamePassword(credentialsId: '<jenkins-api-credential-id>', usernameVariable: 'JENKINS_USER', passwordVariable: 'JENKINS_TOKEN'),
-                        string(credentialsId: '<board-password-credential-id>', variable: 'BOARD_1_PASSWORD'),
-                    ]) {
-                        runCommand("grf deploy ${action} --component \"${params.COMPONENTS}\" --build \"${params.BUILD}\" ${branch} ${digest} " +
-                                   "--trigger ${trigger} --outdir results/deploy")
+                withCredentials([
+                    usernamePassword(credentialsId: '<jenkins-api-credential-id>', usernameVariable: 'JENKINS_USER', passwordVariable: 'JENKINS_TOKEN'),
+                    string(credentialsId: '<board-password-credential-id>', variable: 'BOARD_1_PASSWORD'),
+                ]) {
+                    script {
+                        // GRF snapshots the request, plans every numeric build+digest before promotion,
+                        // validates deployment records, applies selection and gates even a failed test run.
+                        if (isUnix()) {
+                            sh '''
+                                python -m grf workflow deploy-and-test --yes \
+                                  --request "$GRF_APPROVED_REQUEST" --request-sha256 "$GRF_APPROVED_REQUEST_SHA256" \
+                                  --config "$GRF_SITE_CONFIG" --outdir "$GRF_WORKFLOW_OUT"
+                            '''
+                        } else {
+                            bat '''
+                                @echo off
+                                python -m grf workflow deploy-and-test --yes --request "%GRF_APPROVED_REQUEST%" --request-sha256 "%GRF_APPROVED_REQUEST_SHA256%" --config "%GRF_SITE_CONFIG%" --outdir "%GRF_WORKFLOW_OUT%"
+                            '''
+                        }
                     }
                 }
-            }
-        }
-        stage('Test') {
-            when { expression { params.RUN_TESTS && !params.PLAN_ONLY } }
-            steps {
-                // Preserve a failed Test stage but still evaluate saved output in the acceptance stage.
-                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                    runCommand("grf run --request \"${params.REQUEST}\" --tier \"${params.TIER}\" " +
-                               "--outdir results/test-${env.BUILD_NUMBER} --deployment results/deploy")
-                }
-            }
-        }
-        stage('Acceptance gate') {
-            when { expression { params.RUN_TESTS && !params.PLAN_ONLY } }
-            steps {
-                runCommand("grf gate --request \"${params.REQUEST}\" --output results/test-${env.BUILD_NUMBER}/output.xml " +
-                           "--deployment results/deploy")
             }
         }
     }
-
     post {
         always {
-            archiveArtifacts artifacts: 'results/deploy/**/deployment.json, results/deploy/**/deploy.log, results/**/acceptance.json, results/**/traceability.*, results/**/*.html',
+            archiveArtifacts artifacts: 'results/workflow-*/workflow.jsonl, results/workflow-*/request.toml, results/workflow-*/**/deployment.json, results/workflow-*/**/deploy.log, results/workflow-*/**/output.xml, results/workflow-*/acceptance.json, results/workflow-*/**/traceability.*, results/workflow-*/**/*.html',
                              allowEmptyArchive: true
         }
     }

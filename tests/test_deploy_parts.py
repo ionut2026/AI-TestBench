@@ -617,11 +617,10 @@ def test_starter_deploy_files_only_with_the_flag(tmp_path):
     assert not (plain / "jenkins" / "Jenkinsfile.deploy").exists()
     root = init_project(tmp_path / "deploy", "Widget", "WID", with_deploy=True)
     jenkinsfile = (root / "jenkins" / "Jenkinsfile.deploy").read_text(encoding="utf-8")
-    assert "withCredentials" in jenkinsfile and "'run --yes'" in jenkinsfile and "grf deploy ${action}" in jenkinsfile
-    assert "grf request check" in jenkinsfile and "grf gate --request" in jenkinsfile
-    assert "--sha256" in jenkinsfile and "acceptance.json" in jenkinsfile
-    assert jenkinsfile.index("grf request check") < jenkinsfile.index("grf deploy ${action}")
-    assert jenkinsfile.index("grf run --tier") < jenkinsfile.index("grf gate --request")
+    assert "withCredentials" in jenkinsfile and "grf workflow deploy-and-test --yes" in jenkinsfile
+    assert "--request-sha256" in jenkinsfile and "acceptance.json" in jenkinsfile
+    assert "lock(resource:" in jenkinsfile and "disableConcurrentBuilds()" in jenkinsfile
+    assert "deleteDir" not in jenkinsfile and "params." not in jenkinsfile and "lastSuccessfulBuild" not in jenkinsfile
     example = (root / "robot" / "environments" / "deploy.example.toml").read_text(encoding="utf-8")
     with pytest.raises(DeployError, match="placeholder"):
         parse(tomllib.loads(example), Path("deploy.example.toml"))

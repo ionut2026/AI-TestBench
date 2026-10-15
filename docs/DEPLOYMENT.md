@@ -373,18 +373,18 @@ physical board identity. Product commissioning must establish endpoint mapping, 
 
 `grf init --with-deploy` also creates `jenkins\Jenkinsfile.deploy`, a commented template:
 
-- parameters `COMPONENTS`, `BUILD`, `BRANCH`, `PLAN_ONLY`, `RUN_TESTS`, `TIER`;
-- schedules/downstream triggers left disabled until the owner/admin commissions bounded authorization;
-- `disableConcurrentBuilds()`, a timeout, and a commented `lock(...)` for the Lockable Resources plugin;
+- protected fixed request/digest/site inputs, not unrestricted component/build parameters;
+- no schedules/downstream triggers until owner/admin commissioning of bounded authorization;
+- `disableConcurrentBuilds()`, a timeout and enforced `lock(...)` for the Lockable Resources plugin;
 - `withCredentials` for the Jenkins token and the board password;
-- validation of a supplied protected request against the exact single component/numeric build/digest/tier;
-- `grf deploy run --yes ... --sha256 ... --outdir results/deploy`, then `grf run --deployment results/deploy`;
-- `grf gate` after successful tests, archiving `acceptance.json`, `deployment.json`, `deploy.log` and reports.
+- the [maintained bounded workflow](WORKFLOWS.md#maintained-deploy-and-test-workflow), including all-component
+  planning/promotion, record checks, exact selection and acceptance after failed tests;
+- fresh per-build evidence, archiving request/journal, `acceptance.json`, deployment records and reports.
 
-This starter is not a production controller: add protected approval/source/catalog/target binding and approved
-selection filters before enabling it. Acceptance requires the Pipeline Utility Steps plugin (`readJSON`).
-Failed Robot execution already fails the job and skips the later gate; use a product-owned finalization policy
-if the site must write rejection records even after test failure. Never catch a failure to turn the job green.
+This starter is not a commissioned controller: protect approval/source/catalog/target binding, implement the
+product evidence hooks and configure the authoritative resource reservation before enabling it. It no longer
+requires Pipeline Utility Steps (`readJSON`); generic sequencing and failed-run finalization live in GRF.
+Never catch a failure to turn the job green.
 
 Prerequisites, done by the site's Jenkins administrator and the instrument owner (never by an agent):
 
@@ -392,8 +392,9 @@ Prerequisites, done by the site's Jenkins administrator and the instrument owner
 2. The job created from the template, with "Build" permission only for the instrument owners.
 3. Credentials: the board password (and optionally a Jenkins API token) as Jenkins credentials.
 4. The filled-in site config and the `known_hosts` file on the agent, outside the workspace.
-5. First authorized runs: `PLAN_ONLY`, then a real deployment of the build that already runs (expect
-   `UNCHANGED`), then a different build, then a deliberate `deploy rollback`, then enable the nightly run.
+5. Commission first with separate authorized `deploy plan` commands, then an approved pinned workflow for
+   the build that already runs (expect `UNCHANGED`), then approved deployment/recovery checks. Schedules require
+   their own bounded owner authorization and must not replace immutable builds/digests with floating aliases.
 
 ## Security
 

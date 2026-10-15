@@ -79,7 +79,7 @@ keyword with one explicit record file, component, observed version and target la
 proof of board identity. See `docs\DEPLOYMENT.md#checking-the-observed-product-version` in your GRF checkout.
 The synthetic counter has no deployment or product version and does not call this assertion.
 
-For controlled product workflows, GRF 0.3.0 adds `request check` (validate a saved intention), `gate` (evaluate
+For controlled product workflows, GRF supplies `request check` (validate a saved intention), `gate` (evaluate
 finished evidence) and content-aware human reviews. See `docs\WORKFLOWS.md` in your GRF checkout.
 The gate never accepts the mock counter as product evidence. Local tier locks only coordinate runs sharing
 the same configured results root; a real instrument needs the site's authoritative controller reservation.

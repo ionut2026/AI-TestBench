@@ -54,6 +54,9 @@ Run the [core validation and wheel-only demo](docs/TESTING.md#core-validation-wi
 Changes consumed by a product also need that repository's authorized regression gates.
 Never regenerate goldens just to make a failure go away: explain and review an intentional output change.
 Product and hardware runs need the owner's authorization; core changes do not authorize consumer operations.
+Validate workflow sequencing with injected synthetic deployments, including plan mismatches, source/request
+changes and failed/cancelled tests that still attempt acceptance. Never execute live workflow/deployment
+commands as a generic validation step; see [the workflow boundary](docs/WORKFLOWS.md#maintained-deploy-and-test-workflow).
 Do not publish data to RV&S or introduce archive/history/publishing features excluded from the approved scope.
 
 Deployment code (`src\grf\deploy`) must stay generic: no host names, product names or credentials in core.

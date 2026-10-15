@@ -6,6 +6,9 @@ It explains the terminology, reads a small test line by line, and guides you thr
 Reusable infrastructure for specification-traced Robot Framework system tests. GRF owns configuration, CLI,
 catalog ingestion, briefs, drift/lint gates, review ledgers, reports, capability selection and timing/rig helpers.
 Each product owns its adapters, keywords, specifications, environments and suites.
+Controlled evidence uses [typed product validation and explicit assertion coverage](docs/WORKFLOWS.md#evidence-integrity-and-assertion-coverage-04-migration).
+Owner-authorized deployment/testing can use the [maintained bounded workflow](docs/WORKFLOWS.md#maintained-deploy-and-test-workflow);
+it does not grant instrument permission or commission a Jenkins site.
 
 In plain language: Robot Framework runs readable test steps; GRF adds project organization and links those
 tests to the written behavior they should check. Product code supplies the steps that interact with your product.

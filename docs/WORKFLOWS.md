@@ -9,8 +9,9 @@ protected controller such as Jenkins authenticates who starts it.
 
 GRF supplies local request validation, local run reservation, content-aware review records and a post-run
 acceptance evaluator. The product supplies runtime version semantics, observable behavior and controller integration.
-There is no generic unattended workflow engine, protected profile store, distributed lease, authenticated
-review service or automatic AI author/reviewer chain. A valid request does not execute anything.
+The bounded deploy-and-test command below maintains plan/promotion/run/gate sequencing. There is no generic
+unattended scheduler, protected profile store, distributed lease, authenticated review service or automatic
+AI author/reviewer chain. A valid request does not execute anything.
 
 `grf run --request <file>` validates authorization expiry, tier, exact selection, optional source/catalog
 pins and supplied deployment identities **before** capability discovery or Robot execution. It saves the
@@ -219,6 +220,50 @@ Old reviews remain in the ledger and visible to drift/reporting, but do not sati
 a fingerprint. After actual human review, re-record with the ordinary `grf review ... --reviewer ... --verdict ...`
 command; do not synthesize fingerprints as approval. Agent reviews never count as human approval.
 Changing test/shared-resource content invalidates affected approvals. See [Testing](TESTING.md).
+
+## Maintained deploy-and-test workflow
+
+`grf workflow deploy-and-test` is for an **owner-authorized protected controller**, not an agent operation.
+It requires an unexpired deploy-and-test request with numeric builds/SHA256, clean immutable source revision,
+catalog digest, a protected expected request digest, and `--yes`. No floating build alias or target override
+is accepted. The controller still authenticates approval and holds the authoritative instrument reservation.
+
+Run from the pinned product checkout only after site commissioning and owner authorization:
+
+```powershell
+grf workflow deploy-and-test --yes --request <protected-request-file> --request-sha256 <approved-digest> --config <external-site-config> --outdir results\workflow-<unique-run-id>
+```
+
+The command validates source/catalog/selection/preflight **before** deployment, snapshots exact request bytes
+into a new directory, then plans **all** components in the product's configured deployment order. Plans must
+match project/component/site target, numeric build, digest and any expected installation version before
+promotion. Actual deployment uses the same in-memory site configuration and pinned numeric build/digest;
+re-resolving a changed Jenkins artifact fails checksum verification rather than following a moving alias.
+Source/catalog/authorization are rechecked before each stage. Site credential files and host-key trust remain
+site-owned, not copied into the workspace.
+
+Successful deployment records must match the original request and planned targets before testing begins.
+GRF then applies `run --request` and always attempts the pure acceptance gate after a test return/error/cancel,
+preserving abnormal test errors and failing gate results. A failed deployment stops before testing.
+Earlier successful component deployments are **not** automatically rolled back if a later component fails;
+the owner uses retained records/recovery guidance. A failing test does not itself authorize rollback.
+
+`run` and `gate` accept optional `--request-sha256`; the workflow always supplies it, comparing the digest
+against the same bytes parsed, not a separate prior read. Changed snapshots fail closed. The fresh output
+contains `request.toml`, append-only flushed `workflow.jsonl` stage/digest records, separate `plan` and `deploy`
+records, `test` output/reports, and `acceptance.json`. A missing final `evaluated` event means incomplete
+or interrupted orchestration, never acceptance. Existing directories are refused, never deleted or reused.
+No global data pruning, cross-machine lease, authenticated signature or automatic resume is provided.
+
+The workflow returns the gate failure code, otherwise the test return code; deployment failure codes are
+preserved. Input/pin/provenance errors return 2. Success requires both a successful run and acceptance.
+Mock execution and fake deployment unit tests validate orchestration only, never a real product.
+
+**Jenkins migration:** the generated template now invokes this maintained command using protected fixed
+request/digest/site inputs and an enforced Lockable Resources reservation. It no longer duplicates request
+comparison logic, permits floating build parameters, clears static evidence folders or skips the gate after
+failed tests. Product wrappers should retain only site guards, endpoint/approval policy and credential setup.
+Commission permissions, shared reservation, approved inputs and evidence hooks before enabling the job.
 
 ## Evidence integrity and assertion coverage (0.4 migration)
 

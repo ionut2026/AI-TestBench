@@ -247,6 +247,11 @@ comment changes it. This prevents accidentally accepting output belonging to a d
 After an owner-authorized run, `grf gate --request <request-file> --output <output-file>` reads saved results
 and writes `acceptance.json` with ACCEPTED or REJECTED and explanations. Run these from the product checkout.
 The mock counter cannot become accepted product evidence: it checks framework wiring, not a real application.
+For an already commissioned instrument site, a **workflow** means the maintained sequence that plans pinned
+builds, deploys them, runs the requested tests and checks acceptance, even when testing fails.
+`grf workflow deploy-and-test` is not a demo command: it changes instruments and requires owner authorization
+and protected site setup. Its [advanced reference](WORKFLOWS.md#maintained-deploy-and-test-workflow)
+belongs with product/site maintainers, not the safe mock walkthrough.
 
 A **content fingerprint** is a digest (a compact identifier calculated from text) of the test and imported
 Robot resources. GRF 0.3.0 records it when a human reviews the test, so changing the reviewed logic invalidates
