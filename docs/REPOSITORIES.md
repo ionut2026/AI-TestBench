@@ -36,6 +36,14 @@ See [Configuration](CONFIGURATION.md#external-windchill-integration) for setup.
 
 ## Compatibility
 
+Simulator integration is product-owned too. GRF has no dependency on SMM TestBench, its `etc` resources,
+or the older SMM simulators. SMMAutomationFramework owns the adapter and the requirements for simulator
+source, build outputs and runtime assets. See the [beginner explanation](GETTING-STARTED.md#does-grf-need-a-simulator-such-as-smm-testbench).
+A simulator hosted in Bitbucket can be consumed by a product without moving its code into GRF or GitHub;
+compatibility depends on the product adapter's interfaces and packaging requirements, not the Git host.
+The product's [TestBench integration guide](https://github.com/ionut2026/SMMAutomationFramework/blob/main/docs/TESTBENCH-INTEGRATION.md)
+records its exact engine imports, runtime assets, legacy-source comparison and supplier handover checklist.
+
 Products pin an approved GRF release independently. A sibling editable install is useful for coordinated local
 development but is not a source-provenance guarantee. Core validation does not establish product compatibility:
 the product owner must run its own authorized regression against the exact immutable framework commit before

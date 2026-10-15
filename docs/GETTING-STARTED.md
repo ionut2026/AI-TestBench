@@ -52,6 +52,24 @@ SMMAutomationFramework. A different future product gets its own adapters and tes
 configuration, review rules and reporting. A generic reporting fix can then benefit both projects after each
 team upgrades to and validates the release containing that fix.
 
+### Does GRF need a simulator such as SMM TestBench?
+
+**No. GRF itself does not need SMM TestBench or either of the older SMM simulators.**
+GRF's counter demo runs without them. The product automation project decides which simulator, real
+application or instrument it connects to.
+
+For SMM, the connection belongs to SMMAutomationFramework. Robot Framework executes a readable test;
+SMM's library translates its steps into product-specific interactions; GRF supplies the shared selection,
+review and reporting workflow. A simulator's source repository is not automatically a usable installation:
+the product adapter may also need built programs, protocol definitions, configuration and runtime data.
+Those requirements belong in the product's integration guide, not in GRF's installation requirements.
+For the concrete SMM file inventory, testing modes and comparison with the older simulator sources, see
+[SMM TestBench integration](https://github.com/ionut2026/SMMAutomationFramework/blob/main/docs/TESTBENCH-INTEGRATION.md).
+
+Replacing a product's simulator therefore means checking or adapting that product's integration, not
+adding SMM-specific imports to GRF. Passing a test against a substitute simulator does not establish that
+the real application or instrument behaves correctly.
+
 ### Could SMM do all this without GRF?
 
 **Yes. GRF is a design choice, not a technical requirement.** SMM could keep its own ingestion, review,

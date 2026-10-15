@@ -4,6 +4,11 @@ GRF uses Semantic Versioning. Additive public APIs use a minor release; compatib
 Before 1.0, incompatible API changes also require a minor release. Release tags are `vMAJOR.MINOR.PATCH`.
 Tags and publication are explicit maintainer actions.
 
+## Unreleased
+
+- Clarify simulator ownership in the beginner and repository guides: GRF does not require SMM TestBench;
+  product adapters define the simulator build, interface and runtime-resource requirements.
+
 ## 0.4.3 - 2026-10-15
 
 - Add opt-in public `grf.hostlock.acquire` for atomic same-machine resource sets, owner/run/lease identities,
