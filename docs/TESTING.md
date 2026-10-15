@@ -99,6 +99,12 @@ checksum, every rollback point, rollback failure, restore, redaction, config val
 starter. They need no board, Jenkins or network, and passing them is not evidence that a real board deploys.
 See [Deploying builds](DEPLOYMENT.md).
 
+`test_deploy_binding.py` exercises strict local record/version assertions, including real Robot execution
+of the inherited keyword. These are synthetic checks, not deployments or product observations.
+Attaching a deployment record to a report is not a runtime check; products may opt into the
+[observed-version assertion](DEPLOYMENT.md#checking-the-observed-product-version) and own fresh version
+acquisition and endpoint mapping.
+
 ## Wheel-only smoke run
 
 This checks packaging separately from an editable source install. Choose fresh output directories if rerunning.

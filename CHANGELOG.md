@@ -1,7 +1,23 @@
 # Changelog
 
-GRF uses Semantic Versioning. Before 1.0, incompatible API changes require a minor release; compatible fixes use
-a patch release. Release tags are `vMAJOR.MINOR.PATCH`. Tags and publication are explicit maintainer actions.
+GRF uses Semantic Versioning. Additive public APIs use a minor release; compatible fixes use a patch release.
+Before 1.0, incompatible API changes also require a minor release. Release tags are `vMAJOR.MINOR.PATCH`.
+Tags and publication are explicit maintainer actions.
+
+## 0.3.0 - Unreleased
+
+- Added the read-only `grf.deploy.binding.assert_product_version` helper and inherited
+  `Deployment Record Should Match Product Version` Robot keyword. They check an explicit deployment file's
+  component, target, optional expected project, successful installed outcome and exact observed version.
+  Only `DEPLOYED`/`UNCHANGED`/`RESTORED`, explicit non-dry-run records and running installed versions qualify;
+  requested artifact versions are never a fallback. Product adapters own fresh observation and endpoint mapping.
+- Clarified that `--deployment` attaches provenance only, not proof of runtime version or board identity.
+  No deployment or network action is performed by the new assertion. Existing suite behavior and configuration
+  are unchanged. See `docs\DEPLOYMENT.md#checking-the-observed-product-version`.
+- Migration: update both the dependency pin and `[framework] version` to an approved 0.3.0 commit/release
+  together, then validate the consuming adapter. Existing products must explicitly call the new keyword or
+  helper to use it; no automatic setup is added. Starter and checked-in demo pins now use 0.3.0.
+  No release tag is created by this change.
 
 ## 0.2.0 - Unreleased
 

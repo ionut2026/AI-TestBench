@@ -78,8 +78,10 @@ approval counts as review. Product and instrument-affecting operations require t
 GRF reads RV&S and writes local artifacts; it never publishes results back to RV&S.
 
 Before testing on an instrument, `grf deploy` can install a Jenkins build on its boards, with automatic
-rollback, and the report shows which build was tested (`--deployment`). Deploying changes the instrument and
-needs the owner's authorization; see [Deploying builds](docs/DEPLOYMENT.md).
+rollback, and `--deployment` attaches build provenance to the report; it does not check the running product.
+An opt-in `Deployment Record Should Match Product Version` keyword checks a product-supplied version
+against the record. Deploying changes the instrument and needs the owner's authorization;
+see [Deploying builds](docs/DEPLOYMENT.md#checking-the-observed-product-version).
 
 Live ingestion is optional: install `.[windchill]`, explicitly configure an **external** MCP server and provide
 its connection settings. Generic development and the demo do not need the server or MCP SDK.

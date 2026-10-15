@@ -36,11 +36,17 @@ Never weaken host-key, TLS, checksum, lock or rollback checks to make something 
 simulated board (`tests\deploy_fakes.py`), and never run a real deployment as part of validating a core change.
 See [Deploying builds](docs/DEPLOYMENT.md).
 
+Keep deployment-to-test binding in `grf.deploy.binding`; product adapters own fresh version acquisition
+and the endpoint-to-target mapping. Test the inherited Robot keyword as well as the helper, and reject
+missing data rather than substituting the requested artifact version. Report attachment alone is not
+runtime validation; see the [public contract](docs/DEPLOYMENT.md#checking-the-observed-product-version).
+
 ## Compatibility and releases
 
 Record user-visible changes in CHANGELOG. Keep public keyword names, configuration and CLI behavior stable
 within a release line. Deprecate compatibility shims deliberately, with migration instructions, not silently.
-Use SemVer (`vX.Y.Z` tags); release creation/push requires a maintainer decision.
+Use SemVer (`vX.Y.Z` tags): additive public APIs use a minor release, compatible fixes a patch;
+before 1.0, incompatible changes also use a minor release. Release creation/push requires a maintainer decision.
 Products pin an approved GRF version in both `pyproject.toml` and `[framework] version` in `grf.toml`.
 `grf doctor` checks the installed distribution against the latter. During local development install the sibling
 checkout editable; version equality is not a commit-identity check. CI must also pin the approved

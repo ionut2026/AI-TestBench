@@ -255,6 +255,67 @@ outcome, time) and the JSON report a `deployments` list. An outcome other than `
 warning: the tests may not have run against the intended build. A deployment never changes the evidence rules;
 see [Testing](TESTING.md).
 
+### Checking the observed product version
+
+`--deployment` and `GRF_DEPLOYMENT_RECORD` attach provenance only. They do not expose a Robot variable,
+query a product version, select a record for assertions or automatically add setup checks.
+An adapter that extends `grf.library.GrfLibrary` inherits this opt-in keyword:
+
+```text
+Deployment Record Should Match Product Version    record    component    actual_version    target    project=
+```
+
+`record` must name one existing JSON file, not a directory or an inferred latest deployment.
+`component`, `actual_version` and `target` must be nonempty strings. The optional `project` defaults to the
+current `grf.toml` display name. Comparisons are exact, case-sensitive strings, with no version normalization.
+The keyword returns the parsed record on success and fails the test with a diagnostic otherwise.
+The underlying Python API is:
+
+```python
+from grf.deploy.binding import assert_product_version
+
+record = assert_product_version(
+    record_path, "app", observed_version, target="board-1", project="My Product",
+)
+```
+
+Signature: `assert_product_version(record: str | Path, component: str, actual_version: str, *,
+target: str, project: str | None = None) -> dict[str, Any]`.
+The Python helper raises `AssertionError`; `project=None` omits only the expected-project comparison.
+Product integrations should supply their project name explicitly. Both entry points require a schema-1
+record, nonempty project/component/target fields, `dryRun=false`, a `DEPLOYED`, `UNCHANGED` or `RESTORED` outcome,
+and `installed.status="running"` with a nonempty `installed.version`. They compare **installed.version**,
+never the requested artifact version: failed/rolled-back deployments, dry runs and missing observations
+cannot become successful bindings. `RESTORED` is accepted by this assertion even though the report's
+provenance table conservatively warns for outcomes other than `DEPLOYED`/`UNCHANGED`.
+
+Example product-owned setup (illustrative only; `Read Fresh Product Version` must be implemented by the
+product adapter):
+
+```robotframework
+*** Keywords ***
+Check Selected Deployment
+    ${observed}=    Read Fresh Product Version
+    Deployment Record Should Match Product Version    ${DEPLOYMENT_RECORD}    app    ${observed}    ${DEPLOYMENT_TARGET}
+```
+
+From the consuming product's root, on an **owner-authorized** tier, explicitly supply both the report attachment
+and the Robot variable when invoking a suite that calls this setup:
+
+```powershell
+grf run --tier <authorized-tier> --outdir results\version-check --deployment <record-file> --variable DEPLOYMENT_RECORD:<record-file> --variable DEPLOYMENT_TARGET:board-1
+```
+
+Successful output includes a passing setup assertion; any mismatch fails the test. No new configuration keys
+are needed, and existing suites remain unchanged until they call the keyword. The helper reads only the local
+file, needs no `deploy` extra, and performs no deployment or network operation.
+
+The product must freshly observe its version, reject missing/malformed responses, and establish the mapping
+between the observed endpoint and the expected target. `target` checks a record label, **not physical board
+identity**. Version equality alone does not prove artifact identity, record freshness, absence of another
+deployment, or correct behavior. Coordinate deployment and tests with the owner's instrument lock and retain
+the record with the results. Synthetic/mock checks are never product evidence.
+
 ## Jenkins
 
 `grf init --with-deploy` also creates `jenkins\Jenkinsfile.deploy`, a commented template:
