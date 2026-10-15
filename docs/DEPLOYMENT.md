@@ -97,7 +97,16 @@ Step by step, for one component on one board:
 14. **Commit**: write the board marker `<workdir>/.grf-deploy/<name>.json`, remove `<name>_grf_previous`, keep the
     newest `retention` earlier component images and tarballs. No global image prune is performed. Problems here
     are warnings: the new build already runs.
-15. **Unlock**, write the record.
+15. **Unlock**, finalize the record.
+
+Before any connection, GRF exclusively reserves `deployment.json` in the output folder.
+Each step is saved as `IN_PROGRESS` before its action and checkpointed afterward using
+flushed atomic replacement; recovery commands and the previous installation are recorded before
+replacement. An interrupted record has no final outcome/finished time and is not installation evidence.
+If persistence fails, normal work aborts; compensating cleanup is still attempted and the error is
+reported. Keep output on reliable storage: snapshots are not a signed or remote audit journal.
+Do not reuse output folders, even for a retry. Existing `deployment.json`/`deploy.log` is never truncated;
+default output names include microseconds to avoid same-second collisions.
 
 ### Automatic rollback
 

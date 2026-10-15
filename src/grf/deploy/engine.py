@@ -84,6 +84,7 @@ class Deployment:
         self.wd, self.prev_dir, self.marker = wd, f"{wd}/{PREVIOUS}", f"{wd}/{MARKERS}/{component.name}.json"
         self.name, self.prev_name = self.recipe.name, self.recipe.name + PREVIOUS_SUFFIX
         self.operation_id = uuid.uuid4().hex
+        self.journal_failed = False
 
     # ------------------------------------------------------------------ helpers
 
@@ -94,11 +95,14 @@ class Deployment:
 
     @contextmanager
     def step(self, name: str) -> Iterator[Step]:
-        current = Step(name, "OK")
+        current = Step(name, "IN_PROGRESS")
         self.record.steps.append(current)
+        self.checkpoint()
         start = self.monotonic()
         try:
             yield current
+            if current.status == "IN_PROGRESS":
+                current.status = "OK"
         except BaseException as err:
             current.status = "FAIL"
             current.detail = current.detail or self.redact(str(err) or type(err).__name__)
@@ -106,6 +110,17 @@ class Deployment:
         finally:
             current.seconds = round(self.monotonic() - start, 2)
             self.log(f"[{current.status}] {name}" + (f": {current.detail}" if current.detail else ""))
+            self.checkpoint()
+
+    def checkpoint(self) -> None:
+        if self.journal_failed:
+            return  # the first error aborts normal execution; compensating cleanup must remain possible
+        try:
+            self.record.write(self.work_dir)
+        except OSError as err:
+            self.journal_failed = True
+            self.log(f"ERROR: deployment evidence checkpoint failed: {err}; aborting, cleanup may be unjournaled")
+            raise DeployError(f"cannot persist deployment evidence: {err}") from err
 
     def run(self, command: str, timeout_s: float = 120, check: bool = True) -> str:
         assert self.t is not None
@@ -200,6 +215,8 @@ class Deployment:
         if options.restore:
             record.trigger = "rollback"
         record.dry_run = options.dry_run
+        record.reserve(self.work_dir)
+        record.write(self.work_dir)
         locked = False
         owner = self.lock_owner()
         try:
@@ -263,6 +280,7 @@ class Deployment:
             if self.t is not None:
                 self.t.close()
             record.finished = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
+            record.write(self.work_dir)
         return record
 
     # ------------------------------------------------------------------ steps 1-4
@@ -387,6 +405,8 @@ class Deployment:
         self.stopped = self.renamed = self.started = False
         self.had_previous = info is not None
         self.previous_container_id = info.get("Id") if info else None
+        self.record.recovery = self.recovery_commands()
+        self.checkpoint()
         try:
             with self.step("keep the current tarball in previous_builds") as s:
                 self.run(f"mkdir -p {q(self.prev_dir)}")
@@ -421,6 +441,7 @@ class Deployment:
             reason = "aborted (Ctrl+C or Jenkins abort)" if isinstance(err, KeyboardInterrupt) else self.redact(str(err))
             self.rollback(reason, artifact, tar, moved)
         self.commit(artifact, loaded, options)
+        self.record.recovery = []
 
     def restore_files(self, artifact: ArtifactRef, tar: str, moved: list[str], staged: bool) -> None:
         """Puts the tarballs back where they were before this deployment (best effort, logged)."""

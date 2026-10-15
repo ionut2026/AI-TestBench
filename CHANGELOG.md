@@ -6,6 +6,11 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Reserve deployment output exclusively before connecting. Persist flushed, atomic pre-action and
+  completion snapshots (including rollback commands) at every step. Journal write failure aborts normal
+  work without blocking compensating cleanup; unfinished records remain explicitly incomplete.
+  **Migration:** never reuse deployment output folders; defaults now include microseconds.
+
 - Read preflight, holds, rollback snapshot and unchanged decisions under the board lock.
   Unchanged installations must also pass configured health/stability checks.
 - Fail closed on Docker inspection/transport errors; only explicit not-found means absent.

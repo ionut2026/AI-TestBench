@@ -28,8 +28,9 @@ def tarball(tmp_path, version="1.2.3", board=None):
 
 def deploy(board, tmp_path, comp=None, config=None, **options):
     clock = Clock()
+    output = tmp_path / f"out-{len(list(tmp_path.glob('out-*')))}"
     d = Deployment("Widget", comp or component(), config or site(), (config or site()).targets["board"],
-                   work_dir=tmp_path / "out", env={}, transport_factory=lambda t, env: board,
+                   work_dir=output, env={}, transport_factory=lambda t, env: board,
                    sleep=clock.sleep, monotonic=clock.monotonic, echo=lambda _t: None)
     record = d.deploy(Options(**options))
     return record
@@ -414,8 +415,58 @@ def test_record_is_written_and_appended_to_the_audit_log(board, tmp_path):
 
     record = deploy(board, tmp_path, local_tar=tarball(tmp_path, board=board))
     audit = tmp_path / "audit" / "deployments.jsonl"
-    path = record.write(tmp_path / "rec", str(audit))
+    path = record.write(tmp_path / "out-0", str(audit))
     data = json.loads(path.read_text(encoding="utf-8"))
     assert data["schema"] == 1 and data["outcome"] == "DEPLOYED" and data["artifact"]["version"] == "1.2.3"
-    assert (tmp_path / "rec" / "deploy.log").read_text(encoding="utf-8").count("[OK]") >= 5
+    assert (tmp_path / "out-0" / "deploy.log").read_text(encoding="utf-8").count("[OK]") >= 5
     assert json.loads(audit.read_text(encoding="utf-8").splitlines()[0])["component"] == "app"
+
+
+def test_output_reuse_fails_before_connection(board, tmp_path):
+    from grf.deploy.record import DeployRecord
+
+    output = tmp_path / "reserved"
+    previous = DeployRecord("Widget", "app", "board", "host", "cli").write(output)
+    before = previous.read_bytes()
+    d = Deployment("Widget", component(), site(), site().targets["board"], work_dir=output,
+                   transport_factory=lambda *args: pytest.fail("must not connect"))
+    with pytest.raises(FileExistsError):
+        d.deploy(Options(local_tar=tarball(tmp_path, board=board)))
+    assert previous.read_bytes() == before
+
+
+def test_pre_action_record_survives_an_interrupted_step(board, tmp_path, monkeypatch):
+    import json
+
+    original = board.put
+
+    def put(local, remote, **kwargs):
+        data = json.loads((tmp_path / "out-0" / "deployment.json").read_text(encoding="utf-8"))
+        assert data["finished"] is None and data["outcome"] is None
+        assert data["previous"]["version"] == "1.2.2"
+        assert data["steps"][-1]["status"] == "IN_PROGRESS"
+        assert data["artifact"]["sha256"] and data["recovery"]
+        return original(local, remote, **kwargs)
+
+    monkeypatch.setattr(board, "put", put)
+    assert deploy(board, tmp_path, local_tar=tarball(tmp_path, board=board)).outcome == Outcome.DEPLOYED
+
+
+def test_checkpoint_failure_after_stop_does_not_block_rollback(board, tmp_path, monkeypatch):
+    from grf.deploy.record import DeployRecord
+
+    original = DeployRecord.write
+    failed = []
+
+    def write(record, *args, **kwargs):
+        if not failed and record.steps and record.steps[-1].name.startswith("stop ") and record.steps[-1].status == "OK":
+            failed.append(True)
+            raise OSError("disk full")
+        return original(record, *args, **kwargs)
+
+    monkeypatch.setattr(DeployRecord, "write", write)
+    result = deploy(board, tmp_path, local_tar=tarball(tmp_path, board=board))
+    assert result.outcome == Outcome.ROLLED_BACK
+    assert "cannot persist" in result.message and "cleanup may be unjournaled" in "\n".join(result.log)
+    assert board.running_image_id() == image_id("1.2.2")
+    assert lock_free(board)

@@ -230,7 +230,7 @@ def _deploy(site: SiteConfig, components: list[Component], args: argparse.Namesp
             return 2
     if site.jenkins and site.jenkins.insecure_tls and not local_tar and not restore:
         print("WARNING: [jenkins] insecure_tls = true: the Jenkins certificate is not verified", file=sys.stderr)
-    stamp = dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%SZ")
+    stamp = dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%S%fZ")
     previous_handler = None
     if command != "plan" and hasattr(signal, "SIGTERM"):
         def terminate(_signum: int, _frame: Any) -> None:

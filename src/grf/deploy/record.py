@@ -8,6 +8,8 @@ import datetime as dt
 import getpass
 import json
 import os
+import tempfile
+import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from importlib.metadata import PackageNotFoundError, version
@@ -61,10 +63,13 @@ class DeployRecord:
     actor: dict[str, str | None] = field(default_factory=actor)
     insecure_tls: bool = False
     log: list[str] = field(default_factory=list)
+    record_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    _output: Path | None = field(default=None, init=False, repr=False)
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "schema": RECORD_SCHEMA,
+            "recordId": self.record_id,
             "project": self.project,
             "component": self.component,
             "target": self.target,
@@ -87,11 +92,50 @@ class DeployRecord:
             "framework": {"grf": _version("general-robot-framework")},
         }
 
-    def write(self, out_dir: Path, audit_log: str | None = None) -> Path:
+    def reserve(self, out_dir: Path) -> None:
+        """Exclusively reserve evidence output before any connection or board action."""
         out_dir.mkdir(parents=True, exist_ok=True)
+        if (out_dir / "deploy.log").exists():
+            raise FileExistsError(f"deployment output already has a deploy.log: {out_dir}")
+        path = out_dir / RECORD_FILE
+        with path.open("x", encoding="utf-8") as f:
+            json.dump(self.as_dict(), f, indent=1)
+            f.flush()
+            os.fsync(f.fileno())
+        if os.name != "nt":
+            descriptor = os.open(out_dir, os.O_RDONLY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+        self._output = out_dir.resolve()
+
+    def write(self, out_dir: Path, audit_log: str | None = None) -> Path:
+        if self._output is None:
+            self.reserve(out_dir)
+        if self._output != out_dir.resolve():
+            raise ValueError("a deployment record cannot change its reserved output directory")
         data = self.as_dict()
         path = out_dir / RECORD_FILE
-        path.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
+        # Replace a complete, flushed snapshot, never truncate the previous checkpoint.
+        temporary: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=out_dir,
+                                             prefix=".deployment-", suffix=".tmp", delete=False) as f:
+                temporary = Path(f.name)
+                json.dump(data, f, indent=1, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temporary, path)
+            if os.name != "nt":
+                descriptor = os.open(out_dir, os.O_RDONLY)
+                try:
+                    os.fsync(descriptor)
+                finally:
+                    os.close(descriptor)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
         (out_dir / "deploy.log").write_text("\n".join(self.log) + "\n", encoding="utf-8")
         if audit_log:
             audit = Path(audit_log)
