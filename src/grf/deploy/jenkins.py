@@ -30,6 +30,14 @@ from grf.deploy.model import ArtifactRef, Component, DeployError, Outcome
 _BUILD = re.compile(r"^(\d+|lastSuccessfulBuild|lastStableBuild|lastBuild)$")
 
 
+def job_url(settings: JenkinsSettings, component: Component, branch: str | None = None) -> str:
+    """Exact configured job identity; branch names are encoded as one Jenkins path segment."""
+    url = f"{settings.base_url}/{component.jenkins_job.strip('/')}"
+    if branch is not None and (not isinstance(branch, str) or not branch.strip()):
+        raise DeployError("Jenkins branch must be nonempty", Outcome.ARTIFACT_FAILED)
+    return f"{url}/job/{quote(branch, safe='')}" if branch is not None else url
+
+
 class _SameHostRedirect(urllib.request.HTTPRedirectHandler):
     def __init__(self, host: str):
         self.host = host
@@ -67,8 +75,21 @@ class Jenkins:
     # ------------------------------------------------------------------ urls
 
     def job_url(self, component: Component, branch: str | None = None) -> str:
-        url = f"{self.settings.base_url}/{component.jenkins_job.strip('/')}"
-        return f"{url}/job/{quote(branch, safe='')}" if branch else url
+        return job_url(self.settings, component, branch)
+
+    def _build_job(self, component: Component, branch: str | None) -> str:
+        job = self.job_url(component, branch)
+        if branch is None:
+            data = self.api(f"{job}/api/json?tree=_class,jobs[name]")
+            kind = data.get("_class")
+            if not isinstance(kind, str) or not kind.strip():
+                raise DeployError(f"cannot establish Jenkins job type for {component.name}; configure its branch "
+                                  "or grant read access to job metadata", Outcome.ARTIFACT_FAILED)
+            if "jobs" in data or "multibranch" in kind.lower() or "folder" in kind.lower():
+                raise DeployError(f"{component.name} is a multibranch/container job; configure [deploy.branches] "
+                                  f"{component.name} or --branch {component.name}=BRANCH; parent job refused",
+                                  Outcome.ARTIFACT_FAILED)
+        return job
 
     def _open(self, url: str, timeout_s: float | None = None):
         request = urllib.request.Request(url, headers={"Accept": "application/json, */*"})
@@ -105,14 +126,15 @@ class Jenkins:
         return sorted(str(j["name"]) for j in data.get("jobs", []))
 
     def builds(self, component: Component, branch: str | None = None, limit: int = 10) -> list[dict[str, Any]]:
-        data = self.api(f"{self.job_url(component, branch)}/api/json?tree=builds[number,result,timestamp,url]{{0,{int(limit)}}}")
+        job = self._build_job(component, branch)
+        data = self.api(f"{job}/api/json?tree=builds[number,result,timestamp,url]{{0,{int(limit)}}}")
         return [{"number": b.get("number"), "result": b.get("result"), "timestamp": _iso(b.get("timestamp")),
                  "url": b.get("url")} for b in data.get("builds", [])]
 
     def resolve(self, component: Component, build: str = "lastSuccessfulBuild", branch: str | None = None) -> ArtifactRef:
         if not _BUILD.match(build):
             raise DeployError(f"build must be a number or lastSuccessfulBuild, not {build!r}", Outcome.ARTIFACT_FAILED)
-        job = self.job_url(component, branch)
+        job = self._build_job(component, branch)
         tree = "number,result,timestamp,url,artifacts[fileName,relativePath],actions[lastBuiltRevision[SHA1]]"
         data = self.api(f"{job}/{build}/api/json?tree={tree}")
         if data.get("result") != "SUCCESS":

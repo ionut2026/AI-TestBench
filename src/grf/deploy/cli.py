@@ -24,6 +24,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from grf.deploy.branches import resolve_branches
 from grf.deploy.config import SiteConfig, config_env, load
 from grf.deploy.engine import Deployment, Options
 from grf.deploy.jenkins import Jenkins
@@ -43,7 +44,9 @@ def add_parser(sub: argparse._SubParsersAction, env_prefix: str) -> None:
     def build_options(p: argparse.ArgumentParser) -> None:
         p.add_argument("--target", help="board name from the site config (default: [components] of the site config)")
         p.add_argument("--build", default="lastSuccessfulBuild", help="Jenkins build number or lastSuccessfulBuild (default)")
-        p.add_argument("--branch", help="branch of a multibranch Jenkins job (default: [deploy] default_branch)")
+        p.add_argument("--branch", action="append", metavar="COMPONENT=BRANCH",
+                       help="repeatable per-component branch; legacy single BRANCH also accepted; "
+                            "default: [deploy.branches], then [deploy] default_branch")
         p.add_argument("--local-tar", type=Path, help="deploy this image tarball instead of a Jenkins build")
         p.add_argument("--sha256", help="expected artifact SHA-256 (64 lowercase hex characters); single component, "
                                        "checked before connecting to the board")
@@ -57,7 +60,8 @@ def add_parser(sub: argparse._SubParsersAction, env_prefix: str) -> None:
     p = dsub.add_parser("builds", allow_abbrev=False, help="list Jenkins builds (or branches) of a component")
     common(p)
     p.add_argument("--component", required=True)
-    p.add_argument("--branch")
+    p.add_argument("--branch", action="append", metavar="COMPONENT=BRANCH",
+                   help="per-component branch override; legacy single BRANCH also accepted")
     p.add_argument("--branches", action="store_true", help="list the branches of a multibranch job instead")
     p.add_argument("--limit", type=int, default=10)
     p = dsub.add_parser("plan", allow_abbrev=False, help="dry run: resolve, download, verify and preflight; changes nothing")
@@ -130,7 +134,9 @@ def cmd_deploy(args: argparse.Namespace, project: Any, *, jenkins_factory: Calla
             raise DeployError(f"{project.name} defines no deployable components (its plugin's deploy_components())")
         site = load(args.config, project.env_prefix, project.root)
         if args.deploy_command == "builds":
-            return _builds(site, _components(components, args.component, [])[0], args, project, jenkins_factory)
+            branches = resolve_branches(components, default_branch=project.deploy_branch,
+                                        configured=project.deploy_branches, overrides=args.branch)
+            return _builds(site, _components(components, args.component, [])[0], args, branches, jenkins_factory)
         if args.deploy_command == "status":
             return _status(site, components, args, project, deployment_factory)
         return _deploy(site, components, args, project, deployment_factory)
@@ -155,7 +161,7 @@ def _list_components(components: list[Component], args: argparse.Namespace, proj
     return 0
 
 
-def _builds(site: SiteConfig, component: Component, args: argparse.Namespace, project: Any,
+def _builds(site: SiteConfig, component: Component, args: argparse.Namespace, branches: dict[str, str | None],
             jenkins_factory: Callable[..., Jenkins]) -> int:
     if site.jenkins is None:
         raise DeployError(f"{site.path} has no [jenkins] section")
@@ -164,7 +170,7 @@ def _builds(site: SiteConfig, component: Component, args: argparse.Namespace, pr
         for name in client.branches(component):
             print(name)
         return 0
-    branch = args.branch or project.deploy_branch
+    branch = branches[component.name]
     for b in client.builds(component, branch, args.limit):
         print(f"{b['number']:>6}  {str(b['result']):<9} {b['timestamp'] or '':<25} {b['url']}")
     return 0
@@ -206,6 +212,8 @@ def _deploy(site: SiteConfig, components: list[Component], args: argparse.Namesp
             deployment_factory: Callable[..., Deployment]) -> int:
     command = args.deploy_command
     chosen = _components(components, args.component, project.deploy_order)
+    branches = resolve_branches(components, default_branch=project.deploy_branch,
+                                configured=project.deploy_branches, overrides=getattr(args, "branch", None))
     restore = command == "rollback"
     if restore and len(chosen) > 1:
         raise DeployError("rollback takes one component")
@@ -219,9 +227,6 @@ def _deploy(site: SiteConfig, components: list[Component], args: argparse.Namesp
     if len(chosen) > 1 and (local_tar or build.isdigit()):
         raise DeployError("--local-tar and a build number need a single --component (every component has its own job)")
     targets = [site.target_for(c.name, args.target) for c in chosen]
-    options = Options(build=build, branch=getattr(args, "branch", None) or project.deploy_branch, local_tar=local_tar,
-                      dry_run=command == "plan", force=getattr(args, "force", False), ignore_hold=args.ignore_hold,
-                      break_stale_lock=getattr(args, "break_stale_lock", False), restore=restore, sha256=sha256)
     if command in ("run", "rollback") and not args.yes:
         what = (f"roll back {chosen[0].name} to its newest retained build" if restore else
                 f"deploy {', '.join(c.name for c in chosen)} ({local_tar or f'Jenkins {build}'})")
@@ -240,6 +245,10 @@ def _deploy(site: SiteConfig, components: list[Component], args: argparse.Namesp
     try:
         code = 0
         for component, target in zip(chosen, targets, strict=True):
+            options = Options(build=build, branch=branches[component.name], local_tar=local_tar,
+                              dry_run=command == "plan", force=getattr(args, "force", False),
+                              ignore_hold=args.ignore_hold, break_stale_lock=getattr(args, "break_stale_lock", False),
+                              restore=restore, sha256=sha256)
             if args.outdir:
                 out_dir = args.outdir / component.name if len(chosen) > 1 else args.outdir
             else:

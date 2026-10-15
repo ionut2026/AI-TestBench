@@ -10,7 +10,9 @@ import pytest
 from deploy_fakes import component, target
 
 from grf import cli, workflow
-from grf.deploy.model import ArtifactRef, Installed, Outcome
+from grf.deploy.config import JenkinsSettings
+from grf.deploy.jenkins import job_url
+from grf.deploy.model import ArtifactRef, DeployError, Installed, Outcome
 from grf.deploy.record import DeployRecord
 
 SHA = "a" * 64
@@ -46,7 +48,7 @@ valid_until = {dt.date.today() + dt.timedelta(days=1)}
     monkeypatch.setattr(widget.plugin, "deploy_components", lambda: [component()])
     monkeypatch.setattr(workflow, "git_state", lambda root: (REVISION, False))
     monkeypatch.setattr(workflow, "load_site", lambda *args: SimpleNamespace(
-        target_for=lambda name: target(), audit_log=None))
+        target_for=lambda name: target(), audit_log=None, jenkins=JenkinsSettings("https://jenkins.example.test")))
     args = argparse.Namespace(request=str(request), request_sha256=hashlib.sha256(request.read_bytes()).hexdigest(),
                               outdir=tmp_path / "results" / "workflow", config=None, operator="none", yes=True,
                               catalog=str(catalog), suites=[str(suite)], reviews=None, scope=None)
@@ -56,18 +58,25 @@ valid_until = {dt.date.today() + dt.timedelta(days=1)}
         change_plan = False
         fail_deploy = False
         order = []
+        options = []
+        wrong_branch = False
+        wrong_job = False
 
         def __init__(self, project, component, site, target, **kwargs):
-            self.name, self.target = component.name, target
+            self.name, self.target, self.component, self.site = component.name, target, component, site
 
         def deploy(self, options):
             calls.append(("plan" if options.dry_run else "deploy", options.build, options.sha256))
             self.order.append(("plan" if options.dry_run else "deploy", self.name))
+            self.options.append((self.name, options))
             return DeployRecord("Widget", self.name, self.target.name, self.target.host, "manual", dry_run=options.dry_run,
                                 outcome=Outcome.DRY_RUN if options.dry_run else
                                     Outcome.PREFLIGHT_FAILED if self.fail_deploy else Outcome.DEPLOYED,
                                 artifact=ArtifactRef(self.name, "jenkins", "app_1.2.3.tar.gz", version="1.2.3",
-                                                     build_number=8 if self.change_plan else 7, sha256=SHA),
+                                                     build_number=8 if self.change_plan else 7, sha256=SHA,
+                                                     branch="wrong" if self.wrong_branch else options.branch,
+                                                     job_url="https://wrong.test" if self.wrong_job else
+                                                         job_url(self.site.jenkins, self.component, options.branch)),
                                 installed=Installed("app", "running", version="1.2.3"))
 
     def invoke(argv):
@@ -130,7 +139,8 @@ def test_changed_plan_cannot_be_promoted(flow):
 def test_all_components_are_planned_before_deployment_in_product_order(flow, monkeypatch):
     project, args, deployment, _, _ = flow
     monkeypatch.setattr(project.plugin, "deploy_components", lambda: [component(), replace(component(), name="app2")])
-    project.data["deploy"] = {"order": ["app2", "app"]}
+    project.data["deploy"] = {"order": ["app2", "app"], "default_branch": "main", "branches": {"app": "release/app"}}
+    args.branch = ["app2=feature/other"]
     request = Path(args.request)
     request.write_text(request.read_text(encoding="utf-8") + f"""
 [[component]]
@@ -142,6 +152,47 @@ expected_version = "1.2.3"
     args.request_sha256 = hashlib.sha256(request.read_bytes()).hexdigest()
     assert execute(flow) == 0
     assert deployment.order == [("plan", "app2"), ("plan", "app"), ("deploy", "app2"), ("deploy", "app")]
+    assert [(name, options.branch) for name, options in deployment.options] == [
+        ("app2", "feature/other"), ("app", "release/app"), ("app2", "feature/other"), ("app", "release/app"),
+    ]
+    for name, branch in (("app", "release/app"), ("app2", "feature/other")):
+        for stage in ("plan", "deploy"):
+            record = json.loads((args.outdir / stage / name / "deployment.json").read_text(encoding="utf-8"))
+            assert record["artifact"]["branch"] == branch
+            assert record["artifact"]["job_url"].endswith("/job/" + branch.replace("/", "%2F"))
+
+
+@pytest.mark.parametrize("attribute", ["wrong_branch", "wrong_job"])
+@pytest.mark.parametrize("stage", ["plan", "deploy"])
+def test_workflow_rejects_wrong_jenkins_identity_before_tests(flow, attribute, stage):
+    deployment = flow[2]
+    original = deployment.deploy
+
+    def deploy(self, options):
+        setattr(self, attribute, options.dry_run == (stage == "plan"))
+        return original(self, options)
+
+    deployment.deploy = deploy
+    with pytest.raises(ValueError, match="Jenkins job/branch differs"):
+        execute(flow)
+    assert all(call[0] not in ("run", "gate") for call in flow[4])
+
+
+@pytest.mark.parametrize("branches", [["unknown=main"], ["app=one", "app=two"], ["app="]])
+def test_workflow_invalid_branch_fails_before_side_effects(flow, branches):
+    flow[1].branch = branches
+    with pytest.raises(DeployError):
+        execute(flow)
+    assert not flow[4] and not flow[1].outdir.exists()
+
+
+def test_workflow_parser_accepts_repeatable_branches():
+    parser = argparse.ArgumentParser()
+    workflow.add_parser(parser.add_subparsers())
+    args = parser.parse_args(["workflow", "deploy-and-test", "--request", "request.toml",
+                              "--request-sha256", SHA, "--outdir", "new",
+                              "--branch", "app=release/app", "--branch", "other=main"])
+    assert args.branch == ["app=release/app", "other=main"]
 
 
 def test_source_change_after_planning_stops_before_real_deployment(flow, monkeypatch):

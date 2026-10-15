@@ -14,8 +14,10 @@ from typing import TYPE_CHECKING
 
 from grf.acceptance import deployment_identity, file_sha256, git_state, load_request, require_policy
 from grf.commands import CommandContext
+from grf.deploy.branches import resolve_branches
 from grf.deploy.config import load as load_site
 from grf.deploy.engine import Deployment, Options
+from grf.deploy.jenkins import job_url
 from grf.deploy.model import EXIT_CODES, DeployError, Outcome
 from grf.deploy.record import load_records
 from grf.selection import select
@@ -31,6 +33,8 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     cmd.add_argument("--request", required=True)
     cmd.add_argument("--request-sha256", required=True, help="expected digest from the protected approval boundary")
     cmd.add_argument("--config", help="external deployment site config")
+    cmd.add_argument("--branch", action="append", metavar="COMPONENT=BRANCH",
+                     help="repeatable per-component Jenkins branch override")
     cmd.add_argument("--outdir", type=Path, required=True, help="new workflow directory; must not exist")
     cmd.add_argument("--operator", choices=("none", "console", "dialog"), default="none")
     cmd.add_argument("--yes", action="store_true", help="confirm owner authorization; never grants it")
@@ -46,6 +50,8 @@ def deploy_and_test(args: argparse.Namespace, project: Project, invoke: Callable
     components = {component.name: component for component in definitions}
     if len(components) != len(definitions):
         raise ValueError("duplicate deployable component names")
+    branches = resolve_branches(definitions, default_branch=project.deploy_branch,
+                                configured=project.deploy_branches, overrides=getattr(args, "branch", None))
     request = load_request(Path(args.request), project.tiers, list(components))
     if not re.fullmatch(r"[0-9a-f]{64}", args.request_sha256) or request.sha256 != args.request_sha256:
         raise ValueError("protected request digest does not match")
@@ -61,6 +67,10 @@ def deploy_and_test(args: argparse.Namespace, project: Project, invoke: Callable
         raise ValueError("workflow requires the pinned clean source and catalog before any deployment")
     select(request, context.collect_tests(args))
     site = load_site(args.config, project.env_prefix, project.root)
+    if site.jenkins is None:
+        raise ValueError("workflow requires [jenkins] in the site config")
+    jobs = {component.name: job_url(site.jenkins, components[component.name], branches[component.name])
+            for component in request.components}
     targets = {component.name: site.target_for(component.name) for component in request.components}
     # Preflight is read-only; the run repeats it after deployment against the actual test environment.
     from grf.evidence import PREFLIGHT, require_checks
@@ -97,19 +107,22 @@ def deploy_and_test(args: argparse.Namespace, project: Project, invoke: Callable
                     raise ValueError("source, catalog or authorization changed before the next deployment stage")
                 name = component_request.name
                 out = root / ("plan" if dry_run else "deploy") / name
-                event("planning" if dry_run else "deploying", component=name)
+                event("planning" if dry_run else "deploying", component=name, branch=branches[name], jobUrl=jobs[name])
                 deployment = deployment_factory(project.name, components[name], site, targets[name], work_dir=out,
                                                 trigger="manual")
                 record = deployment.deploy(Options(build=str(component_request.build), sha256=component_request.sha256,
-                                                   branch=project.deploy_branch, dry_run=dry_run))
+                                                   branch=branches[name], dry_run=dry_run))
                 path = record.write(out, site.audit_log)
                 data = load_records([path])[0]
                 code = EXIT_CODES[record.outcome or Outcome.FAILED]
                 if code or (dry_run and record.outcome != Outcome.DRY_RUN):
                     event("stopped", component=name, outcome=str(record.outcome), code=code or 2)
                     return code or 2
+                artifact = data.get("artifact") or {}
+                if artifact.get("source") != "jenkins" or artifact.get("branch") != branches[name] \
+                        or artifact.get("job_url") != jobs[name]:
+                    raise ValueError(f"deployment {name}: Jenkins job/branch differs from the resolved configuration")
                 if dry_run:
-                    artifact = data.get("artifact") or {}
                     if data.get("project") != project.name or data.get("component") != name \
                             or data.get("target") != targets[name].name or data.get("host") != targets[name].host \
                             or artifact.get("component") != name:

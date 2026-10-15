@@ -69,7 +69,9 @@ flowchart TD
 Step by step, for one component on one board:
 
 1. **Resolve** the build: `--build N` or `lastSuccessfulBuild` of the component's Jenkins job (or the branch job
-   `--branch B` / `[deploy] default_branch`). Only builds with result `SUCCESS` are used, and exactly one artifact
+   `--branch C=B` / `[deploy.branches]` / `[deploy] default_branch`; legacy single `--branch B` is supported).
+   Multibranch jobs require an explicit resolved branch; the parent is never used as a fallback.
+   Only builds with result `SUCCESS` are used, and exactly one artifact
    of the build must match the component's file pattern. `--local-tar F` deploys a local file instead (recorded
    as `source = local`).
 2. **Download** to the output folder, checking the size and computing the SHA-256. Nothing on the board has
@@ -144,8 +146,8 @@ GRF and the starter, `SMM_DEPLOY_CONFIG` in SMM).
 | Command | Changes the board? | What it does |
 |---|---|---|
 | `deploy components` | no | The product's components, their jobs, patterns, images and configured target |
-| `deploy builds --component C [--branch B] [--branches] [--limit N]` | no (Jenkins only) | Recent builds, or the branches of a multibranch job |
-| `deploy plan --component C [--build N \| --local-tar F] [--branch B] [--target T]` | no (logs in) | Dry run: resolve, download, preflight, list the commands |
+| `deploy builds --component C [--branch C=B] [--branches] [--limit N]` | no (Jenkins only) | Recent builds, or the branches of a multibranch job |
+| `deploy plan --component C [--build N \| --local-tar F] [--branch C=B] [--target T]` | no (logs in) | Dry run: resolve, download, preflight, list the commands |
 | `deploy status [--component C] [--target T] [--json]` | no (logs in) | What runs, version, drift, hold, lock, retained builds |
 | `deploy run --component C[,C2] [build options] [--yes] [--force] [--trigger manual\|nightly] [--ignore-hold] [--break-stale-lock] [--outdir D]` | **yes** | Deploy |
 | `deploy rollback --component C [--target T] [--yes]` | **yes** | Back to the newest retained earlier build |
@@ -247,8 +249,11 @@ The product's `grf.toml` may contain (no hosts, no credentials):
 ```toml
 [deploy]
 order = ["sti", "appsmm"]   # deployment order when several components are deployed together
-default_branch = "master"   # branch job of a multibranch Jenkins job, used when --branch is not given
+default_branch = "master"   # fallback when no per-component branch/CLI override exists
 ```
+
+Use `[deploy.branches]` for independent component branches and repeatable `--branch COMPONENT=BRANCH`
+to override them. See [branch configuration, precedence and migration](CONFIGURATION.md#deployment-branch-selection-041).
 
 ### Environment variables
 

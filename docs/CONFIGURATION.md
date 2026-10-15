@@ -32,7 +32,7 @@ spec_prefix = "SPEC"
 plugin = "product_automation.plugin:DemoPlugin"
 
 [framework]
-version = "0.4.0"
+version = "0.4.1"
 
 [paths]
 scope = "catalog/demo.scope.toml"
@@ -73,11 +73,45 @@ acceptance. See [the canonical policy schema](WORKFLOWS.md#project-acceptance-po
 | `[catalog]` | Optional `message_pattern` used by catalog enrichment |
 | `[mutation]` | Optional `faults_env` and supported `fault_actions`; implementations belong to the product |
 | `[texts]` | Product-specific report labels such as `non_evidence` and `nospec_skip` |
-| `[deploy]` | Optional `order` (component list) and `default_branch` for `grf deploy`; hosts and credentials belong in the site config ([Deploying builds](DEPLOYMENT.md)) |
+| `[deploy]` | Optional `order` (component list), `default_branch` fallback and `[deploy.branches]` per-component Jenkins branches for deployment/workflow; hosts and credentials belong in the site config ([Deploying builds](DEPLOYMENT.md)) |
 
 Declare `evidence = false` explicitly for every mock/simulator tier. Unknown or missing report tiers are
 non-evidence. Exact tier names take priority; legacy metadata with a dash/space suffix may resolve to a known
 tier, with the longest matching name first. An arbitrary prefix such as `benchwork` does not resolve to `bench`.
+
+### Deployment branch selection (0.4.1)
+
+In the product's `grf.toml`, configure each Jenkins component independently:
+
+```toml
+[deploy]
+order = ["controller", "app"]
+default_branch = "main"
+
+[deploy.branches]
+app = "release/app"
+controller = "release/controller"
+```
+
+`Project.deploy_branches` exposes this optional string map; `Project.deploy_branch` remains the global
+fallback. Branch values and component names must be nonempty strings. Unknown component keys are rejected
+when deployment/workflow resolves the plugin's component definitions. There is no implicit environment-variable
+expansion: product wrappers may pass their own validated branch variables as CLI overrides.
+
+Precedence is explicit `--branch COMPONENT=BRANCH`, then `[deploy.branches]`, then `[deploy] default_branch`.
+For example, `grf deploy plan --component app --branch app=feature/fix` changes only that invocation.
+`deploy run` and `workflow deploy-and-test` accept repeated overrides, one per component; `deploy builds`
+uses the same selection rules. Unknown components, duplicate overrides and empty names/values fail before
+deployment. The legacy **single** `--branch BRANCH` still overrides all components; do not mix it with
+qualified overrides or repeat it.
+
+If no branch resolves, GRF reads Jenkins job metadata before listing/resolving builds. A multibranch job
+(a parent containing separate jobs for each source branch) or folder is refused, never used as a build job.
+Missing/unreadable job-type metadata also fails closed; permit read access or configure the branch explicitly.
+A regular build job may still omit the branch. `deploy builds --branches` lists child branches without
+requiring branch selection. Branches containing `/` are encoded as one Jenkins URL segment.
+The resolved branch and exact job URL are saved as `artifact.branch` and `artifact.job_url` in each deployment
+record; the workflow binds both during planning and actual deployment. See [Workflows](WORKFLOWS.md#maintained-deploy-and-test-workflow).
 
 Only tiers marked `parallel = true` can use `grf run --processes N`. This flag is a product-owner assertion of
 resource isolation, not something GRF can prove. Do not mark an instrument-sharing tier parallel-safe.

@@ -234,15 +234,26 @@ Run from the pinned product checkout only after site commissioning and owner aut
 grf workflow deploy-and-test --yes --request <protected-request-file> --request-sha256 <approved-digest> --config <external-site-config> --outdir results\workflow-<unique-run-id>
 ```
 
+Components can use different Jenkins branches. Configure `[deploy.branches]` in `grf.toml`, with the existing
+`[deploy] default_branch` as fallback, or append repeatable overrides such as
+`--branch app=release/app --branch controller=release/controller`. Selection is resolved once before planning
+and reused unchanged for actual deployment. Unknown components, duplicate overrides and empty values are
+rejected. See [the exact configuration and compatibility rules](CONFIGURATION.md#deployment-branch-selection-041).
+The controller must protect these branch inputs alongside its approved request/site configuration:
+the schema-1 request pins build number and artifact SHA, not branch authorization.
+
 The command validates source/catalog/selection/preflight **before** deployment, snapshots exact request bytes
 into a new directory, then plans **all** components in the product's configured deployment order. Plans must
-match project/component/site target, numeric build, digest and any expected installation version before
+match project/component/site target, resolved Jenkins job URL/branch, numeric build, digest and any expected installation version before
 promotion. Actual deployment uses the same in-memory site configuration and pinned numeric build/digest;
 re-resolving a changed Jenkins artifact fails checksum verification rather than following a moving alias.
 Source/catalog/authorization are rechecked before each stage. Site credential files and host-key trust remain
 site-owned, not copied into the workspace.
 
-Successful deployment records must match the original request and planned targets before testing begins.
+Successful deployment records must match the original request, planned targets and resolved job/branch before
+testing begins. Both plan and deployment records retain `artifact.branch` and `artifact.job_url`; journal
+stage entries also retain the resolved identity. With no branch configured, multibranch/container jobs are
+rejected before parent-build lookup; regular jobs remain supported without a branch.
 GRF then applies `run --request` and always attempts the pure acceptance gate after a test return/error/cancel,
 preserving abnormal test errors and failing gate results. A failed deployment stops before testing.
 Earlier successful component deployments are **not** automatically rolled back if a later component fails;

@@ -4,6 +4,19 @@ GRF uses Semantic Versioning. Additive public APIs use a minor release; compatib
 Before 1.0, incompatible API changes also require a minor release. Release tags are `vMAJOR.MINOR.PATCH`.
 Tags and publication are explicit maintainer actions.
 
+## 0.4.1
+
+- Fix deployment/workflow branch selection for independent Jenkins component jobs. Add optional
+  `[deploy.branches]` and repeatable `--branch COMPONENT=BRANCH`, falling back to the existing global
+  `[deploy] default_branch`. Reject unknown components, duplicate overrides and empty values.
+  The legacy single `--branch BRANCH` remains supported; mixed forms are rejected.
+- Refuse multibranch/container parent-build lookup when no branch is configured; missing job-type metadata
+  fails closed. Ordinary non-multibranch jobs still work without a branch; branch listing remains available.
+- Bind each workflow plan and actual record to its resolved Jenkins job URL and branch, retaining both in
+  deployment artifacts and workflow provenance. Protected controllers must protect branch inputs too;
+  request schema 1 does not itself authorize a branch. See Configuration and Workflows.
+- Include core-owned operator console done/fail/timeout/stale-input/closed-input regression scenarios.
+
 ## 0.4.0
 
 - Add owner-authorized `workflow deploy-and-test` with protected request digest, immutable source/catalog pins,

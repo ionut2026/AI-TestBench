@@ -159,7 +159,7 @@ class FakeJenkins(http.server.BaseHTTPRequestHandler):
 
 @pytest.fixture
 def jenkins_server():
-    FakeJenkins.routes = {}
+    FakeJenkins.routes = {"/view/X/job/App/api/json": api({"_class": "hudson.model.FreeStyleProject"})}
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), FakeJenkins)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -198,6 +198,48 @@ def test_jenkins_branch_job_url(jenkins_server):
     base, routes = jenkins_server
     routes["/view/X/job/App/job/feature%2Fx/7/api/json"] = api(build())
     assert client(base).resolve(component(), "7", "feature/x").branch == "feature/x"
+
+
+@pytest.mark.parametrize("operation", ["resolve", "builds"])
+@pytest.mark.parametrize("metadata", [
+    {"_class": "org.jenkinsci.plugins.workflow.multibranch.WorkflowMultiBranchProject"},
+    {"_class": "com.cloudbees.hudson.plugins.folder.Folder", "jobs": []},
+    {"_class": "unknown.Container", "jobs": [{"name": "main"}]},
+    {},
+])
+def test_jenkins_missing_branch_never_uses_parent_builds(jenkins_server, operation, metadata):
+    base, routes = jenkins_server
+    routes["/view/X/job/App/api/json"] = api(metadata)
+    routes["/view/X/job/App/lastSuccessfulBuild/api/json"] = api(build())
+    with pytest.raises(DeployError) as err:
+        getattr(client(base), operation)(component())
+    assert err.value.outcome == Outcome.ARTIFACT_FAILED
+
+
+def test_jenkins_lists_normal_job_builds_without_a_branch(jenkins_server):
+    base, routes = jenkins_server
+    routes["/view/X/job/App/api/json"] = api({"_class": "hudson.model.FreeStyleProject", "builds": [build()]})
+    assert client(base).builds(component())[0]["number"] == 42
+
+
+def test_jenkins_branch_listing_does_not_require_a_branch(jenkins_server):
+    base, routes = jenkins_server
+    routes["/view/X/job/App/api/json"] = api({"jobs": [{"name": "release/app"}, {"name": "main"}]})
+    assert client(base).branches(component()) == ["main", "release/app"]
+
+
+@pytest.mark.parametrize("branch", ["", "   "])
+def test_jenkins_explicit_empty_branch_is_not_treated_as_parent(jenkins_server, branch):
+    base, _ = jenkins_server
+    with pytest.raises(DeployError, match="branch must be nonempty"):
+        client(base).resolve(component(), branch=branch)
+
+
+def test_missing_branch_job_never_falls_back_to_parent(jenkins_server):
+    base, routes = jenkins_server
+    routes["/view/X/job/App/lastSuccessfulBuild/api/json"] = api(build())
+    with pytest.raises(DeployError, match="404"):
+        client(base).resolve(component(), branch="nonexistent")
 
 
 @pytest.mark.parametrize("data,message", [
@@ -446,7 +488,7 @@ def test_recipe_and_component_validation():
 def fake_project(tmp_path, components=None):
     plugin = SimpleNamespace(deploy_components=lambda: list(components if components is not None else [component()]))
     return SimpleNamespace(name="Widget", cli="widget", env_prefix="WIDGET", root=tmp_path, plugin=plugin,
-                           deploy_order=[], deploy_branch=None, path=lambda key: tmp_path / key)
+                           deploy_order=[], deploy_branch=None, deploy_branches={}, path=lambda key: tmp_path / key)
 
 
 def args_for(command, **values):
@@ -493,6 +535,53 @@ def test_cli_plan_is_a_dry_run(tmp_path, site_file):
     FakeDeployment.outcomes, FakeDeployment.options = [Outcome.DRY_RUN], []
     assert deploy_cli.cmd_deploy(args_for("plan", yes=False), fake_project(tmp_path), deployment_factory=FakeDeployment) == 0
     assert FakeDeployment.options[0].dry_run
+
+
+def test_cli_deploy_resolves_each_component_branch(tmp_path, site_file):
+    product = fake_project(tmp_path, [component(), component(name="other")])
+    product.deploy_branch = "main"
+    product.deploy_branches = {"app": "release/app"}
+    FakeDeployment.outcomes, FakeDeployment.options = [Outcome.DEPLOYED, Outcome.DEPLOYED], []
+    args = args_for("run", component="app,other", branch=["other=feature/other"], outdir=tmp_path / "rec")
+    assert deploy_cli.cmd_deploy(args, product, deployment_factory=FakeDeployment) == 0
+    assert [option.branch for option in FakeDeployment.options] == ["release/app", "feature/other"]
+
+
+@pytest.mark.parametrize("branches", [["unknown=main"], ["app=one", "app=two"], ["app="]])
+def test_cli_rejects_invalid_branches_before_deployment(tmp_path, site_file, branches):
+    FakeDeployment.options = []
+    assert deploy_cli.cmd_deploy(args_for("plan", branch=branches), fake_project(tmp_path),
+                                 deployment_factory=FakeDeployment) == 2
+    assert FakeDeployment.options == []
+
+
+def test_cli_build_listing_uses_component_branch(tmp_path, site_file):
+    product = fake_project(tmp_path)
+    product.deploy_branch, product.deploy_branches = "main", {"app": "release/app"}
+    captured = []
+
+    class Client:
+        def __init__(self, settings):
+            pass
+
+        def builds(self, component, branch, limit):
+            captured.append(branch)
+            return []
+
+    config = site_file.read_text(encoding="utf-8") + '\n[jenkins]\nbase_url = "https://jenkins.example.test"\n'
+    site_file.write_text(config, encoding="utf-8")
+    args = args_for("builds", branches=False, limit=10, branch=["app=feature/app"])
+    assert deploy_cli.cmd_deploy(args, product, jenkins_factory=Client) == 0
+    assert captured == ["feature/app"]
+
+
+def test_deploy_cli_parser_retains_repeatable_and_legacy_branch_syntax():
+    parser = argparse.ArgumentParser()
+    deploy_cli.add_parser(parser.add_subparsers(), "WIDGET")
+    args = parser.parse_args(["deploy", "run", "--component", "app,other",
+                              "--branch", "app=release/app", "--branch", "other=main"])
+    assert args.branch == ["app=release/app", "other=main"]
+    assert parser.parse_args(["deploy", "builds", "--component", "app", "--branch", "main"]).branch == ["main"]
 
 
 def test_cli_sha256_is_validated_and_forwarded(tmp_path, site_file, capsys):

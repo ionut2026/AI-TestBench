@@ -102,7 +102,7 @@ class Project:
             "lint": {"tag_rules"},
             "catalog": {"message_pattern"},
             "mutation": {"faults_env", "fault_actions"},
-            "deploy": {"order", "default_branch"},
+            "deploy": {"order", "default_branch", "branches"},
         }.items():
             table(self._section(section), f"[{section}]", keys)
         for key in ("name", "cli", "product", "spec_prefix", "rule_prefix", "env_prefix", "plugin"):
@@ -121,7 +121,7 @@ class Project:
         if "capabilities" in self._section("operator"):
             self._strings(self._section("operator")["capabilities"], "[operator] capabilities")
         if "deploy" in self.data:
-            _ = self.deploy_order, self.deploy_branch
+            _ = self.deploy_order, self.deploy_branch, self.deploy_branches
         for key, value in self._section("framework").items():
             if key == "version":
                 text(value, "[framework] version")
@@ -370,12 +370,16 @@ class Project:
 
     @property
     def deploy_branch(self) -> str | None:
-        """``[deploy] default_branch``: the Jenkins branch job used when ``--branch`` is not given (None: the job
-        itself is not a multibranch job)."""
+        """Global Jenkins branch fallback; None requires a non-multibranch job."""
         value = self._section("deploy").get("default_branch")
         if value is not None and (not isinstance(value, str) or not value.strip()):
             raise ProjectError("[deploy] default_branch must be a nonempty string")
         return value
+
+    @property
+    def deploy_branches(self) -> dict[str, str]:
+        """``[deploy.branches]``: component-to-branch overrides of ``deploy_branch``."""
+        return self._string_map(self._section("deploy").get("branches", {}), "[deploy.branches]")
 
     # ------------------------------------------------------------------ plugin
 

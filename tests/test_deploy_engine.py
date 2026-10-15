@@ -1,6 +1,8 @@
 """The deployment step machine against a simulated board (tests/deploy_fakes.py). No network, no instrument."""
 
 import hashlib
+import json
+from dataclasses import replace
 
 import pytest
 from deploy_fakes import PREV, WD, Clock, FakeBoard, component, image_id, inspect_of, site, tar_name
@@ -199,6 +201,52 @@ def test_jenkins_changed_bytes_fail_before_board_connection(board, tmp_path):
                    echo=lambda _: None)
     result = d.deploy(Options(build="7", sha256="a" * 64))
     assert result.outcome == Outcome.ARTIFACT_FAILED and not contacted
+
+
+def test_resolved_jenkins_branch_is_preserved_in_deployment_record(board, tmp_path):
+    from grf.deploy.config import JenkinsSettings
+    from grf.deploy.jenkins import job_url, local_artifact
+
+    artifact = tarball(tmp_path, board=board)
+    config = site(jenkins=JenkinsSettings("https://jenkins.example.test"))
+    expected_job = job_url(config.jenkins, component(), "release/app")
+
+    class Client:
+        def resolve(self, comp, build, branch):
+            assert branch == "release/app"
+            return replace(local_artifact(comp, artifact), source="jenkins", branch=branch,
+                           job_url=job_url(config.jenkins, comp, branch), build_number=int(build))
+
+        def download(self, ref, destination):
+            return ref
+
+    deployment = Deployment("Widget", component(), config, config.targets["board"], work_dir=tmp_path / "record",
+                            jenkins_factory=lambda *args: Client(), transport_factory=lambda *args: board,
+                            echo=lambda _: None)
+    record = deployment.deploy(Options(build="7", branch="release/app", dry_run=True))
+    assert record.outcome == Outcome.DRY_RUN, record.message
+    saved = json.loads((tmp_path / "record" / "deployment.json").read_text(encoding="utf-8"))
+    assert saved["artifact"]["branch"] == "release/app"
+    assert saved["artifact"]["job_url"] == expected_job
+
+
+def test_unconfigured_multibranch_fails_before_board_connection(board, tmp_path, monkeypatch):
+    from grf.deploy.config import JenkinsSettings
+    from grf.deploy.jenkins import Jenkins
+
+    config = site(jenkins=JenkinsSettings("https://jenkins.example.test"))
+    client = Jenkins(config.jenkins, env={})
+    monkeypatch.setattr(client, "api", lambda url: {
+        "_class": "org.jenkinsci.plugins.workflow.multibranch.WorkflowMultiBranchProject", "jobs": [],
+    })
+    deployment = Deployment("Widget", component(), config, config.targets["board"], work_dir=tmp_path / "record",
+                            jenkins_factory=lambda *args: client,
+                            transport_factory=lambda *args: pytest.fail("must not contact a board"),
+                            echo=lambda _: None)
+    record = deployment.deploy(Options(build="7"))
+    assert record.outcome == Outcome.ARTIFACT_FAILED
+    assert "parent job refused" in record.message
+    assert not board.commands
 
 
 def test_success_replaces_the_container_and_keeps_the_previous_build(board, tmp_path):
