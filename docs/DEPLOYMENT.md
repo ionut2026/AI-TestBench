@@ -93,7 +93,8 @@ Step by step, for one component on one board:
 10. **Load** the image (`docker load -i`); the loaded image must belong to the recipe's repository.
 11. **Run** the new container with exactly the recipe's settings.
 12. **Health check**: the container runs, does not restart, and stays up for `stable_s` seconds; then the
-    component's `health_command` and/or `health_port` must succeed within `ready_timeout_s`.
+    component's `health_command` and/or `health_port` must succeed within one shared `ready_timeout_s`
+    budget, including the stability wait, all inspection calls and retries.
 13. **Verify**: the container runs the loaded image ID, and its configuration (network, privileged, init, restart
     policy, log options, mounts including read/write mode, environment) equals the recipe. A difference fails the deployment (or is a
     warning with `drift = "warn"` on the component).

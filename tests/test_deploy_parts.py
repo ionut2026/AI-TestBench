@@ -323,6 +323,87 @@ def test_paramiko_policies_and_password(tmp_path):
     assert "pw123" not in str(err.value) and "***" in str(err.value)
 
 
+def test_paramiko_drains_both_streams_before_waiting_for_exit():
+    class Channel:
+        def __init__(self):
+            self.output = [b"x" * 65536, b"tail"]
+            self.errors = [b"error" * 10000]
+            self.closed = False
+
+        def recv_ready(self):
+            return bool(self.output)
+
+        def recv_stderr_ready(self):
+            return bool(self.errors)
+
+        def recv(self, size):
+            return self.output.pop(0)
+
+        def recv_stderr(self, size):
+            return self.errors.pop(0)
+
+        def exit_status_ready(self):
+            return not self.output and not self.errors  # remote blocks until both windows drain
+
+        def recv_exit_status(self):
+            assert self.exit_status_ready()
+            return 0
+
+        def close(self):
+            self.closed = True
+
+    channel = Channel()
+    ssh = object.__new__(ParamikoTransport)
+    ssh.paramiko = SimpleNamespace(SSHException=RuntimeError)
+    ssh.redact = Redactor()
+    ssh.client = SimpleNamespace(exec_command=lambda *args, **kwargs: (
+        SimpleNamespace(close=lambda: None), SimpleNamespace(channel=channel), None))
+    result = ssh.run("noisy-command", timeout_s=1)
+    assert result.stdout == "x" * 65536 + "tail" and result.stderr == "error" * 10000
+    assert channel.closed
+
+
+def test_scp_total_deadline_cannot_reset_per_chunk(tmp_path, monkeypatch):
+    from deploy_fakes import Clock
+
+    from grf import deadline
+    from grf.deploy import transport
+
+    clock = Clock()
+    timeouts = []
+
+    class Channel:
+        closed = False
+
+        def settimeout(self, seconds):
+            timeouts.append(seconds)
+
+        def exec_command(self, command):
+            pass
+
+        def sendall(self, data):
+            clock.sleep(0.4)
+
+        def recv(self, count):
+            clock.sleep(0.1)
+            return b"\0"
+
+        def close(self):
+            self.closed = True
+
+    channel = Channel()
+    monkeypatch.setattr(transport, "Deadline", lambda seconds: deadline.Deadline(seconds, clock=clock.monotonic))
+    ssh = object.__new__(ParamikoTransport)
+    ssh.paramiko = SimpleNamespace(SSHException=RuntimeError)
+    ssh.redact, ssh.host = Redactor(), "synthetic"
+    ssh.client = SimpleNamespace(get_transport=lambda: SimpleNamespace(open_session=lambda **kwargs: channel))
+    local = tmp_path / "large.tar"
+    local.write_bytes(b"x" * (3 << 16))
+    with pytest.raises(DeployError, match="deadline"):
+        ssh.put(local, "/tmp/large.tar", timeout_s=1)
+    assert channel.closed and timeouts[-1] < timeouts[0]
+
+
 # ------------------------------------------------------------------ docker
 
 

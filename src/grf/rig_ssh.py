@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from grf import project
+from grf.deadline import Deadline
 from grf.validation import integer, number, table, text
 
 
@@ -55,9 +56,9 @@ def _run(argv: list[str], timeout_s: float) -> subprocess.CompletedProcess[str]:
     return subprocess.run(argv, capture_output=True, text=True, timeout=timeout_s, check=False)
 
 
-def _port_open(host: str, port: int) -> bool:
+def _port_open(host: str, port: int, timeout_s: float) -> bool:
     try:
-        with socket.create_connection((host, port), timeout=2):
+        with socket.create_connection((host, port), timeout=min(2, timeout_s)):
             return True
     except OSError:
         return False
@@ -65,7 +66,7 @@ def _port_open(host: str, port: int) -> bool:
 
 class RigSsh:
     def __init__(self, config: dict[str, Any], run: Runner = _run, sleep: Callable[[float], None] = time.sleep,
-                 port_open: Callable[[str, int], bool] = _port_open, clock: Callable[[], float] = time.monotonic,
+                 port_open: Callable[[str, int, float], bool] = _port_open, clock: Callable[[], float] = time.monotonic,
                  wall_ms: Callable[[], float] = lambda: time.time() * 1000):
         try:
             self._validate(config)
@@ -173,10 +174,13 @@ class RigSsh:
             raise RigSshError(f"recovery start of {target} failed; target may be down: {err}{prior}") from err
         if failure is not None:
             raise failure
+        deadline = Deadline(self.ready_timeout_s, clock=self.clock)
         if section.get("running"):
-            self._until(lambda: self.remote(section["running"], check=False).returncode == 0, f"{target} to run again")
+            self._until(lambda timeout: self.remote(section["running"], check=False, timeout_s=timeout).returncode == 0,
+                        f"{target} to run again", deadline)
         if port:
-            self._until(lambda: self.port_open(self.host, int(port)), f"{target} to listen on {self.host}:{port}")
+            self._until(lambda timeout: self.port_open(self.host, int(port), timeout),
+                        f"{target} to listen on {self.host}:{port}", deadline)
 
     def fetch_log(self, dest: Path) -> None:
         section = self._section("log")
@@ -225,12 +229,16 @@ class RigSsh:
             raise RigSshError(f"{what} failed with exit code {done.returncode}" + (f": {detail}" if detail else ""))
         return done
 
-    def _until(self, ready: Callable[[], bool], what: str) -> None:
-        deadline = self.clock() + self.ready_timeout_s
-        while not ready():
-            if self.clock() >= deadline:
-                raise RigSshError(f"timed out after {self.ready_timeout_s:g} s waiting for {what}")
-            self.sleep(1)
+    def _until(self, ready: Callable[[float], bool], what: str, deadline: Deadline) -> None:
+        try:
+            while True:
+                result = ready(deadline.remaining())
+                deadline.remaining()
+                if result:
+                    return
+                deadline.sleep(1, sleep=self.sleep)
+        except TimeoutError as err:
+            raise RigSshError(f"timed out after {self.ready_timeout_s:g} s waiting for {what}") from err
 
     def _section(self, name: str) -> dict[str, Any]:
         section = self.config.get(name) or {}

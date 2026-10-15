@@ -34,6 +34,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NoReturn
 
+from grf.deadline import Deadline
 from grf.deploy import docker, lock
 from grf.deploy.config import SiteConfig, Target
 from grf.deploy.jenkins import Jenkins, local_artifact
@@ -85,6 +86,7 @@ class Deployment:
         self.name, self.prev_name = self.recipe.name, self.recipe.name + PREVIOUS_SUFFIX
         self.operation_id = uuid.uuid4().hex
         self.journal_failed = False
+        self.journaling = False
 
     # ------------------------------------------------------------------ helpers
 
@@ -113,7 +115,7 @@ class Deployment:
             self.checkpoint()
 
     def checkpoint(self) -> None:
-        if self.journal_failed:
+        if not self.journaling or self.journal_failed:
             return  # the first error aborts normal execution; compensating cleanup must remain possible
         try:
             self.record.write(self.work_dir)
@@ -130,9 +132,9 @@ class Deployment:
         assert self.t is not None
         return self.t.run(command, timeout_s=timeout_s, check=False).returncode == 0
 
-    def inspect(self, name: str) -> dict[str, Any] | None:
+    def inspect(self, name: str, timeout_s: float = 120) -> dict[str, Any] | None:
         assert self.t is not None
-        result = self.t.run(f"docker inspect --type container {q(name)}", check=False)
+        result = self.t.run(f"docker inspect --type container {q(name)}", timeout_s=timeout_s, check=False)
         if result.returncode != 0:
             if result.returncode == 1 and re.fullmatch(
                 r"(?:Error(?: response from daemon)?: )?No such (?:container|object)(?::[^\n]*)?",
@@ -148,8 +150,8 @@ class Deployment:
             raise DeployError(f"docker inspect {name} returned an invalid container object")
         return data[0]
 
-    def state(self, name: str) -> tuple[str, int, str] | None:
-        info = self.inspect(name)
+    def state(self, name: str, timeout_s: float = 120) -> tuple[str, int, str] | None:
+        info = self.inspect(name, timeout_s=timeout_s)
         if info is None:
             return None
         st = info.get("State") or {}
@@ -216,6 +218,7 @@ class Deployment:
             record.trigger = "rollback"
         record.dry_run = options.dry_run
         record.reserve(self.work_dir)
+        self.journaling = True
         record.write(self.work_dir)
         locked = False
         owner = self.lock_owner()
@@ -277,10 +280,12 @@ class Deployment:
                     lock.release(self.t, self.wd, owner["token"])
                 except Exception as err:  # noqa: BLE001 - the record must still be written
                     self.log(f"WARNING: could not release the board lock: {err}")
-            if self.t is not None:
-                self.t.close()
-            record.finished = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
-            record.write(self.work_dir)
+            try:
+                if self.t is not None:
+                    self.t.close()
+            finally:
+                record.finished = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
+                record.write(self.work_dir)
         return record
 
     # ------------------------------------------------------------------ steps 1-4
@@ -499,20 +504,22 @@ class Deployment:
 
     def health(self, fresh: bool) -> str:
         c = self.component
-        deadline = self.monotonic() + c.ready_timeout_s
+        deadline = Deadline(c.ready_timeout_s, clock=self.monotonic)
         while True:
-            st = self.state(self.name)
+            st = self.state(self.name, timeout_s=deadline.remaining())
+            deadline.remaining()
             if st and st[0] == "running":
                 break
-            if self.monotonic() > deadline or (st and st[0] in ("exited", "dead")):
+            if st and st[0] in ("exited", "dead"):
                 raise DeployError(f"{self.name} is {st[0] if st else 'missing'}, not running")
-            self.sleep(2)
+            deadline.sleep(2, sleep=self.sleep)
         assert st is not None
         restarts = st[1]
         if fresh and restarts:
             raise DeployError(f"{self.name} restarted {restarts} times while starting")
-        self.sleep(c.stable_s)
-        again = self.state(self.name)
+        deadline.sleep(c.stable_s, sleep=self.sleep)
+        again = self.state(self.name, timeout_s=deadline.remaining())
+        deadline.remaining()
         if not again or again[0] != "running" or again[1] != restarts:
             raise DeployError(f"{self.name} did not stay up for {c.stable_s:g} s "
                               f"({again[0] if again else 'missing'}, {again[1] if again else '?'} restarts)")
@@ -526,11 +533,16 @@ class Deployment:
             checks.append(f"port {c.health_port} listening")
         return ", ".join(checks)
 
-    def wait_until(self, command: str, deadline: float, what: str) -> None:
-        while not self.ok(command, timeout_s=60):
-            if self.monotonic() > deadline:
-                raise DeployError(f"{what} did not succeed within {self.component.ready_timeout_s:g} s")
-            self.sleep(3)
+    def wait_until(self, command: str, deadline: Deadline, what: str) -> None:
+        try:
+            while True:
+                ready = self.ok(command, timeout_s=deadline.remaining())
+                deadline.remaining()
+                if ready:
+                    return
+                deadline.sleep(3, sleep=self.sleep)
+        except TimeoutError as err:
+            raise DeployError(f"{what} did not succeed within {self.component.ready_timeout_s:g} s") from err
 
     def rollback(self, reason: str, artifact: ArtifactRef, tar: str, moved: list[str]) -> NoReturn:
         self.log(f"deployment failed ({reason}); rolling back")

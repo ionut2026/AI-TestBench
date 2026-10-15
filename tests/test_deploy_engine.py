@@ -408,6 +408,7 @@ def test_status_is_read_only(board, tmp_path):
     assert status["previousBuilds"] == [tar_name("1.2.1")] and status["drift"] == []
     assert not status["unfinishedDeployment"] and status["hold"] is None and status["lock"] is None
     assert board.mutating() == []
+    assert not (tmp_path / "deployment.json").exists()
 
 
 def test_record_is_written_and_appended_to_the_audit_log(board, tmp_path):

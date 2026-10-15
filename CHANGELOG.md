@@ -6,6 +6,12 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Drain both SSH command streams before waiting for exit, avoiding channel backpressure deadlock.
+  Bound SCP and readiness/stability/retries with one monotonic deadline. Expose
+  `grf.deadline.Deadline` for product adapters; late successes cannot reset an expired budget.
+- Keep read-only deployment status free of evidence-output writes; final snapshots are attempted
+  even when transport close fails.
+
 - Always attempt rig restart recovery after stop/downtime failure or cancellation; report both errors
   if recovery fails. Reject invalid downtime before stop.
 - Stage each log fetch separately and return only freshly delivered files; reject destination collisions.

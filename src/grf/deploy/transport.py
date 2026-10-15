@@ -16,11 +16,11 @@ from __future__ import annotations
 
 import shlex
 import subprocess
-import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, NamedTuple, Protocol
 
+from grf.deadline import Deadline
 from grf.deploy.config import Target
 from grf.deploy.model import DeployError
 
@@ -101,46 +101,63 @@ class ParamikoTransport:
         self.client = client
 
     def run(self, command: str, timeout_s: float = 120, check: bool = True) -> CommandResult:
+        deadline = Deadline(timeout_s)
+        channel = None
         try:
-            _, stdout, stderr = self.client.exec_command(command, timeout=timeout_s)
+            stdin, stdout, _ = self.client.exec_command(command, timeout=deadline.remaining())
             channel = stdout.channel
-            deadline = time.monotonic() + timeout_s
-            while not channel.exit_status_ready():
-                if time.monotonic() > deadline:
-                    channel.close()
-                    raise DeployError(self.redact(f"board command did not finish within {timeout_s:g} s: {command}"))
-                time.sleep(0.1)
-            result = CommandResult(channel.recv_exit_status(), stdout.read().decode("utf-8", "replace"),
-                                   stderr.read().decode("utf-8", "replace"))
+            stdin.close()
+            output, errors = [], []
+            while True:
+                deadline.remaining()
+                if channel.recv_ready():
+                    output.append(channel.recv(65536))
+                if channel.recv_stderr_ready():
+                    errors.append(channel.recv_stderr(65536))
+                if channel.exit_status_ready() and not channel.recv_ready() and not channel.recv_stderr_ready():
+                    break
+                deadline.sleep(0.01)
+            result = CommandResult(channel.recv_exit_status(), b"".join(output).decode("utf-8", "replace"),
+                                   b"".join(errors).decode("utf-8", "replace"))
         except (self.paramiko.SSHException, OSError) as err:
             raise DeployError(self.redact(f"ssh error running {command}: {err}")) from None
+        finally:
+            if channel is not None:
+                channel.close()
         return _checked(result, command, check, self.redact)
 
     def put(self, local: Path, remote: str, timeout_s: float = 1800) -> None:
         """Copies ``local`` to the board path ``remote`` with the scp protocol (works without an sftp server)."""
         size = local.stat().st_size
+        deadline = Deadline(timeout_s)
         transport = self.client.get_transport()
-        channel = transport.open_session()
-        channel.settimeout(timeout_s)
+        channel = transport.open_session(timeout=deadline.remaining())
         try:
+            channel.settimeout(deadline.remaining())
             channel.exec_command(f"scp -t {shlex.quote(remote)}")
-            self._ack(channel, "start")
+            self._ack(channel, "start", deadline)
+            channel.settimeout(deadline.remaining())
             channel.sendall(f"C0644 {size} {Path(remote).name}\n".encode())
-            self._ack(channel, "header")
+            self._ack(channel, "header", deadline)
             with local.open("rb") as f:
                 while block := f.read(1 << 16):
+                    channel.settimeout(deadline.remaining())
                     channel.sendall(block)
+            channel.settimeout(deadline.remaining())
             channel.sendall(b"\0")
-            self._ack(channel, "data")
+            self._ack(channel, "data", deadline)
+            deadline.remaining()
         except (self.paramiko.SSHException, OSError) as err:
-            raise DeployError(f"copying {local.name} to {self.host}:{remote} failed: {err}") from None
+            raise DeployError(self.redact(f"copying {local.name} to {self.host}:{remote} failed: {err}")) from None
         finally:
             channel.close()
 
     @staticmethod
-    def _ack(channel: Any, what: str) -> None:
+    def _ack(channel: Any, what: str, deadline: Deadline) -> None:
+        channel.settimeout(deadline.remaining())
         code = channel.recv(1)
         if code != b"\0":
+            channel.settimeout(deadline.remaining())
             message = channel.recv(1024).decode("utf-8", "replace").strip() if code else "connection closed"
             raise DeployError(f"scp refused the {what}: {message}")
 

@@ -130,6 +130,14 @@ invocation and never returns pre-existing destination files or overwrites earlie
 The `clock` response must contain exactly two finite numbers with nonnegative uncertainty;
 contradictory SSH clock samples are unavailable, not repaired by swapping bounds.
 
+Readiness uses one monotonic deadline (elapsed time unaffected by wall-clock adjustments)
+shared by every command, stability wait and port probe, not a fresh timeout per retry.
+Paramiko drains stdout and stderr while a command is running to avoid SSH channel backpressure;
+SCP has a total transfer budget rather than a new allowance for each chunk.
+Product integrations can share `grf.deadline.Deadline(seconds)` across substeps:
+pass `remaining()` to blocking calls and use `sleep(seconds)` for bounded polling.
+Expiry raises `TimeoutError`; a late successful response does not renew the budget.
+
 Deployment reads its site config from `<ENV_PREFIX>_DEPLOY_CONFIG` (a file outside the repository), the optional
 Jenkins login from `JENKINS_USER`/`JENKINS_TOKEN` and records for reports from `GRF_DEPLOYMENT_RECORD`; see
 [Deploying builds](DEPLOYMENT.md#environment-variables). Install `general-robot-framework[deploy]` for the default

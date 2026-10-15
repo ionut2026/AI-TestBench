@@ -58,3 +58,28 @@ def test_contradictory_clock_bounds_are_unavailable(widget):
                  run=lambda argv, timeout: subprocess.CompletedProcess(argv, 0, next(board), ""))
     with pytest.raises(RigSshError, match="contradict"):
         rig.clock_offset(samples=2)
+
+
+def test_late_success_cannot_exceed_shared_readiness_budget(widget):
+    from deploy_fakes import Clock
+
+    clock = Clock()
+    budgets = []
+
+    def run(argv, timeout):
+        if argv[-1] == "running":
+            budgets.append(timeout)
+            clock.sleep(4)
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    def port(host, number, timeout):
+        budgets.append(timeout)
+        clock.sleep(2)
+        return True
+
+    rig = RigSsh({"host": "board", "ready_timeout_s": 5,
+                  "widgetd": {"stop": "stop", "start": "start", "running": "running", "port": 42}},
+                 run=run, clock=clock.monotonic, sleep=clock.sleep, port_open=port)
+    with pytest.raises(RigSshError, match="timed out"):
+        rig.restart("widgetd", 0)
+    assert budgets == [5, 1]
