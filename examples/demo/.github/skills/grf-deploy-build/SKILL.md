@@ -10,7 +10,7 @@ image tarball) on the instrument board that runs it. `grf deploy` does this safe
 keeps the previous build and rolls back automatically when the new one does not come up. Only products whose plugin
 defines `deploy_components()` can deploy. The full guide is `docs/DEPLOYMENT.md` in GeneralRobotFramework.
 
-The commands below use `grf`; a product with its own CLI name uses that name instead (for example `smm deploy`).
+The commands below use `grf`; a product with its own CLI name uses that name instead (for example `product-auto deploy`).
 
 ## What an agent may do
 
