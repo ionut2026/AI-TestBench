@@ -15,6 +15,7 @@ import re
 import tomllib
 from dataclasses import dataclass, field
 from functools import cached_property
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -97,6 +98,21 @@ class Project:
             self._strings(self._section("operator")["capabilities"], "[operator] capabilities")
         if "deploy" in self.data:
             _ = self.deploy_order, self.deploy_branch
+
+    def require_framework(self) -> None:
+        """Fail before evidence execution/acceptance when the installed distribution violates its pin."""
+        settings = self._section("framework")
+        expected = settings.get("version")
+        if expected is None:
+            return
+        if not isinstance(expected, str) or not expected.strip():
+            raise ProjectError("[framework] version must be a nonempty exact package version")
+        try:
+            installed = version("general-robot-framework")
+        except PackageNotFoundError as err:
+            raise ProjectError("general-robot-framework is not installed") from err
+        if installed != expected:
+            raise ProjectError(f"installed GRF {installed}, project requires {expected}")
 
     # ------------------------------------------------------------------ names
 

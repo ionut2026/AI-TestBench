@@ -6,6 +6,10 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Read `grf.__version__` from installed distribution metadata (one version source).
+  Evidence-tier runs and `gate`, not only doctor, enforce a configured exact `[framework] version`
+  before executing/evaluating anything. **Migration:** update the dependency pin and project version together.
+
 - Terminate owned descendant process trees on local rig/SSH/SCP and mutation timeout/cancellation,
   including inherited output-pipe holders. Windows ownership uses a kill-on-close job established
   before launching the site command; ownership setup failure aborts without launching it.

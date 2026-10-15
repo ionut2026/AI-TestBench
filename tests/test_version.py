@@ -2,7 +2,7 @@ from importlib.metadata import PackageNotFoundError
 
 import pytest
 
-from grf import doctor
+from grf import cli, doctor, project
 
 
 @pytest.mark.parametrize("installed,status", [("0.1.0", "OK"), ("0.2.0", "FAIL"), ("0.1.0.dev1", "FAIL")])
@@ -39,3 +39,23 @@ def test_invalid_framework_section(widget):
     widget.data["framework"] = "0.1.0"
     check = doctor.run_doctor("sim", env={})[0]
     assert check.status == "FAIL" and "must be a table" in check.detail
+
+
+def test_package_version_uses_installed_metadata():
+    from importlib.metadata import version
+
+    import grf
+
+    assert grf.__version__ == version("general-robot-framework")
+
+
+@pytest.mark.parametrize("command", [
+    ["run", "--tier", "bench"],
+    ["gate", "--request", "absent.toml", "--output", "absent.xml"],
+])
+def test_evidence_and_gate_enforce_exact_framework_pin(widget, monkeypatch, capsys, command):
+    widget.data["framework"] = {"version": "0.1.0"}
+    monkeypatch.setattr(project, "version", lambda name: "0.9.0")
+    monkeypatch.setattr(cli, "_robot", lambda *args: pytest.fail("must not execute"))
+    assert cli.main(command) == 2
+    assert "project requires 0.1.0" in capsys.readouterr().err

@@ -60,7 +60,7 @@ The starter supplies the referenced files and plugin. See `examples\demo\grf.tom
 | Section | Purpose |
 |---|---|
 | `[project]` | `name`, `product`, `cli` (default `grf`), `spec_prefix` (default `SPEC`), `rule_prefix`/`env_prefix` (default `GRF`), optional `module:attribute` plugin |
-| `[framework]` | Approved exact installed distribution `version`, checked by doctor |
+| `[framework]` | Approved exact installed distribution `version`, checked by doctor, evidence-tier runs and acceptance |
 | `[paths]` | Scope/catalog, reviews, suites, environment files, results, briefs, `brief_target`, keyword docs and mutants |
 | `[tiers.<name>]` | String-list `capabilities`; boolean `evidence` (default true), `parallel` and `rig_control` (default false); optional `lock` (local reservation name, default: the tier name for non-parallel tiers) |
 | `[capabilities]` | Required test tag to capability, e.g. `"needs:reset" = "reset"` |

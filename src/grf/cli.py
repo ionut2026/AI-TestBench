@@ -236,12 +236,14 @@ def cmd_run(args, robot_args: list[str]) -> int:
     from robot.run import RobotFramework
 
     p = project.current()
+    if p.tier(args.tier).evidence:
+        p.require_framework()
     forwarded, sources = RobotFramework().parse_arguments([*robot_args, "__grf_managed_suite__.robot"])
     for key in ("outputdir", "output", "variablefile", "name"):
         if key in forwarded:
             raise ValueError(f"Robot option {key!r} is managed by GRF; use --outdir and tier configuration")
-    if any(value.split(":", 1)[0].lower() == "tier" for value in forwarded.get("metadata", [])):
-        raise ValueError("Tier metadata is managed by GRF")
+    if any(value.split(":", 1)[0].lower() in ("tier", "grf version") for value in forwarded.get("metadata", [])):
+        raise ValueError("Tier metadata and GRF version metadata are managed by GRF")
     if forwarded.get("dryrun") and p.tier(args.tier).evidence:
         raise ValueError("Robot dry runs require a non-evidence tier")
     if sources != ["__grf_managed_suite__.robot"]:
@@ -274,12 +276,14 @@ def cmd_run(args, robot_args: list[str]) -> int:
     os.environ[project.PROJECT_ENV] = str(p.root)
     if args.exclude_pending:
         excludes.append("review:pending")
+    from grf import __version__
+
     options = {
         "variablefile": [str(p.path("environments") / f"{args.tier}.py")],
         "exclude": excludes,
         "outputdir": str(out_dir),
         "name": f"{p.name} {args.tier}",
-        "metadata": [f"Run:{stamp}", f"Tier:{args.tier}"],
+        "metadata": [f"Run:{stamp}", f"Tier:{args.tier}", f"GRF Version:{__version__}"],
     }
     argv: list[str] = []
     for key, values in options.items():
@@ -421,6 +425,7 @@ def cmd_gate(args) -> int:
     from grf.pipeline.report import read_results
 
     p = project.current()
+    p.require_framework()
     try:
         request = _load_request(args.request)
     except RequestError as err:

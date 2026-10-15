@@ -437,6 +437,8 @@ def evaluate(request: RunRequest, *, tests: list[dict], meta: dict, known: list,
         _check(checks, "deployments", [f"deployment record(s) of component(s) not in the request: {', '.join(unexpected)}"], "")
 
     accepted = all(c.status == "PASS" for c in checks)
+    from grf import __version__
+
     return {
         "schema": RESULT_SCHEMA,
         "request": request.id,
@@ -447,6 +449,7 @@ def evaluate(request: RunRequest, *, tests: list[dict], meta: dict, known: list,
         "sourceRevision": head,
         "sourceModified": dirty,
         "catalogSha256": digest,
+        "framework": {"grf": __version__},
         "authorization": {"owner": request.owner, "reference": request.reference, "validUntil": str(request.valid_until)},
         "executed": len(executed),
         "checks": [vars(c) for c in checks],
