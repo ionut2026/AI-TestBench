@@ -6,6 +6,13 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Require product-owned typed evidence preflight before real-tier capability discovery and pure persisted-result
+  integrity assessment afterward, including startup, completeness, cleanup, provenance and actual targets.
+  Missing checks fail closed even with `--no-report`/`--fail-on none`; old adapters must adopt the evidence hooks.
+- Require explicit required/observed assertion clauses for acceptance and VERIFIED reports; skipped/undeclared
+  clauses make coverage PARTIAL. VERIFIED now also requires the current test/dependency fingerprint, not legacy
+  hash-only human review. See WORKFLOWS for 0.4 migration and product-owned observability responsibilities.
+
 - Consolidate rig control and deployment on public `grf.ssh` configuration, clients, redaction and bounded
   transfers. Rig SSH now requires explicit user/known_hosts, defaults to pinned keys and downloads exact
   safely listed files. **Migration:** PuTTY/hostkey/custom executable configurations require OpenSSH or

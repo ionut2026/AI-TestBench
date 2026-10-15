@@ -38,6 +38,7 @@ GeneralRobotFramework\
     capabilities.py, doctor.py  selection and readiness checks
     library.py                  timing, operator and lifecycle helpers
     cleanup.py                  aggregated owned-resource cleanup and final-state/quarantine outcomes
+    evidence.py                 fail-closed preflight/result checks and explicit assertion coverage
     acceptance.py               strict local requests and post-run acceptance evaluation
     reservation.py              OS file locks for runs sharing a results root
     deadline.py, process.py      monotonic budgets and owned local subprocess trees
@@ -121,7 +122,7 @@ flowchart LR
 
 `ProductPlugin` offers only actual extension points: known message names, extra brief sections, a doctor class,
 additional CLI commands, deployable components (`deploy_components`, see [Deploying builds](DEPLOYMENT.md)),
-and split build/runtime identity policy (`runtime_identity`, `installed_matches`, `runtime_matches`,
+typed fail-closed evidence/explicit assertion coverage hooks, and split build/runtime identity policy (`runtime_identity`, `installed_matches`, `runtime_matches`,
 see [Workflows](WORKFLOWS.md)). Plugin command services and scoped discovery are public contracts;
 see [Configuration](CONFIGURATION.md#plugins-and-libraries), not private CLI helpers.
 Static names, paths, tiers, capabilities and lint rules belong in `grf.toml`.

@@ -1,30 +1,36 @@
+import json
+
 import pytest
 
+from grf.evidence import PREFLIGHT, EvidenceCheck, EvidenceChecks
 from grf.pipeline import drift, report
 from grf.pipeline.drift import TestRef
 
 
 @pytest.fixture
-def evidence_case(widget):
+def evidence_case(widget, synthetic_evidence):
     spec = {
         "id": 1, "area": "counter", "text": "Increment the counter once", "hash": "abcdef123456",
         "state": "Accepted", "testable": True, "satisfies": [2], "userStories": [3], "explorativeTests": [],
     }
     catalog = {"specifications": {"1": spec}, "requirements": {"2": {}}, "userStories": {"3": {}}}
     known = [TestRef("Increment", "Suites.Counter", "", ["WID-1", "spechash:abcdef12"],
-                     specs=[1], hash="abcdef12")]
+                     specs=[1], hash="abcdef12", fingerprint="sha256:" + "1" * 64)]
     executed = [{
         "name": "Increment", "suite": "Widget bench.Counter", "status": "PASS", "message": "", "elapsed": 0.1,
         "specs": [1], "hash": "abcdef12", "hashes": {}, "pending": False, "knownIssues": [],
     }]
     reviews = [{"test": "Increment", "suite": "Suites.Counter", "spechash": "abcdef12",
-                "reviewer": "Owner", "verdict": "approved"}]
+                "reviewer": "Owner", "verdict": "approved", "fingerprint": known[0].fingerprint}]
     return catalog, known, executed, reviews
 
 
 def build(case, tier="bench"):
     catalog, known, executed, reviews = case
-    return report.build_report(catalog, executed, {"Tier": tier}, known, reviews)
+    preflight = EvidenceChecks(tuple(EvidenceCheck(name, True, "synthetic") for name in PREFLIGHT),
+                               {"engine": "synthetic-fixture"})
+    return report.build_report(catalog, executed, {"Tier": tier, "GRF Preflight": json.dumps(preflight.as_dict())},
+                               known, reviews)
 
 
 def test_verified_requires_current_human_approval(evidence_case):
@@ -34,6 +40,19 @@ def test_verified_requires_current_human_approval(evidence_case):
     assert result["specifications"][0]["verdict"] == "PASS"
     assert not result["specifications"][0]["verified"]
     assert result["review"] == {"tests": 1, "unreviewed": 1}
+
+
+def test_passing_spec_tag_does_not_replace_explicit_assertion_coverage(evidence_case, widget, monkeypatch):
+    monkeypatch.setattr(widget.plugin, "assertion_coverage", lambda *args: {})
+    result = build(evidence_case)
+    assert result["specifications"][0]["verdict"] == "PARTIAL"
+    assert not result["specifications"][0]["verified"]
+    assert "assertion coverage unavailable" in result["specifications"][0]["evidenceProblems"][0]
+
+
+def test_legacy_hash_only_review_cannot_verify_current_content(evidence_case):
+    evidence_case[3][0].pop("fingerprint")
+    assert not build(evidence_case)["specifications"][0]["verified"]
 
 
 @pytest.mark.parametrize("tier", ["sim", "unknown", "?", "sim-parallel"])

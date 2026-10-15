@@ -10,6 +10,7 @@ import pytest
 
 from grf import cli
 from grf.acceptance import RequestError, evaluate, parse_request, require_policy, validate_policy
+from grf.evidence import AssertionCoverage, EvidenceAssessment
 from grf.pipeline import drift
 from grf.reservation import ReservationError, exclusive
 
@@ -118,7 +119,8 @@ def case(tmp_path):
                 "reviewer": "Owner", "verdict": "approved"}]
     return {"tests": tests, "meta": {"Tier": "bench"}, "known": known, "reviews": reviews, "catalog": catalog,
             "catalog_path": path, "records": [], "observed": {"widgetd": "1.2.3"},
-            "matches": lambda c, e, o: e == o, "root": tmp_path}
+            "matches": lambda c, e, o: e == o, "root": tmp_path,
+            "evidence_assessment": EvidenceAssessment((), {1: AssertionCoverage(("increment",), ("increment",))})}
 
 
 def gate(request, kw):
@@ -136,6 +138,14 @@ def gate(request, kw):
 def test_gate_accepts_complete_run(tmp_path):
     status, checks = gate(parse_request(request_data()), case(tmp_path))
     assert status == "ACCEPTED", checks
+
+
+def test_gate_cannot_accept_unavailable_integrity_or_assertion_coverage(tmp_path):
+    kw = case(tmp_path)
+    kw["evidence_assessment"] = None
+    assert gate(parse_request(request_data()), kw)[1]["evidence integrity and assertions"]["status"] == "FAIL"
+    kw["evidence_assessment"] = EvidenceAssessment((), {})
+    assert gate(parse_request(request_data()), kw)[1]["evidence integrity and assertions"]["status"] == "FAIL"
 
 
 @pytest.mark.parametrize("mutate, check", [
@@ -368,7 +378,7 @@ def test_reservation_rejects_bad_names(tmp_path):
 
 # ---------------------------------------------------------------- CLI
 
-def test_cli_request_check_and_gate(widget, tmp_path, capsys):
+def test_cli_request_check_and_gate(widget, tmp_path, capsys, synthetic_evidence):
     req = tmp_path / "request.toml"
     req.write_text(textwrap.dedent(f"""\
         schema = 1
@@ -453,7 +463,7 @@ def test_request_file_digest_covers_exact_snapshot_bytes(tmp_path):
     assert first.source_bytes != second.source_bytes
 
 
-def test_run_holds_tier_reservation(widget, tmp_path, capsys):
+def test_run_holds_tier_reservation(widget, tmp_path, capsys, synthetic_evidence):
     from grf import project
 
     assert project.current().tier("bench").lock == "bench"

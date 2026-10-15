@@ -88,8 +88,9 @@ the same configured results root; a real instrument needs the site's authoritati
 
 Update all relevant README, authoring rules and configuration documentation after every code or suite change.
 Reset product state between tests and isolate worker resources before declaring a tier parallel-safe.
-Passing tests become VERIFIED only on an evidence tier with current hashes, recorded human approval and no
-specification drift. Removing `review:pending` alone is not approval. New review entries are suite-qualified;
+Passing tests become VERIFIED only on an evidence tier with validated integrity/provenance/cleanup, explicit
+required assertions, current hashes/content fingerprints, recorded human approval and no specification drift.
+See GRF's WORKFLOWS evidence contract before adopting real tiers. Removing `review:pending` alone is not approval. New review entries are suite-qualified;
 legacy name-only reviews apply only to unique test names.
 
 The generic author/reviewer agents are in `.github\agents`. They preserve human sign-off and read-only RV&S access.

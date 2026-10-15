@@ -48,3 +48,20 @@ fault_actions = ["drop", "delay"]
 """, encoding="utf-8")
     monkeypatch.setenv(project.PROJECT_ENV, str(tmp_path))
     return project.current()
+
+
+@pytest.fixture
+def synthetic_evidence(widget, monkeypatch):
+    """Explicit fake evidence for isolated contract tests; never an instrument/product result."""
+    from grf.evidence import PREFLIGHT, RESULT, AssertionCoverage, EvidenceCheck, EvidenceChecks
+
+    def checks(names):
+        return EvidenceChecks(tuple(EvidenceCheck(name, True, "synthetic contract fixture") for name in names),
+                              {"engine": "synthetic-fixture"})
+
+    monkeypatch.setattr(widget.plugin, "evidence_preflight", lambda tier: checks(PREFLIGHT))
+    monkeypatch.setattr(widget.plugin, "evidence_checks", lambda tier, tests, meta: checks(RESULT))
+    monkeypatch.setattr(widget.plugin, "assertion_coverage", lambda tests, meta: {
+        1: AssertionCoverage(("increment",), ("increment",) if any(1 in test["specs"] for test in tests) else ()),
+    })
+    return checks(PREFLIGHT)

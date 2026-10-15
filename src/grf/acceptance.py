@@ -354,7 +354,7 @@ def evaluate(request: RunRequest, *, tests: list[dict], meta: dict, known: list,
              catalog_path: Path, records: list[dict], observed: dict[str, str], matches, root: Path,
              today: dt.date | None = None, evidence: bool = True, project_name: str | None = None,
              installed_matches=None, output_sha256: str | None = None, record_digests: list[dict] | None = None,
-             product_version: str | None = None) -> dict:
+             product_version: str | None = None, evidence_assessment=None) -> dict:
     """The acceptance result. ``tests``/``meta``: ``report.read_results``; ``known``: the current suites
     (``drift.collect_tests``); ``observed``: component -> runtime version (the plugin); ``matches(component, expected,
     observed)``: the plugin's version comparison."""
@@ -449,6 +449,10 @@ def evaluate(request: RunRequest, *, tests: list[dict], meta: dict, known: list,
     if missing_specs:
         problems.append("required specification(s) without an executed test: " + ", ".join(map(str, missing_specs)))
     _check(checks, "selection", problems, f"{len(executed)} test(s) ran, covering {len(ran_specs)} specification(s)")
+    problems = ["mandatory product evidence assessment unavailable"] if evidence_assessment is None else (
+        list(evidence_assessment.problems) + evidence_assessment.coverage_problems(list(ran_specs | set(request.specs))))
+    _check(checks, "evidence integrity and assertions", problems,
+           "validated startup, completeness, cleanup, identities and explicit required assertions")
 
     # results
     problems = []

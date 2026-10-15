@@ -304,9 +304,13 @@ def cmd_run(args, robot_args: list[str]) -> int:
                 raise ValueError("request requires the pinned clean source revision before execution")
         if request.catalog_sha256 and file_sha256(_catalog_path(args)) != request.catalog_sha256:
             raise ValueError("request catalog digest does not match before execution")
+    from grf.evidence import PREFLIGHT, PREFLIGHT_METADATA, require_checks
     from grf.operator_prompt import env_name as operator_env_name
     from grf.rigcontrol import RigControlError
 
+    preflight = p.plugin.evidence_preflight(args.tier)
+    if preflight is not None or p.is_evidence(args.tier):
+        preflight = require_checks(preflight, PREFLIGHT)
     try:
         caps, notes = tier_capabilities(args.tier, args.operator)
     except RigControlError as err:
@@ -322,6 +326,8 @@ def cmd_run(args, robot_args: list[str]) -> int:
     from grf import __version__
 
     metadata = [f"Run:{stamp}", f"Tier:{args.tier}", f"GRF Version:{__version__}"]
+    if preflight is not None:
+        metadata.append(PREFLIGHT_METADATA + ":" + json.dumps(preflight.as_dict(), separators=(",", ":")))
     if (product_version := p.plugin.product_version()) is not None:
         metadata.append(f"GRF Product Version:{product_version}")
     if request:
@@ -366,6 +372,19 @@ def cmd_run(args, robot_args: list[str]) -> int:
     output = out_dir / "output.xml"
     if output.exists() and not args.no_report:
         _report(_catalog_path(args), output, out_dir, _suites(args), _reviews(args), args.deployment)
+    if p.is_evidence(args.tier) and output.exists():
+        from grf.evidence import assess
+        from grf.pipeline.report import read_results
+
+        tests, meta = read_results(output)
+        assessment = assess(p.plugin, args.tier, tests, meta)
+        problems = list(assessment.problems) + assessment.coverage_problems(
+            [sid for test in tests for sid in test["specs"]])
+        if meta.get("Tier") != args.tier:
+            problems.append("Robot output tier differs from validated run tier")
+        if problems:
+            print("INVALID EVIDENCE: " + "; ".join(problems), file=sys.stderr)
+            return 2  # --fail-on none/known failures cannot suppress missing integrity or mandatory assertions.
     return _exit_code(rc, output, args.fail_on)
 
 
@@ -483,6 +502,7 @@ def cmd_gate(args) -> int:
     from grf.acceptance import RequestError, evaluate, file_sha256, format_result, write_result
     from grf.deploy.cli import record_paths
     from grf.deploy.record import load_records, record_files
+    from grf.evidence import assess
     from grf.pipeline.drift import collect_tests, load_reviews
     from grf.pipeline.ingest import load_catalog
     from grf.pipeline.report import read_results
@@ -507,6 +527,7 @@ def cmd_gate(args) -> int:
                       observed=p.plugin.runtime_identity(meta), matches=p.plugin.runtime_matches, root=p.root,
                       installed_matches=p.plugin.installed_matches,
                       output_sha256=file_sha256(output), record_digests=digests, product_version=p.plugin.product_version(),
+                      evidence_assessment=assess(p.plugin, meta.get("Tier", "?"), tests, meta),
                       evidence=p.is_evidence(meta.get("Tier", "?")), project_name=p.name)
     target = Path(args.json) if args.json else output.parent / "acceptance.json"
     write_result(result, target)

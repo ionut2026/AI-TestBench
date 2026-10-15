@@ -6,6 +6,10 @@ Put product-independent configuration, pipeline, reporting, capability and timin
 Keep product services, interfaces/schemas, log parsers, state models, fault implementations, test catalogs and
 suites in the product repository. Use `ProductPlugin` only for actual product extension points.
 Do not add a generic abstraction based on a single hypothetical consumer; demonstrate it with the neutral demo.
+Evidence validation/coverage contracts stay generic; service/resource/actual-target validation and assertion
+clause models stay product-owned. Add fail-closed counterexamples when adopting
+[the evidence hooks](docs/WORKFLOWS.md#evidence-integrity-and-assertion-coverage-04-migration), never static
+success substitutes. Synthetic fixtures and demo passes cannot establish real-product evidence.
 
 ## Documentation is part of every code change
 

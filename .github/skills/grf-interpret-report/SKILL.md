@@ -28,6 +28,7 @@ Quote the first meaningful error, name the evidence used, and propose the smalle
 ## Safety
 
 - Mock, dry-run and non-evidence results are never product evidence.
-- VERIFIED needs an evidence tier, current hashes, recorded human approval and no relevant drift.
+- VERIFIED needs an evidence tier, validated integrity/cleanup/provenance, explicit complete assertions,
+  current hashes/content fingerprints, recorded human approval and no relevant drift (GRF WORKFLOWS).
 - Do not weaken assertions or mark failures known just to make a report pass.
 - Real-product or instrument reruns require the instrument owner's authorization. RV&S access is read-only.

@@ -220,6 +220,47 @@ a fingerprint. After actual human review, re-record with the ordinary `grf revie
 command; do not synthesize fingerprints as approval. Agent reviews never count as human approval.
 Changing test/shared-resource content invalidates affected approvals. See [Testing](TESTING.md).
 
+## Evidence integrity and assertion coverage (0.4 migration)
+
+An evidence tier is **eligible** for product evidence, not proof that the actual environment is valid.
+Products must implement these `ProductPlugin` hooks using public types from `grf.evidence`:
+
+| Hook | Required behavior |
+|---|---|
+| `evidence_preflight(tier)` | Before capability discovery or any product contact, validate pinned/clean code and resources (`provenance`) and the actual allowed configuration (`actual-target`). Return `EvidenceChecks`, or `None` when unavailable. Never create an environment, start services, deploy or operate an instrument here. |
+| `evidence_checks(tier, tests, meta)` | Pure assessment of **persisted** results for every executed test: `startup`, `completeness`, `cleanup`, `provenance`, `actual-target`. No network/product contact during report or gate. Missing, malformed, generation-changed, overflowed or unconfirmed cleanup evidence must fail, not warn. |
+| `assertion_coverage(passed_tests, meta)` | Map each specification ID to `AssertionCoverage(required=(...), observed=(...))`. Required clause IDs come from the product's reviewed coverage model; observed IDs come only from assertions actually executed by the supplied passing tests. A spec tag, capability label or state notification cannot substitute for an omitted hardware assertion or ordering check. |
+
+`EvidenceCheck(name, passed, detail)` requires an exact boolean and diagnostic detail.
+`EvidenceChecks(checks=(...), identities={...})` requires unique check names and nonempty validated identities
+when used for evidence: for example code/resource digests and an actual configuration fingerprint.
+`as_dict()` / `from_dict()` provide strict schema-1 serialization. Do not include credentials or sensitive
+endpoint details. GRF stamps the validated preflight into managed `GRF Preflight` metadata; final assessment
+must preserve **every** preflight identity unchanged. Product code must also compare persisted identities
+with its approved pin/resource policy, not merely accept a matching pair of stale strings.
+
+At the product facade's mandatory per-test setup boundary, call `require_checks(startup, STARTUP)` after
+obtaining fresh marks/session identity; failure must prevent the test body. At teardown, retain every
+mandatory obligation and use `require_checks(final, FINAL)` alongside owned-resource cleanup even if a test
+assertion or diagnostic export failed. These helpers raise `EvidenceError` (a `ValueError`) on unavailable or
+failed checks. Persist outcomes, including unsuccessful ones, for `evidence_checks`; aggregate **all tests**,
+not just the final session. Product-specific transport schemas, service generation tracking, fault state,
+resource manifests and clause IDs stay in the product.
+
+GRF refuses an evidence run without a passing preflight **before** capability discovery. An implemented
+preflight must also pass on non-evidence tiers, so adapters can reject real-target/mock contradictions.
+Development/mock runs may omit the hooks, but can never become accepted/VERIFIED evidence. After execution,
+`--no-report`, `--fail-on none` and known-failure policy cannot suppress missing integrity or mandatory
+assertions: `run` returns 2. Gate rejects unavailable/failed assessment; report shows integrity errors and
+uses PARTIAL for passing tests with undeclared/unobserved required assertions. VERIFIED additionally requires
+current-content human review. A legacy hash-only review or specification tag is insufficient.
+
+**Migration:** old adapters and XML without validated preflight/results/assertion coverage are not upgraded
+into evidence. Implement and negatively test all hooks before real-tier execution. Re-run only with the
+instrument owner's authorization. The generic demo remains non-evidence and needs no product validation hook.
+These contracts are not signed attestation and cannot authenticate dishonest adapter claims; protected source,
+controller authorization, resource reservation and owner-approved observability remain necessary.
+
 ## Product lifecycle and cleanup APIs
 
 `GrfLibrary` exposes `begin_test(started_ms)`, `end_test()`, `set_marks()`, `add_segment(label)`,

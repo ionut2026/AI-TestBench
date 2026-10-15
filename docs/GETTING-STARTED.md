@@ -476,7 +476,11 @@ Open these files in `D:\projects\GeneralRobotFramework\results\learning-counter-
 Start with `report.html`; if a test fails, look at its steps in `log.html`.
 For a mock run, a green **PASS** means the executed checks succeeded against the mock.
 **VERIFIED** is a stricter GRF designation requiring a product-evidence tier, current specification hashes,
-human approval and no relevant specification drift. The demo must not claim VERIFIED product evidence.
+current-content human approval, validated environment integrity and every required assertion actually performed,
+with no relevant specification drift. An assertion is a check such as "the counter increased once"; a specification
+tag only links a test to its requirement, not proof that every required check ran.
+The demo must not claim VERIFIED product evidence. Product maintainers can read the advanced
+[evidence contract](WORKFLOWS.md#evidence-integrity-and-assertion-coverage-04-migration) when adopting real tiers.
 
 ## 7. Try a small failure safely
 

@@ -1,5 +1,5 @@
 """What a product adds to the generic framework: the hooks a project's plugin (``[project] plugin`` in ``grf.toml``)
-overrides. The defaults do nothing, so a project without a plugin gets the plain framework."""
+overrides. Optional defaults do nothing; evidence hooks default to unavailable, not approval."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from grf.deploy.model import Component
     from grf.doctor import Doctor
+    from grf.evidence import AssertionCoverage, EvidenceChecks
     from grf.project import Project
 
 Command = Callable[[argparse.Namespace], int]
@@ -50,6 +51,26 @@ class ProductPlugin:
         package = type(self).__module__.partition(".")[0]
         distributions = packages_distributions().get(package, []) if package != "grf" else []
         return version(distributions[0]) if len(distributions) == 1 else None
+
+    def evidence_preflight(self, tier: str) -> EvidenceChecks | None:
+        """Validate code/resources and actual configuration before capability discovery or product contact.
+
+        No startup, deployment or instrument action belongs here. None is unavailable, never evidence success.
+        Non-evidence runs may omit the hook; implemented checks must pass even on development tiers.
+        """
+        return None
+
+    def evidence_checks(self, tier: str, tests: list[dict], meta: dict) -> EvidenceChecks | None:
+        """Pure persisted-result assessment of mandatory startup, completeness, cleanup and identities.
+
+        The product must retain every executed test's failed/unavailable obligations, including teardown.
+        Do not query an instrument here or substitute warnings/defaults for missing evidence.
+        """
+        return None
+
+    def assertion_coverage(self, passed_tests: list[dict], meta: dict) -> dict[int, AssertionCoverage]:
+        """Required clause IDs and assertions actually executed by passing tests, never inferred from spec tags."""
+        return {}
 
     def runtime_identity(self, meta: dict[str, str]) -> dict[str, str]:
         """Component -> version that the product reported during a run, read from the Robot run metadata

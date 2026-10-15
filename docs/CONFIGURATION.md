@@ -104,12 +104,17 @@ what = "resets the product"
 
 ## Plugins and libraries
 
+Product-evidence tiers require `evidence_preflight`, `evidence_checks` and `assertion_coverage`; see the
+[typed evidence contract and 0.4 migration](WORKFLOWS.md#evidence-integrity-and-assertion-coverage-04-migration).
+Their defaults are unavailable, not successful checks. Declaring `evidence = true` alone does not validate an instrument.
+
 Product commands use the public `self.context` (`grf.commands.CommandContext`) supplied by
 `ProductPlugin`. It resolves `catalog_path(args)`, `scope_path(args)`, `reviews_path(args)` and
 `suites(args)` with the same CLI overrides as core; `load_catalog(args)` and `collect_tests(args)`
 load those inputs. Missing paths fail only when that feature is used. Do not import underscored
 CLI helpers. Public review/identity APIs are in `grf.pipeline.drift`
-(`test_key`, `require_unique_tests`, `record_review`, `review_problem`).
+(`test_key`, `require_unique_tests`, `record_review`, `current_review_problem`; legacy `review_problem`
+is not sufficient for current-content approval).
 Core commands do not register unrelated optional product commands; extensions must not replace
 core safety commands through the returned handler mapping.
 

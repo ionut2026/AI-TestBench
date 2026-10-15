@@ -63,11 +63,14 @@ for a new run. Use a new directory, or process existing output with `grf report`
 | Result | Meaning |
 |---|---|
 | PASS | Every known test for the specification ran and passed |
-| PARTIAL | Some tests passed, but others were skipped or did not run |
-| VERIFIED | PASS on a known evidence tier, current hashes, human-approved tests and no stale/state/link/retired/suspect specification issues |
+| PARTIAL | Some tests passed, but other tests or explicit required assertion clauses were skipped, missing or undeclared |
+| VERIFIED | PASS on a known evidence tier, validated integrity/target/provenance/cleanup, complete explicit assertions, current hashes/content fingerprints, human approval and no specification drift |
 | Mock PASS | Framework/adapter wiring only; never VERIFIED product evidence |
 
 Unrecorded reviews, missing hashes and stale hashes must not produce VERIFIED even if pending tags were removed.
+The [evidence hooks](WORKFLOWS.md#evidence-integrity-and-assertion-coverage-04-migration) must include negative
+startup/completeness/cleanup, identity-change and skipped-clause counterexamples. A legacy hash-only review
+cannot verify changed test logic.
 Suite-qualified identities prevent equally named tests in different child suites from hiding missing tests.
 Identity uses the actual child hierarchy, not punctuation in a renamed root; dotted product names remain valid.
 The report preserves raw verdicts, review warnings, drift details and `productEvidence`.

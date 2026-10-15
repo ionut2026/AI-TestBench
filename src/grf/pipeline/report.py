@@ -28,7 +28,7 @@ from grf.pipeline.drift import (
     TestRef,
     agent_reviews,
     check,
-    check_reviews,
+    current_review_problem,
     hash_for,
     parse_hash_tags,
     require_unique_tests,
@@ -140,8 +140,12 @@ def build_report(catalog: dict, tests: list[dict], meta: dict, known: list[TestR
     require_unique_tests(known)
     tier = meta.get("Tier", "?")
     product = is_product_tier(tier)
+    from grf.evidence import EvidenceAssessment, assess
+
+    assessment = assess(project.current().plugin, tier, tests, meta) if product else EvidenceAssessment((), {})
     agent = {a["test"]: a for a in agent_reviews(known, reviews or [])}
-    unrecorded = {(r["suite"], r["test"]) for r in check_reviews(known, reviews or [])}
+    unrecorded = {(test.suite, test.name) for test in known
+                  if current_review_problem(test, known, reviews or [])}
     drift = check(catalog, known, reviews or []) if known else None
     specs_out = []
     for key, spec in catalog["specifications"].items():
@@ -149,6 +153,9 @@ def build_report(catalog: dict, tests: list[dict], meta: dict, known: list[TestR
         run = [t for t in tests if sid in t["specs"]]
         defined = [k for k in known if sid in k.specs]
         verdict = _spec_verdict(spec, run, defined)
+        coverage_problems = assessment.coverage_problems([sid]) if product else []
+        if verdict == "PASS" and coverage_problems:
+            verdict = "PARTIAL"
         stale = [t["name"] for t in run if not (h := hash_for(sid, t["specs"], t["hash"], t.get("hashes") or {}))
                  or not spec["hash"].startswith(h)]
         unreviewed = sorted({t["name"] for t in run if t.get("pending")}
@@ -161,11 +168,14 @@ def build_report(catalog: dict, tests: list[dict], meta: dict, known: list[TestR
             for issue in (drift or {}).get(key, [])
         )
         outcomes = [outcome(t, product) for t in run]
+        evidence_problems = list(assessment.problems) + coverage_problems if product else []
         specs_out.append({
             "id": sid,
             "area": spec["area"],
             "verdict": verdict,
-            "verified": product and verdict == "PASS" and bool(defined) and not unreviewed and not stale and not invalid_spec,
+            "verified": product and verdict == "PASS" and bool(defined) and not unreviewed
+                        and not stale and not invalid_spec and not evidence_problems,
+            "evidenceProblems": evidence_problems,
             "unreviewed": unreviewed,
             "failClass": ("new" if "NEW FAIL" in outcomes else "known") if verdict == "FAIL" else None,
             "text": spec["text"],
@@ -208,6 +218,8 @@ def build_report(catalog: dict, tests: list[dict], meta: dict, known: list[TestR
         "scope": catalog.get("scope"),
         "tier": tier,
         "productEvidence": product,
+        "evidenceIntegrity": {"status": "FAIL" if assessment.problems else "PASS" if product else "NOT EVIDENCE",
+                              "problems": list(assessment.problems)},
         "metadata": {k: v for k, v in meta.items() if not k.startswith("_")},
         "totals": meta.get("_totals"),
         "summary": summary,
@@ -278,6 +290,8 @@ def render_html(report: dict) -> str:
     warn = ""
     if not report["productEvidence"]:
         warn = f"<div class='warn'>{p.text('non_evidence', 'these verdicts are <b>not evidence about the product</b>.')}</div>"
+    if problems := report.get("evidenceIntegrity", {}).get("problems"):
+        warn += "<div class='bad'><b>INVALID EVIDENCE:</b> " + "; ".join(e(problem) for problem in problems) + "</div>"
     spec_rows = []
     for s in report["specifications"]:
         tests = "<br>".join(
@@ -293,6 +307,7 @@ def render_html(report: dict) -> str:
         notes = []
         if s["reason"]:
             notes.append(e(s["reason"]))
+        notes.extend(e(problem) for problem in s.get("evidenceProblems", []))
         if s["stale"]:
             notes.append("<b>STALE:</b> current specification hash is missing or mismatched")
         if s["suspect"]:
