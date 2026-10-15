@@ -4,6 +4,16 @@ GRF uses Semantic Versioning. Additive public APIs use a minor release; compatib
 Before 1.0, incompatible API changes also require a minor release. Release tags are `vMAJOR.MINOR.PATCH`.
 Tags and publication are explicit maintainer actions.
 
+## 0.4.3
+
+- Add opt-in public `grf.hostlock.acquire` for atomic same-machine resource sets, owner/run/lease identities,
+  explicit monotonic heartbeat and owner-checked idempotent release. Stale recovery requires a provably
+  nonexistent process or PID creation-time mismatch; heartbeat age alone never authorizes takeover.
+- Add optional `[hostlock] directory` / `Project.hostlock_dir`, defaulting outside checkouts to shared
+  machine state. Require `psutil>=6` for Windows/POSIX OS creation identity; sites provision shared trusted
+  directory permissions separately. No automatic tier/workflow adoption, distributed leasing, process
+  cleanup or instrument authorization is implied. See Workflows and Configuration.
+
 ## 0.4.2
 
 - Fix nightly workflow provenance: `workflow deploy-and-test --trigger cli|manual|nightly` uses the same

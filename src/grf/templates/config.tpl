@@ -5,7 +5,7 @@ spec_prefix = "__SPEC_PREFIX__"
 plugin = "product_automation.plugin:DemoPlugin"
 
 [framework]
-version = "0.4.2"
+version = "0.4.3"
 
 [paths]
 scope = "catalog/demo.scope.toml"

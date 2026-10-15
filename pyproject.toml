@@ -4,12 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "general-robot-framework"
-version = "0.4.2"
+version = "0.4.3"
 description = "General Robot Framework: the generic base of product test automation frameworks (project config, CLI, RV&S pipeline, rig control, Robot library base)"
 requires-python = ">=3.11"
 dependencies = [
   "robotframework>=7.0",
   "robotframework-pabot>=5",
+  "psutil>=6",
 ]
 
 [project.optional-dependencies]

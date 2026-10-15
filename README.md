@@ -72,7 +72,7 @@ example. Both examples use the real catalog/report pipeline with fake input; nei
 | `grf scaffold --update-skills` | [Reviewed, conflict-safe generic skill updates](docs/SKILLS.md#how-skills-reach-product-projects); product overlays are preserved |
 | [Repositories](docs/REPOSITORIES.md) | Independent repositories and data ownership |
 | [Deploying builds](docs/DEPLOYMENT.md) | `grf deploy`: Jenkins builds to instrument boards, rollback, site config, Jenkins pipeline |
-| [Workflows](docs/WORKFLOWS.md) | Run requests, the acceptance gate (`grf gate`), content-bound reviews and run reservation |
+| [Workflows](docs/WORKFLOWS.md) | Run requests, acceptance (`grf gate`), content-bound reviews, tier reservation and opt-in host-wide resource leases |
 | [Contributing](CONTRIBUTING.md) | Change scope, documentation maintenance, compatibility and review policy |
 | [Changelog](CHANGELOG.md) | User-visible changes and migration notes |
 

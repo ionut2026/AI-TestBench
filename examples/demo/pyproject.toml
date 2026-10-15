@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "demo-counter-automation"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["general-robot-framework==0.4.2"]
+dependencies = ["general-robot-framework==0.4.3"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

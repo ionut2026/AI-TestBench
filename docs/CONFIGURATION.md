@@ -32,7 +32,7 @@ spec_prefix = "SPEC"
 plugin = "product_automation.plugin:DemoPlugin"
 
 [framework]
-version = "0.4.2"
+version = "0.4.3"
 
 [paths]
 scope = "catalog/demo.scope.toml"
@@ -74,6 +74,7 @@ acceptance. See [the canonical policy schema](WORKFLOWS.md#project-acceptance-po
 | `[mutation]` | Optional `faults_env` and supported `fault_actions`; implementations belong to the product |
 | `[texts]` | Product-specific report labels such as `non_evidence` and `nospec_skip` |
 | `[deploy]` | Optional `order` (component list), `default_branch` fallback and `[deploy.branches]` per-component Jenkins branches for deployment/workflow; hosts and credentials belong in the site config ([Deploying builds](DEPLOYMENT.md)) |
+| `[hostlock]` | Optional absolute shared-machine `directory` outside this checkout for the opt-in Python resource lease API |
 
 Declare `evidence = false` explicitly for every mock/simulator tier. Unknown or missing report tiers are
 non-evidence. Exact tier names take priority; legacy metadata with a dash/space suffix may resolve to a known
@@ -115,6 +116,23 @@ record; the workflow binds both during planning and actual deployment. See [Work
 
 Only tiers marked `parallel = true` can use `grf run --processes N`. This flag is a product-owner assertion of
 resource isolation, not something GRF can prove. Do not mark an instrument-sharing tier parallel-safe.
+
+### Host-wide resource directory
+
+For product controllers using `grf.hostlock`, the optional configuration is:
+
+```toml
+[hostlock]
+directory = "D:/shared-grf/hostlocks"
+```
+
+`Project.hostlock_dir` returns that absolute resolved path, rejecting empty/relative paths and this checkout
+or its descendants. Omit the section to use `%PROGRAMDATA%\GRF\hostlocks` on Windows or
+`/var/tmp/grf-hostlocks` on POSIX. This setting does not automatically enable leasing or change existing tier
+locks. All projects/accounts sharing a resource must use the same trusted local directory and resource names.
+An administrator provisions shared permissions separately; GRF never falls back to a private user/checkout
+directory or changes permissions. The API's direct `lock_dir=` override must also be absolute.
+See [ownership, heartbeat, conservative stale recovery and limits](WORKFLOWS.md#host-wide-named-resources-043).
 
 `grf run` on a non-parallel tier holds an operating-system file lock `<results>/.locks/<lock>.lock` for the whole
 run; a second run on the same machine stops with "in use by another run". Give two tiers the same `lock` when they

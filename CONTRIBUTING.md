@@ -64,6 +64,11 @@ Never weaken host-key, TLS, checksum, lock or rollback checks to make something 
 simulated board (`tests\deploy_fakes.py`), and never run a real deployment as part of validating a core change.
 See [Deploying builds](docs/DEPLOYMENT.md).
 
+Host-wide ownership belongs in `grf.hostlock`; product controllers define resource names, process/service
+lifecycles and safe reconciliation. Test leases with isolated directories under `results`, simulated PID
+reuse/access denial and owned child processes. Never write to the machine-default registry during core
+validation or infer safe instrument state from a dead lease owner; see [host resource leases](docs/WORKFLOWS.md#host-wide-named-resources-043).
+
 Request/gate and reservation changes must preserve [workflow boundaries](docs/WORKFLOWS.md): local locks are
 not distributed leases, authorization strings are not authentication, and fingerprints do not cover every
 Python/configuration input. Test rejection paths and process contention without contacting products.

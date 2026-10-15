@@ -103,8 +103,11 @@ class Project:
             "catalog": {"message_pattern"},
             "mutation": {"faults_env", "fault_actions"},
             "deploy": {"order", "default_branch", "branches"},
+            "hostlock": {"directory"},
         }.items():
             table(self._section(section), f"[{section}]", keys)
+        if "directory" in self._section("hostlock"):
+            _ = self.hostlock_dir
         for key in ("name", "cli", "product", "spec_prefix", "rule_prefix", "env_prefix", "plugin"):
             value = self._section("project").get(key)
             if value is not None and (not isinstance(value, str) or not value.strip()):
@@ -362,6 +365,23 @@ class Project:
         return str(self._section("texts").get(key, default))
 
     # ------------------------------------------------------------------ deployment
+
+    @property
+    def hostlock_dir(self) -> Path:
+        """Host-wide lease directory, explicitly configured outside this project or machine default."""
+        from grf.hostlock import default_lock_dir
+
+        value = self._section("hostlock").get("directory")
+        if value is None:
+            return default_lock_dir()
+        text(value, "[hostlock] directory")
+        path = Path(value)
+        if not path.is_absolute():
+            raise ProjectError("[hostlock] directory must be absolute and outside the checkout")
+        resolved = path.resolve()
+        if resolved.is_relative_to(self.root.resolve()):
+            raise ProjectError("[hostlock] directory must be outside the checkout")
+        return resolved
 
     @property
     def deploy_order(self) -> list[str]:

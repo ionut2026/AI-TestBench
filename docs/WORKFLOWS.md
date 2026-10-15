@@ -353,6 +353,71 @@ Publish failures remain available through `guard.last_result`, not silently igno
 
 ## Reservation
 
+### Host-wide named resources (0.4.3)
+
+`grf.hostlock` is an **opt-in Python API** for product controllers that share one computer's ports,
+broker instances or service names across projects. A lease is one recorded claim to a complete set of names.
+Acquisition is all-or-nothing, serialized by a short operating-system registry lock, and persisted with an
+atomic file replacement. It does not automatically change `grf run`, deploy, workflow or the tier locks below.
+
+```python
+from grf.hostlock import acquire
+
+with acquire(
+    ["tcp:1883", "broker:demo", "service:counter"],
+    run_id="approved-run-unique-id",
+    lock_dir=project.hostlock_dir,
+) as lease:
+    heartbeat_ns = lease.heartbeat()
+    # Product controller starts/uses/cleans its owned resources within this scope.
+```
+
+Use `acquire(resources, *, run_id, lock_dir=None) -> Lease` before product setup and keep the lease until
+verified cleanup completes. `resources` is a nonempty list/tuple of unique case-sensitive, nonempty strings
+without surrounding whitespace. Every cooperating project must use the **same directory and naming rules**:
+for example `tcp:1883` means that TCP port regardless of checkout or product. This is cooperative reservation,
+not a port bind, service stop, OS access boundary or permission to contact an instrument.
+
+`Lease` exposes `directory`, `lease_id`, `run_id`, sorted `resources` and immutable `owner: ProcessIdentity`.
+Owner fields are `host`, `user`, `pid` and OS process creation timestamp `created`. The random lease ID is
+independent of the supplied run ID. `process_identity(pid=None)` returns OS identity, `None` only for a
+provably nonexistent process, or raises `HostLockError` if identity is inaccessible/uncertain.
+Windows and POSIX process creation identities are read through the required `psutil` package.
+
+`lease.heartbeat()` explicitly updates and returns a strictly increasing monotonic nanosecond value.
+Call it periodically at controller-owned checkpoints; no background heartbeat thread or expiry/TTL is
+implied. It is diagnostic liveness, not authentication or a UTC timestamp. **Old heartbeat age never permits
+takeover.** On a conflict, GRF compares PID **and** creation time: only a missing PID or a different creation
+time proves that recorded process is gone (including PID reuse). An alive, suspended, inaccessible or
+foreign-host owner blocks acquisition and reports the stored owner/run/lease/heartbeat.
+Registry corruption, overlapping persisted claims, unavailable permissions and registry contention fail
+closed with `HostLockError`; a busy registry can be retried by the controller, never bypassed.
+
+`lease.release()` rechecks current process identity and exact persisted lease ownership before removing
+only its own entry. It is idempotent after success and safe when an old recovered entry is already absent;
+it cannot remove a replacement lease. Heartbeat after release/missing ownership fails. Do not transfer
+lease handles to another process or mutate their fields. A context manager releases on exit; if the body
+and release both fail, the original error is retained with the release error attached.
+
+After a controller crash, the OS releases the short registry mutex; the durable claim remains until a
+conflicting acquisition proves the old process gone. **This does not prove its descendants, broker, service
+or instrument are stopped/safe.** The product/controller still owns OS-bounded process trees, resource probes,
+sticky quarantine and owner-approved reconciliation before reuse. Retain the lease when cleanup is unresolved;
+do not equate a released/recovered lease with verified cleanup. The existing `grf.process.run` owns bounded
+command descendants via a Windows kill-on-close Job Object or POSIX process group; this release adds no new
+long-lived process launcher.
+
+Default shared state is `%PROGRAMDATA%\GRF\hostlocks` on Windows and `/var/tmp/grf-hostlocks` on POSIX, not
+a checkout/user-specific results folder. Configure `project.hostlock_dir` using
+[`[hostlock] directory`](CONFIGURATION.md#host-wide-resource-directory). A site administrator must provision
+one trusted local directory with read/write permissions for **all** cooperating accounts and protection from
+untrusted modification. GRF does not alter ACLs, elevate privileges, or silently fall back to user/checkout
+storage. All accounts must resolve the same machine path; do not use network shares, copied registries,
+containers with independent PID namespaces or different directories as a common reservation.
+Never delete/replace the directory or its permanent `registry.lock` while users may run.
+
+### Existing checkout/tier reservation
+
 A non-parallel tier defaults to `lock = "<tier-name>"`; parallel tiers have no automatic lock unless configured.
 `grf run` holds the operating-system file lock `<configured-results>\.locks\<lock>.lock` while Robot executes.
 Two runs using the same lock directory and name cannot overlap; contention returns `2`, and process exit/crash
