@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from grf import project
+from grf.validation import integer, number, table, text
 
 
 def config_env() -> str:
@@ -65,6 +66,10 @@ class RigSsh:
     def __init__(self, config: dict[str, Any], run: Runner = _run, sleep: Callable[[float], None] = time.sleep,
                  port_open: Callable[[str, int], bool] = _port_open, clock: Callable[[], float] = time.monotonic,
                  wall_ms: Callable[[], float] = lambda: time.time() * 1000):
+        try:
+            self._validate(config)
+        except ValueError as err:
+            raise RigSshError(str(err)) from err
         self.config = config
         self.host = str(config.get("host") or "")
         if not self.host:
@@ -103,6 +108,31 @@ class RigSsh:
         self.ready_timeout_s = float(config.get("ready_timeout_s", 180))
         self.run, self.sleep, self.port_open, self.clock, self.wall_ms = run, sleep, port_open, clock, wall_ms
 
+    @staticmethod
+    def _validate(config: dict) -> None:
+        targets = set(project.current().rig_targets)
+        scalar = {"host", "user", "client", "connect_timeout_s", "ready_timeout_s", "port",
+                  "identity", "ssh", "scp", "hostkey", "password_file"}
+        table(config, "rig SSH config", scalar | targets | {"log", "clock"})
+        text(config.get("host"), "host")
+        for key in scalar - {"connect_timeout_s", "ready_timeout_s", "port"}:
+            if key in config:
+                text(config[key], key)
+        integer(config.get("port", 22), "SSH port", minimum=1, maximum=65535)
+        number(config.get("connect_timeout_s", 10), "connect_timeout_s", positive=True)
+        number(config.get("ready_timeout_s", 180), "ready_timeout_s", positive=True)
+        for target in targets:
+            section = table(config.get(target, {}), f"[{target}]", {"stop", "start", "running", "port"})
+            for key in ("stop", "start", "running"):
+                if key in section:
+                    text(section[key], f"[{target}] {key}")
+            if "port" in section:
+                integer(section["port"], f"[{target}] port", minimum=1, maximum=65535)
+        for name, keys in (("log", {"prepare", "pattern", "dir"}), ("clock", {"command"})):
+            section = table(config.get(name, {}), f"[{name}]", keys)
+            for key, value in section.items():
+                text(value, f"[{name}] {key}")
+
     def targets(self) -> list[str]:
         """The project's restart targets this config can stop and start."""
         return [t for t in project.current().rig_targets if self._section(t).get("stop") and self._section(t).get("start")]
@@ -121,6 +151,10 @@ class RigSsh:
     def restart(self, target: str, down_ms: int) -> None:
         """Stops ``target``, waits ``down_ms``, starts it and waits until it is ready: its ``running`` command exits 0
         and/or its ``port`` (default: the project's ``[rig] ready_ports``) accepts connections."""
+        try:
+            integer(down_ms, "down_ms")
+        except ValueError as err:
+            raise RigSshError(str(err)) from err
         section = self._section(target)
         if not (section.get("stop") and section.get("start")):
             raise RigSshError(f"restart-{target} is not configured in the rig ssh config")

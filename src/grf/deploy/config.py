@@ -10,12 +10,13 @@ from __future__ import annotations
 import os
 import tomllib
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
 from grf.deploy.model import DeployError
+from grf.validation import integer, number, table, text
 
 SCHEMA = 1
 HOST_KEY_POLICIES = ("accept-new", "pinned")
@@ -32,6 +33,15 @@ class JenkinsSettings:
     token_env: str = "JENKINS_TOKEN"
     timeout_s: float = 60.0
 
+    def __post_init__(self) -> None:
+        number(self.timeout_s, "[jenkins] timeout_s", positive=True)
+        for key in ("base_url", "user_env", "token_env"):
+            text(getattr(self, key), f"[jenkins] {key}")
+        if type(self.insecure_tls) is not bool:
+            raise ValueError("[jenkins] insecure_tls must be a boolean")
+        if self.ca_bundle is not None:
+            text(self.ca_bundle, "[jenkins] ca_bundle")
+
 
 @dataclass(frozen=True)
 class Target:
@@ -47,6 +57,17 @@ class Target:
     host_key_policy: str = "accept-new"
     workdir: str = "/home/root"
     connect_timeout_s: float = 15.0
+
+    def __post_init__(self) -> None:
+        integer(self.port, f"target {self.name} port", minimum=1, maximum=65535)
+        number(self.connect_timeout_s, f"target {self.name} connect_timeout_s", positive=True)
+        for key in ("name", "host", "user", "known_hosts", "workdir"):
+            text(getattr(self, key), f"target {self.name} {key}")
+        for key in ("password_env", "password_file", "identity"):
+            if getattr(self, key) is not None:
+                text(getattr(self, key), f"target {self.name} {key}")
+        if self.client not in CLIENTS or self.host_key_policy not in HOST_KEY_POLICIES:
+            raise ValueError("target client or host_key_policy is invalid")
 
     def password(self, env: Mapping[str, str]) -> str | None:
         if self.password_env:
@@ -74,6 +95,14 @@ class SiteConfig:
     lock_ttl_s: int = 7200
     audit_log: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        integer(self.min_free_mb, "[limits] min_free_mb")
+        integer(self.retention, "[limits] retention", minimum=1)
+        integer(self.lock_ttl_s, "[limits] lock_ttl_s", minimum=1)
+        number(self.max_load, "[limits] max_load", positive=True)
+        if self.audit_log is not None:
+            text(self.audit_log, "audit_log")
 
     def target_for(self, component: str, target: str | None = None) -> Target:
         name = target or self.components.get(component)
@@ -110,36 +139,50 @@ def _forbidden_keys(data: Any, where: str = "") -> list[str]:
 
 
 def parse(data: dict[str, Any], path: Path, project_root: Path | None = None) -> SiteConfig:
+    try:
+        return _parse(data, path, project_root)
+    except ValueError as err:
+        raise DeployError(f"{path}: {err}") from err
+
+
+def _parse(data: dict[str, Any], path: Path, project_root: Path | None = None) -> SiteConfig:
     def fail(message: str) -> DeployError:
         return DeployError(f"{path}: {message}")
 
+    table(data, "deployment config")
     secrets = _forbidden_keys(data)
     if secrets:
         raise fail(f"secrets do not belong in the deployment config ({', '.join(secrets)}); "
                    "use password_env, password_file or identity")
-    if data.get("schema", SCHEMA) != SCHEMA:
+    table(data, "deployment config", {"schema", "jenkins", "targets", "components", "limits", "audit_log"})
+    if type(data.get("schema", SCHEMA)) is not int or data.get("schema", SCHEMA) != SCHEMA:
         raise fail(f"schema must be {SCHEMA}")
     jenkins = None
     if "jenkins" in data:
         j = data["jenkins"]
+        table(j, "[jenkins]", {f.name for f in fields(JenkinsSettings)})
         if not isinstance(j, dict) or not isinstance(j.get("base_url"), str):
             raise fail("[jenkins] needs base_url")
         url = urlsplit(j["base_url"])
         local = url.hostname in ("localhost", "127.0.0.1")
-        if url.scheme != "https" and not (url.scheme == "http" and local):
+        if not url.hostname or (url.scheme != "https" and not (url.scheme == "http" and local)):
             raise fail("[jenkins] base_url must use https")
+        if url.username is not None or url.password is not None:
+            raise fail("[jenkins] credentials do not belong in base_url")
         if j.get("insecure_tls") not in (None, True, False):
             raise fail("[jenkins] insecure_tls must be a boolean")
         jenkins = JenkinsSettings(
             base_url=j["base_url"].rstrip("/"),
             ca_bundle=j.get("ca_bundle"),
-            insecure_tls=bool(j.get("insecure_tls", False)),
-            user_env=str(j.get("user_env", "JENKINS_USER")),
-            token_env=str(j.get("token_env", "JENKINS_TOKEN")),
-            timeout_s=float(j.get("timeout_s", 60)),
+            insecure_tls=j.get("insecure_tls", False),
+            user_env=j.get("user_env", "JENKINS_USER"),
+            token_env=j.get("token_env", "JENKINS_TOKEN"),
+            timeout_s=j.get("timeout_s", 60),
         )
     targets = {}
-    for name, t in (data.get("targets") or {}).items():
+    for name, t in table(data.get("targets", {}), "[targets]").items():
+        text(name, "target name")
+        table(t, f"[targets.{name}]", {f.name for f in fields(Target)} - {"name"})
         if not isinstance(t, dict):
             raise fail(f"[targets.{name}] must be a table")
         for key in ("host", "user", "known_hosts"):
@@ -152,6 +195,9 @@ def parse(data: dict[str, Any], path: Path, project_root: Path | None = None) ->
         if policy not in HOST_KEY_POLICIES:
             raise fail(f"[targets.{name}] host_key_policy must be one of {', '.join(HOST_KEY_POLICIES)}")
         auth = [k for k in ("password_env", "password_file", "identity") if t.get(k)]
+        for key in ("password_env", "password_file", "identity"):
+            if key in t:
+                text(t[key], f"[targets.{name}] {key}")
         if len(auth) > 1 and set(auth) != {"identity"}:
             raise fail(f"[targets.{name}] use only one of password_env and password_file")
         if client == "openssh" and ({"password_env", "password_file"} & set(auth)):
@@ -163,25 +209,27 @@ def parse(data: dict[str, Any], path: Path, project_root: Path | None = None) ->
         if not workdir.startswith("/") or any(c in workdir for c in " ;&|$`'\"\\"):
             raise fail(f"[targets.{name}] workdir must be an absolute board path without spaces or shell characters")
         targets[name] = Target(
-            name=name, host=t["host"], user=t["user"], port=int(t.get("port", 22)), client=client,
+            name=name, host=t["host"], user=t["user"], port=t.get("port", 22), client=client,
             password_env=t.get("password_env"), password_file=t.get("password_file"), identity=t.get("identity"),
             known_hosts=t["known_hosts"], host_key_policy=policy, workdir=workdir,
-            connect_timeout_s=float(t.get("connect_timeout_s", 15)),
+            connect_timeout_s=t.get("connect_timeout_s", 15),
         )
-    components = {str(k): str(v) for k, v in (data.get("components") or {}).items()}
+    components = table(data.get("components", {}), "[components]")
     for component, target in components.items():
+        text(component, "[components] name")
+        text(target, f"[components] {component}")
         if target not in targets:
             raise fail(f"[components] {component} names the unknown target {target!r}")
-    limits = data.get("limits") or {}
-    retention = int(limits.get("retention", 2))
+    limits = table(data.get("limits", {}), "[limits]", {"retention", "min_free_mb", "max_load", "lock_ttl_s"})
+    retention = integer(limits.get("retention", 2), "[limits] retention", minimum=1)
     if retention < 1:
         raise fail("[limits] retention must be at least 1")
     audit = data.get("audit_log")
     return SiteConfig(
         path=path, jenkins=jenkins, targets=targets, components=components,
-        min_free_mb=int(limits.get("min_free_mb", 1500)), max_load=float(limits.get("max_load", 5.0)),
-        retention=retention, lock_ttl_s=int(limits.get("lock_ttl_s", 7200)),
-        audit_log=str(audit) if audit else None,
+        min_free_mb=limits.get("min_free_mb", 1500), max_load=limits.get("max_load", 5.0),
+        retention=retention, lock_ttl_s=limits.get("lock_ttl_s", 7200),
+        audit_log=audit,
     )
 
 

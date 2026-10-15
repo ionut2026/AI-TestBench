@@ -8,6 +8,8 @@ from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from typing import Any
 
+from grf.validation import integer, number
+
 
 class Outcome(StrEnum):
     DEPLOYED = "DEPLOYED"  # the new build runs and passed health, version and configuration checks
@@ -96,6 +98,13 @@ class Component:
     stop_timeout_s: int = 30
 
     def __post_init__(self) -> None:
+        number(self.stable_s, "stable_s")
+        number(self.ready_timeout_s, "ready_timeout_s", positive=True)
+        integer(self.stop_timeout_s, "stop_timeout_s")
+        if self.stable_s > self.ready_timeout_s:
+            raise ValueError("stable_s must not exceed ready_timeout_s")
+        if self.health_port is not None:
+            integer(self.health_port, "health_port", minimum=1, maximum=65535)
         if not re.fullmatch(r"[a-z][a-z0-9-]*", self.name):
             raise ValueError(f"invalid component name {self.name!r}")
         if self.drift not in ("fail", "warn"):

@@ -103,7 +103,7 @@ what = "resets the product"
 
 `ProductPlugin` subclasses may implement `known_messages`, `brief_sections`, `doctor_class`, `add_commands` and
 `deploy_components` (the deployable applications; see [Deploying builds](DEPLOYMENT.md)).
-The acceptance gate also uses `runtime_identity(meta)` and `identity_matches(component, expected, observed)`;
+The acceptance gate also uses `runtime_identity(meta)`, `installed_matches` and `runtime_matches`;
 see their [exact contract and limits](WORKFLOWS.md#product-identity-hooks).
 Use hooks for product behavior, not static configuration. Product keyword libraries extend `GrfLibrary` and
 own their connections, lifecycle, state isolation and assertions. Timing keywords require finite timestamps;
@@ -115,6 +115,13 @@ without a shell. `<ENV_PREFIX>_RIG_CONTROL_TIMEOUT` must be finite and positive 
 Invalid operator modes fail explicitly rather than silently becoming `none`. `grf.rig_ssh` provides an optional configured
 SSH implementation; site credentials stay outside repositories. Capability discovery may contact a rig, and
 `doctor --deep` may invoke product code: both are owner-authorized product activities.
+
+Deployment and SSH rig configuration reject unknown fields and malformed sections. Numeric budgets must
+be finite (not NaN or infinity), timeouts positive, downtime/stability and free-space floors nonnegative,
+and ports integers from 1 to 65535. Booleans and numeric strings are not numbers. Deployment retention and
+lock TTL must be positive integers. Component stability time cannot exceed its readiness timeout.
+**Migration:** correct misspelled fields or put product-only settings in the product's own configuration;
+GRF no longer silently ignores unknown deployment/SSH rig keys.
 
 Deployment reads its site config from `<ENV_PREFIX>_DEPLOY_CONFIG` (a file outside the repository), the optional
 Jenkins login from `JENKINS_USER`/`JENKINS_TOKEN` and records for reports from `GRF_DEPLOYMENT_RECORD`; see

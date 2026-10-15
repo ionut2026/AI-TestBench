@@ -24,7 +24,6 @@ from ``fetch-log``.
 from __future__ import annotations
 
 import json
-import math
 import os
 import shlex
 import subprocess
@@ -33,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from grf import project
+from grf.validation import integer, number
 
 
 def env_name() -> str:
@@ -87,8 +87,10 @@ class RigControl:
     def __init__(self, command: list[str], timeout_s: float = 300.0):
         if not command:
             raise RigControlError(f"{env_name()} is empty")
-        if not math.isfinite(timeout_s) or timeout_s <= 0:
-            raise RigControlError(f"{timeout_env_name()} must be a finite positive number of seconds")
+        try:
+            number(timeout_s, timeout_env_name(), positive=True)
+        except ValueError as err:
+            raise RigControlError(f"{timeout_env_name()} must be a finite positive number of seconds") from err
         self.command = command
         self.timeout_s = timeout_s
         self._capabilities: frozenset[str] | None = None
@@ -127,6 +129,10 @@ class RigControl:
 
     def restart(self, target: str, down_ms: int) -> None:
         """``restart-<target> --down-ms <ms>`` (a target of the project's ``[rig] targets``)."""
+        try:
+            integer(down_ms, "down_ms")
+        except ValueError as err:
+            raise RigControlError(str(err)) from err
         self._require(f"restart-{target}")
         self._run(f"restart-{target}", "--down-ms", str(int(down_ms)))
 

@@ -6,6 +6,11 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Validate deployment/rig numeric ranges before operations: finite positive timeouts/load limits,
+  nonnegative downtime/stability/free space, valid integer ports/retention/TTL, and correctly typed schema.
+  Component stability must fit readiness budget. Reject unknown deployment and SSH rig fields.
+  **Migration:** correct typos rather than relying on silently ignored configuration.
+
 - Reserve deployment output exclusively before connecting. Persist flushed, atomic pre-action and
   completion snapshots (including rollback commands) at every step. Journal write failure aborts normal
   work without blocking compensating cleanup; unfinished records remain explicitly incomplete.

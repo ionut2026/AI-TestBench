@@ -30,6 +30,9 @@ Who owns what:
 
 ## How a deployment works
 
+Site configuration rejects unknown fields, boolean schema numbers and invalid budgets before connecting.
+See [configuration validation](CONFIGURATION.md#plugins-and-libraries) for numeric ranges.
+
 Lock initialization, stale takeover and release are serialized by a short-lived
 `.grf-deploy.lock.guard` directory. Release checks the operation's owner token. Missing
 or unreadable timestamps/tokens are not evidence of a stale lock: `--break-stale-lock`

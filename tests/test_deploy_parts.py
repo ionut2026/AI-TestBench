@@ -71,6 +71,49 @@ def test_config_rejects(tmp_path, change, message):
         parse(data, tmp_path / "site.toml")
 
 
+@pytest.mark.parametrize("section,key,value", [
+    ("limits", "max_load", float("nan")), ("limits", "max_load", float("inf")),
+    ("limits", "min_free_mb", -1), ("limits", "retention", True), ("limits", "lock_ttl_s", 0),
+    ("jenkins", "timeout_s", -1), ("jenkins", "insecure_tls", 1), ("limits", "unknown", 2),
+])
+def test_numeric_and_unknown_config_is_fail_closed(tmp_path, section, key, value):
+    data = site_data(tmp_path)
+    data[section][key] = value
+    with pytest.raises(DeployError, match=key):
+        parse(data, tmp_path / "site.toml")
+
+
+@pytest.mark.parametrize("key,value", [
+    ("port", 0), ("port", 65536), ("port", True), ("port", "22"),
+    ("connect_timeout_s", float("nan")), ("connect_timeout_s", 0),
+    ("password_file", []), ("unknown", "x"),
+])
+def test_invalid_target_fails_before_connection(tmp_path, key, value):
+    data = site_data(tmp_path)
+    data["targets"]["board"][key] = value
+    with pytest.raises(DeployError, match=key):
+        parse(data, tmp_path / "site.toml")
+
+
+@pytest.mark.parametrize("change", [
+    {"schema": True}, {"targets": []}, {"components": []}, {"limits": []}, {"unknown": 1},
+])
+def test_config_rejects_malformed_sections(tmp_path, change):
+    data = site_data(tmp_path)
+    data.update(change)
+    with pytest.raises(DeployError):
+        parse(data, tmp_path / "site.toml")
+
+
+@pytest.mark.parametrize("change", [
+    {"stable_s": float("nan")}, {"stable_s": -1}, {"ready_timeout_s": float("inf")},
+    {"ready_timeout_s": 0}, {"stable_s": 31}, {"stop_timeout_s": -1}, {"health_port": 65536},
+])
+def test_component_rejects_invalid_budgets(change):
+    with pytest.raises(ValueError):
+        component(**change)
+
+
 def test_config_refuses_credentials_inside_the_repository(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
