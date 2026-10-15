@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from grf import project
+from grf.validation import array, table, text
 
 HASH_TAG = re.compile(r"^spechash:(?:(\d+):)?([0-9a-f]{6,64})$", re.I)
 KNOWN_ISSUE_TAG = re.compile(r"^known-issue:(\S+)$", re.I)
@@ -115,8 +116,30 @@ def load_reviews(path: Path) -> list[dict]:
     """The review ledger: ``[[review]]`` tables with test, spechash, reviewer, date and ref (PR / commit)."""
     if not path.exists():
         return []
-    with open(path, "rb") as f:
-        return list(tomllib.load(f).get("review", []))
+    try:
+        with open(path, "rb") as f:
+            entries = array(tomllib.load(f).get("review", []), "review")
+        for index, entry in enumerate(entries):
+            where = f"review[{index}]"
+            table(entry, where)
+            for name in ("test", "reviewer"):
+                text(entry.get(name), f"{where}.{name}")
+            key = entry.get("spechash")
+            if not isinstance(key, str) or (key and not re.fullmatch(r"(?:\d+:)?[0-9a-fA-F]{6,64}(?:,(?:\d+:)?[0-9a-fA-F]{6,64})*", key)):
+                raise ValueError(f"{where}.spechash must be a specification digest key (empty for nospec tests)")
+            if "verdict" in entry and entry["verdict"] not in VERDICTS:
+                raise ValueError(f"{where}.verdict must be one of {', '.join(VERDICTS)}")
+            if "fingerprint" in entry and (not isinstance(entry["fingerprint"], str) or
+                                           not re.fullmatch(r"sha256:[0-9a-f]{64}", entry["fingerprint"])):
+                raise ValueError(f"{where}.fingerprint must be sha256:<64 lowercase hex digits>")
+            for name in ("suite", "ref", "notes"):
+                if name in entry and not isinstance(entry[name], str):
+                    raise ValueError(f"{where}.{name} must be text")
+            if "date" in entry and not isinstance(entry["date"], (str, dt.date)):
+                raise ValueError(f"{where}.date must be text or a TOML date")
+        return entries
+    except (OSError, ValueError) as err:
+        raise ValueError(f"cannot load review ledger {path}: {err}") from err
 
 
 VERDICTS = ("approved", "approved-with-notes", "changes-requested", "rejected")

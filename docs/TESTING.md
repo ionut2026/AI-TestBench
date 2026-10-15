@@ -36,6 +36,14 @@ all possible bodies are conservatively analyzed. Missing or dynamically unresolv
 `00` rather than implying complete analysis. Use resolvable static resource paths for strict lint.
 Default test setup/teardown, suite setup/teardown and inherited directory initializers participate in
 timing/sleep and capability checks; explicit `NONE` cancels an inherited test lifecycle setting.
+
+Catalogs, review ledgers and deployment records are validated when loaded, with the input path in
+malformed-file diagnostics. Unknown schemas, boolean schema numbers and malformed nested tables/lists
+are rejected before drift/report/gate processing. Schema 1 (including unversioned legacy) catalogs remain
+readable for baseline/hash migration; schema 2 requires `hashVersion`. Legacy reviews without a verdict
+or content fingerprint remain readable for drift, but do not become current-content acceptance approvals.
+Deployment structural validation does not promote an unsuccessful outcome: binding and strict acceptance
+still apply their distinct installed-build policies.
 Pending and suspect entries are reported for review; pending alone does not fail the strict drift gate.
 
 ## Execution and reports

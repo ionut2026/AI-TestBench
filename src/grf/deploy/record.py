@@ -18,9 +18,59 @@ from pathlib import Path
 from typing import Any
 
 from grf.deploy.model import ArtifactRef, Installed, Outcome, Step
+from grf.validation import array, integer, number, table, text
 
 RECORD_SCHEMA = 1
 RECORD_FILE = "deployment.json"
+
+
+def validate_record(data: Any) -> dict[str, Any]:
+    """Validate structural record integrity; binding/gate apply their own outcome policies."""
+    if not isinstance(data, dict) or type(data.get("schema")) is not int or data["schema"] != RECORD_SCHEMA:
+        raise ValueError(f"not a GRF deployment record (schema {RECORD_SCHEMA})")
+    for name in ("project", "component", "target"):
+        text(data.get(name), f"deployment {name}")
+    for name in ("host", "trigger", "started", "finished", "recordId", "message"):
+        if data.get(name) is not None and not isinstance(data[name], str):
+            raise ValueError(f"deployment {name} must be text or null")
+    for name in ("dryRun", "insecureTls"):
+        if name in data and type(data[name]) is not bool:
+            raise ValueError(f"deployment {name} must be a boolean")
+    outcome = data.get("outcome")
+    if outcome is not None and (not isinstance(outcome, str) or outcome not in {v.value for v in Outcome}):
+        raise ValueError("deployment outcome is not recognized")
+    for name in ("artifact", "previous", "installed"):
+        if data.get(name) is None:
+            continue
+        item = table(data[name], f"deployment {name} (running component)" if name == "installed" else f"deployment {name}")
+        strings = ("component", "source", "file_name", "version", "sha256", "path", "url", "job_url", "branch",
+                   "build_url", "build_result", "build_timestamp", "revision", "container", "status", "image", "image_id")
+        for key in strings:
+            if item.get(key) is not None and not isinstance(item[key], str):
+                raise ValueError(f"deployment {name} {key} must be text or null")
+        for key in ("size", "build_number", "restarts"):
+            if item.get(key) is not None:
+                integer(item[key], f"deployment {name}.{key}")
+        if "extra" in item:
+            table(item["extra"], f"deployment {name}.extra")
+    for index, step in enumerate(array(data.get("steps", []), "deployment.steps")):
+        where = f"deployment.steps[{index}]"
+        table(step, where)
+        text(step.get("name"), f"{where}.name")
+        if step.get("status") not in ("IN_PROGRESS", "OK", "WARN", "FAIL", "SKIP"):
+            raise ValueError(f"{where}.status is not recognized")
+        number(step.get("seconds", 0), f"{where}.seconds")
+        if "detail" in step and not isinstance(step["detail"], str):
+            raise ValueError(f"{where}.detail must be text")
+    for name in ("drift", "planned", "recovery"):
+        if any(not isinstance(v, str) for v in array(data.get(name, []), f"deployment.{name}")):
+            raise ValueError(f"deployment.{name} must contain strings")
+    for name in ("actor", "framework"):
+        if name in data:
+            item = table(data[name], f"deployment.{name}")
+            if any(value is not None and not isinstance(value, str) for value in item.values()):
+                raise ValueError(f"deployment.{name} values must be text or null")
+    return data
 
 
 def actor(env: Mapping[str, str] | None = None) -> dict[str, str | None]:
@@ -160,10 +210,8 @@ def load_records(paths: list[Path]) -> list[dict[str, Any]]:
         files = sorted(path.rglob(RECORD_FILE)) if path.is_dir() else [path]
         for file in files:
             try:
-                data = json.loads(file.read_text(encoding="utf-8"))
+                data = validate_record(json.loads(file.read_text(encoding="utf-8")))
             except (OSError, ValueError) as err:
                 raise ValueError(f"cannot read the deployment record {file}: {err}") from err
-            if not isinstance(data, dict) or data.get("schema") != RECORD_SCHEMA:
-                raise ValueError(f"{file} is not a GRF deployment record (schema {RECORD_SCHEMA})")
             records.append(data)
     return records

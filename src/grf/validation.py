@@ -37,3 +37,9 @@ def table(value: Any, where: str, keys: set[str] | None = None) -> dict:
         if unknown:
             raise ValueError(f"{where}: unknown field(s): {', '.join(sorted(unknown))}")
     return value
+
+
+def array(value: Any, where: str) -> list:
+    if not isinstance(value, list):
+        raise ValueError(f"{where} must be an array")
+    return value

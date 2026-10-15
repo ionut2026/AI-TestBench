@@ -6,6 +6,10 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Validate catalog, review-ledger and deployment-record schemas/nested values at file-load boundaries;
+  report malformed input with its path. Preserve explicit legacy catalog/review migration behavior
+  without weakening strict acceptance or deployment-binding policies.
+
 - Resolve static Robot resources consistently for lint/review fingerprints, including `${CURDIR}`,
   `${/}` and keyword-only `.robot` imports. Scope keyword resolution to each suite/import graph;
   ambiguous definitions and unresolved imports report lint rule `00`, never silently overwrite one body.

@@ -21,6 +21,7 @@ from typing import Any
 
 from grf import project
 from grf.pipeline.rvs import RvsClient, run
+from grf.validation import array, integer, table
 
 HASH_VERSION = 2
 CATALOG_SCHEMA = 2
@@ -342,7 +343,51 @@ def write_catalog(path: Path, catalog: dict) -> None:
 
 
 def load_catalog(path: Path) -> dict:
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    try:
+        data = table(json.loads(Path(path).read_text(encoding="utf-8")), "catalog")
+        schema = integer(data.get("schema", 1), "catalog.schema", minimum=1, maximum=CATALOG_SCHEMA)
+        integer(data.get("hashVersion", 1), "catalog.hashVersion", minimum=1, maximum=HASH_VERSION)
+        for section in ("specifications", "requirements", "userStories", "explorativeTests"):
+            entries = table(data.get(section, {}), f"catalog.{section}")
+            if section == "specifications" and section not in data:
+                raise ValueError("catalog.specifications is required")
+            for key, value in entries.items():
+                where = f"catalog.{section}.{key}"
+                if not key.isdecimal() or int(key) < 1:
+                    raise ValueError(f"{where}: item key must be a positive numeric ID")
+                item = table(value, where)
+                if "id" in item and integer(item["id"], f"{where}.id", minimum=1) != int(key):
+                    raise ValueError(f"{where}.id must match its item key")
+                for name in ("text", "state", "summary", "description", "area", "notTestableReason", "deferredReason"):
+                    if item.get(name) is not None and not isinstance(item[name], str):
+                        raise ValueError(f"{where}.{name} must be text or null")
+                for name in ("satisfies", "userStories", "explorativeTests", "specifications", "of"):
+                    for identifier in array(item.get(name, []), f"{where}.{name}"):
+                        integer(identifier, f"{where}.{name} ID", minimum=1)
+                for name in ("messages", "preconditions", "steps", "expected"):
+                    if any(not isinstance(v, str) for v in array(item.get(name, []), f"{where}.{name}")):
+                        raise ValueError(f"{where}.{name} must contain strings")
+                if section == "specifications":
+                    if not isinstance(item.get("hash"), str) or not re.fullmatch(r"[0-9a-fA-F]{6,64}", item["hash"]):
+                        raise ValueError(f"{where}.hash must be a specification hex digest")
+                    if "testable" in item and type(item["testable"]) is not bool:
+                        raise ValueError(f"{where}.testable must be a boolean")
+                    integer(item.get("suspectCount", 0), f"{where}.suspectCount")
+                    if "baseline" in item:
+                        baseline = table(item["baseline"], f"{where}.baseline")
+                        for name in ("satisfies", "userStories"):
+                            for identifier in array(baseline.get(name, []), f"{where}.baseline.{name}"):
+                                integer(identifier, f"{where}.baseline.{name} ID", minimum=1)
+                        if baseline.get("state") is not None and not isinstance(baseline["state"], str):
+                            raise ValueError(f"{where}.baseline.state must be text or null")
+        if any(not isinstance(v, str) for v in array(data.get("retiredStates", []), "catalog.retiredStates")):
+            raise ValueError("catalog.retiredStates must contain strings")
+        # Schema 1/unversioned catalogs remain readable for explicit migration and baseline carry-over.
+        if schema == 2 and "hashVersion" not in data:
+            raise ValueError("catalog.hashVersion is required for schema 2")
+        return data
+    except (OSError, ValueError) as err:
+        raise ValueError(f"cannot load catalog {path}: {err}") from err
 
 
 def diff_catalogs(old: dict, new: dict) -> dict:
