@@ -122,6 +122,11 @@ GRF and the starter, `SMM_DEPLOY_CONFIG` in SMM).
 - `--outdir` (default `results\deploy\<UTC time>-<component>`) receives the downloaded artifact, `deployment.json`
   and `deploy.log`. With several components each gets a subfolder.
 - `--trigger` is recorded only (`cli` by default; the Jenkins template passes `manual` or `nightly`).
+- `plan` and `run` accept `--sha256 <64 lowercase hex characters>` for one component, including `--local-tar`.
+  GRF compares the downloaded/local bytes' digest **before connecting to a board**. Mismatch returns
+  `ARTIFACT_FAILED` (4); malformed CLI input returns 2. Resolve `lastSuccessfulBuild` once during planning,
+  retain its `artifact.build_number` and `artifact.sha256`, then execute the numeric build with that digest.
+  A new upstream build or changed artifact cannot silently replace the approved selection.
 
 Example of a successful dry run:
 
@@ -318,14 +323,33 @@ the record with the results. Synthetic/mock checks are never product evidence.
 
 ## Jenkins
 
+### Gate after deploy
+
+A protected owner-controlled runner validates the request **before** any deployment, binds it to exact
+source/catalog/build/digest/selection and target policy, and holds one authoritative instrument reservation
+through deployment, tests and acceptance. After success, `grf gate --request <file> --output <run>\output.xml
+--deployment <record>` checks the completed run. A failing deployment stops tests; a test/gate failure must not
+be hidden by successful report generation. No automatic rollback is performed merely because a test fails.
+See [request schema, exit codes and limits](WORKFLOWS.md).
+
+Attaching `--deployment` is informational; the gate is the single acceptance policy. The inherited Robot version
+keyword is an optional diagnostic assertion, not a replacement. These APIs do not authenticate approval or prove
+physical board identity. Product commissioning must establish endpoint mapping, controller policy and recovery.
+
 `grf init --with-deploy` also creates `jenkins\Jenkinsfile.deploy`, a commented template:
 
 - parameters `COMPONENTS`, `BUILD`, `BRANCH`, `PLAN_ONLY`, `RUN_TESTS`, `TIER`;
-- a nightly `cron('H 2 * * *')` that deploys `lastSuccessfulBuild` and runs the tests (`--trigger nightly`);
+- schedules/downstream triggers left disabled until the owner/admin commissions bounded authorization;
 - `disableConcurrentBuilds()`, a timeout, and a commented `lock(...)` for the Lockable Resources plugin;
 - `withCredentials` for the Jenkins token and the board password;
-- `grf deploy run --yes ... --outdir results/deploy`, then `grf run --deployment results/deploy`;
-- archives `deployment.json`, `deploy.log` and the reports.
+- validation of a supplied protected request against the exact single component/numeric build/digest/tier;
+- `grf deploy run --yes ... --sha256 ... --outdir results/deploy`, then `grf run --deployment results/deploy`;
+- `grf gate` after successful tests, archiving `acceptance.json`, `deployment.json`, `deploy.log` and reports.
+
+This starter is not a production controller: add protected approval/source/catalog/target binding and approved
+selection filters before enabling it. Acceptance requires the Pipeline Utility Steps plugin (`readJSON`).
+Failed Robot execution already fails the job and skips the later gate; use a product-owned finalization policy
+if the site must write rejection records even after test failure. Never catch a failure to turn the job green.
 
 Prerequisites, done by the site's Jenkins administrator and the instrument owner (never by an agent):
 

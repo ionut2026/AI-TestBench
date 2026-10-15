@@ -6,6 +6,28 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.3.0 - Unreleased
 
+- Added schema-1 TOML run requests (`grf request check FILE [--json FILE]`) and the post-run
+  `grf gate --request FILE --output output.xml [--deployment FILE]` command, writing `acceptance.json`.
+  Exit codes distinguish ACCEPTED (0), REJECTED (1), and input/integration errors (2).
+  Strict gates require actual evidence tiers, required tests/specs, current human content reviews, result/skip
+  policy and matching deployment/runtime identities. Request authorization text is not authentication.
+- Human reviews now record `grf-content-1` content fingerprints covering the test, suite settings and transitive
+  Robot resources. **Migration:** preserve old reviews, but have a human review/re-record them before strict
+  acceptance; never manufacture approvals. Python/external configuration still need protected source pins.
+- Added optional tier `lock`, defaulting to the tier name for non-parallel tiers. `grf run` holds a local OS
+  file lock through Robot execution and rejects competing runs using the same results root/name.
+  **Migration:** configure shared local resources with the same trusted results root and lock name.
+  This is not a distributed rig reservation; the protected controller must lock deployment through acceptance.
+- Added `ProductPlugin.runtime_identity(meta)` and `identity_matches(component, expected, observed)` hooks.
+  **Migration:** consuming adapters needing runtime identity must extract fresh run metadata; the default
+  empty identity fails required checks. Products own endpoint mapping and documented version semantics.
+- Added optional `--sha256` to single-component `deploy plan`/`run` (`Options.sha256` in Python): exact 64
+  lowercase hex digest checked after download and before board connection. Mismatch returns
+  `ARTIFACT_FAILED`/4; malformed CLI values return 2. Pin numeric build plus digest when promoting a plan.
+- Added workflow guidance and a post-test Jenkins acceptance stage; starter pipelines remain uncommissioned
+  templates requiring protected request/source policy and an authoritative site lock.
+- Made Windows setup diagnostic tests robust to long worktree paths and corrected the unsupported-Python
+  fixture's PowerShell/native quoting; setup behavior is unchanged.
 - Added the read-only `grf.deploy.binding.assert_product_version` helper and inherited
   `Deployment Record Should Match Product Version` Robot keyword. They check an explicit deployment file's
   component, target, optional expected project, successful installed outcome and exact observed version.
@@ -19,9 +41,9 @@ Tags and publication are explicit maintainer actions.
   helper to use it; no automatic setup is added. Starter and checked-in demo pins now use 0.3.0.
   No release tag is created by this change.
 
-## 0.2.0 - Unreleased
+## 0.2.0 - 2026-10-15
 
-The package version is 0.2.0; the maintainer tags `v0.2.0` after review.
+Released as `v0.2.0`; the next release remains a maintainer decision after review.
 
 - Added `grf deploy` (`<cli> deploy` in products): deploys a Jenkins build (an image tarball) of a product
   component to an instrument board over SSH with Docker, and records it. Subcommands `components`, `builds`,

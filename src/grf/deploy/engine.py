@@ -61,6 +61,7 @@ class Options:
     ignore_hold: bool = False
     break_stale_lock: bool = False
     restore: bool = False  # `deploy rollback`: redeploy the newest tarball in previous_builds
+    sha256: str | None = None  # expected downloaded bytes, checked before connecting to the board
 
 
 class Deployment:
@@ -193,6 +194,11 @@ class Deployment:
         record.dry_run = options.dry_run
         locked = False
         try:
+            if options.sha256 is not None:
+                if not isinstance(options.sha256, str) or not _SHA.fullmatch(options.sha256):
+                    raise DeployError("sha256 must be 64 lowercase hex characters", Outcome.ARTIFACT_FAILED)
+                if options.restore:
+                    raise DeployError("sha256 cannot pin a board-selected rollback", Outcome.ARTIFACT_FAILED)
             if not options.restore:
                 record.artifact = self.resolve(options)
             self.connect()
@@ -256,6 +262,9 @@ class Deployment:
                 client = self.jenkins_factory(self.site.jenkins, self.env)
                 ref = client.download(client.resolve(self.component, options.build, options.branch),
                                       self.work_dir / "artifacts")
+            if options.sha256 is not None and ref.sha256 != options.sha256:
+                raise DeployError(f"artifact sha256 {ref.sha256} does not match expected {options.sha256}",
+                                  Outcome.ARTIFACT_FAILED)
             s.detail = f"{ref.file_name} ({ref.size} bytes, sha256 {ref.sha256})" + (
                 f", Jenkins build {ref.build_number}" if ref.build_number else ", local file")
             return ref

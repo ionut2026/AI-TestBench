@@ -36,6 +36,11 @@ Never weaken host-key, TLS, checksum, lock or rollback checks to make something 
 simulated board (`tests\deploy_fakes.py`), and never run a real deployment as part of validating a core change.
 See [Deploying builds](docs/DEPLOYMENT.md).
 
+Request/gate and reservation changes must preserve [workflow boundaries](docs/WORKFLOWS.md): local locks are
+not distributed leases, authorization strings are not authentication, and fingerprints do not cover every
+Python/configuration input. Test rejection paths and process contention without contacting products.
+Re-recording reviews requires actual human review; never migrate content fingerprints as new approval.
+
 Keep deployment-to-test binding in `grf.deploy.binding`; product adapters own fresh version acquisition
 and the endpoint-to-target mapping. Test the inherited Robot keyword as well as the helper, and reject
 missing data rather than substituting the requested artifact version. Report attachment alone is not

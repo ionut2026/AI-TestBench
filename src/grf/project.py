@@ -36,6 +36,7 @@ class Tier:
     evidence: bool = True  # verdicts say something about the product (False: a mock of it)
     parallel: bool = False  # tests may run in parallel workers (pabot)
     rig_control: bool = False  # capabilities also come from the site's rig control
+    lock: str | None = None  # local exclusive reservation held by `run` (default: the tier name unless parallel)
 
 
 @dataclass(frozen=True)
@@ -186,8 +187,12 @@ class Project:
                 if key in t and not isinstance(t[key], bool):
                     raise ProjectError(f"[tiers.{name}] {key} must be a boolean")
             caps = self._strings(t.get("capabilities", []), f"[tiers.{name}] capabilities")
-            out[name] = Tier(name, frozenset(caps), t.get("evidence", True),
-                             t.get("parallel", False), t.get("rig_control", False))
+            lock = t.get("lock")
+            if lock is not None and (not isinstance(lock, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", lock)):
+                raise ProjectError(f"[tiers.{name}] lock must be a name of letters, digits, '.', '_' or '-'")
+            parallel = t.get("parallel", False)
+            out[name] = Tier(name, frozenset(caps), t.get("evidence", True), parallel, t.get("rig_control", False),
+                             lock if lock is not None else (None if parallel else name))
         if not out:
             raise ProjectError(f"no [tiers] in {self.root / CONFIG_FILE}")
         return out

@@ -66,6 +66,7 @@ example. Both examples use the real catalog/report pipeline with fake input; nei
 | [Copilot skills](docs/SKILLS.md) | Available GRF skills, how to invoke them, product copies and safety limits |
 | [Repositories](docs/REPOSITORIES.md) | Independent repositories and data ownership |
 | [Deploying builds](docs/DEPLOYMENT.md) | `grf deploy`: Jenkins builds to instrument boards, rollback, site config, Jenkins pipeline |
+| [Workflows](docs/WORKFLOWS.md) | Run requests, the acceptance gate (`grf gate`), content-bound reviews and run reservation |
 | [Contributing](CONTRIBUTING.md) | Change scope, documentation maintenance, compatibility and review policy |
 | [Changelog](CHANGELOG.md) | User-visible changes and migration notes |
 
@@ -82,6 +83,10 @@ rollback, and `--deployment` attaches build provenance to the report; it does no
 An opt-in `Deployment Record Should Match Product Version` keyword checks a product-supplied version
 against the record. Deploying changes the instrument and needs the owner's authorization;
 see [Deploying builds](docs/DEPLOYMENT.md#checking-the-observed-product-version).
+
+A finished run is not automatically an accepted result. `grf request check` validates a run request (tier,
+required specifications/tests, exact builds, owner authorization) and `grf gate` accepts a run only when it
+satisfies the request: see [Workflows](docs/WORKFLOWS.md).
 
 Live ingestion is optional: install `.[windchill]`, explicitly configure an **external** MCP server and provide
 its connection settings. Generic development and the demo do not need the server or MCP SDK.
