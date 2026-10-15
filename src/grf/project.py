@@ -4,7 +4,8 @@ The generic framework (pipeline, lint, report, capabilities, rig control, doctor
 everything product-specific comes from here or from the project's plugin (``[project] plugin = "module:attr"``, a
 ``ProductPlugin``). ``current()`` finds the project: the ``GRF_PROJECT`` environment variable (a ``grf.toml`` file
 or its folder), else the default root a product package registered (``set_default_root``), else the nearest
-``grf.toml`` from the working directory up. ``grf run`` sets ``GRF_PROJECT`` for the Robot processes it starts.
+``grf.toml`` from the working directory up. New product executables pass ``project_root`` explicitly to
+``grf.cli.main`` instead of registering globals on import. ``grf run`` sets ``GRF_PROJECT`` for its Robot workers.
 """
 
 from __future__ import annotations
@@ -13,6 +14,8 @@ import importlib
 import os
 import re
 import tomllib
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import cached_property
 from importlib.metadata import PackageNotFoundError, version
@@ -331,8 +334,7 @@ _default_root: Path | None = None
 
 
 def set_default_root(root: Path | str) -> None:
-    """Registers the project a product package belongs to (used when ``GRF_PROJECT`` is not set); a product's
-    package calls this on import so its command and Robot library find their project from any folder."""
+    """Legacy process-wide fallback. Prefer explicit CLI entrypoint configuration, never import-time mutation."""
     global _default_root
     _default_root = Path(root).resolve()
 
@@ -360,3 +362,29 @@ def use(project: Project | None) -> None:
     """Makes ``project`` the current one (None: load again on the next ``current()``)."""
     global _current
     _current = project
+
+
+@contextmanager
+def using(project: Project) -> Iterator[Project]:
+    """Scope a project to one operation and restore the previous selection afterward."""
+    global _current
+    previous = _current
+    _current = project
+    try:
+        yield project
+    finally:
+        _current = previous
+
+
+def discover(start: Path | None = None) -> Project:
+    """Discover without changing process globals; explicit GRF_PROJECT takes priority."""
+    configured = os.environ.get(PROJECT_ENV)
+    if configured:
+        return Project.load(configured)
+    here = (start or Path.cwd()).resolve()
+    if here.is_file():
+        here = here.parent
+    for folder in (here, *here.parents):
+        if (folder / CONFIG_FILE).is_file():
+            return Project.load(folder)
+    raise ProjectError(f"no {CONFIG_FILE} found in {here} or above (set {PROJECT_ENV})")

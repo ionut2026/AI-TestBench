@@ -101,6 +101,21 @@ what = "resets the product"
 
 ## Plugins and libraries
 
+Product commands use the public `self.context` (`grf.commands.CommandContext`) supplied by
+`ProductPlugin`. It resolves `catalog_path(args)`, `scope_path(args)`, `reviews_path(args)` and
+`suites(args)` with the same CLI overrides as core; `load_catalog(args)` and `collect_tests(args)`
+load those inputs. Missing paths fail only when that feature is used. Do not import underscored
+CLI helpers. Public review/identity APIs are in `grf.pipeline.drift`
+(`test_key`, `require_unique_tests`, `record_review`, `review_problem`).
+Core commands do not register unrelated optional product commands; extensions must not replace
+core safety commands through the returned handler mapping.
+
+Do not select a GRF project while importing a product package. A product executable may call
+`grf.cli.main(project_root=product_root)` explicitly (`GRF_PROJECT` still takes priority).
+`grf.project.discover(start)` resolves a project without mutating globals, and
+`with grf.project.using(project): ...` scopes a selection to one operation and restores the previous one.
+`set_default_root` remains legacy compatibility only, not a recommended import-time action.
+
 `ProductPlugin` subclasses may implement `known_messages`, `brief_sections`, `doctor_class`, `add_commands` and
 `deploy_components` (the deployable applications; see [Deploying builds](DEPLOYMENT.md)).
 The acceptance gate also uses `runtime_identity(meta)`, `installed_matches` and `runtime_matches`;

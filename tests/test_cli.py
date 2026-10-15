@@ -44,9 +44,10 @@ def test_mutation_requires_non_evidence_tier(widget, capsys):
     assert "non-evidence tier" in capsys.readouterr().err
 
 
-def test_malformed_cli_configuration_is_diagnostic(widget, capsys):
+def test_missing_optional_path_is_diagnostic_only_when_used(widget, capsys):
     widget.data["paths"]["scope"] = []
-    assert main(["doctor"]) == 2
+    assert main(["doctor"]) == 0
+    assert main(["ingest"]) == 2
     assert "[paths] scope" in capsys.readouterr().err
 
 

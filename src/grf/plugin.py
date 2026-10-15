@@ -17,7 +17,10 @@ Command = Callable[[argparse.Namespace], int]
 
 class ProductPlugin:
     def __init__(self, project: Project):
+        from grf.commands import CommandContext
+
         self.project = project
+        self.context = CommandContext(project)
 
     def known_messages(self) -> set[str] | None:
         """Message names the catalog may mention (None: every match of ``[catalog] message_pattern`` counts)."""

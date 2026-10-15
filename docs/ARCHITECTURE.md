@@ -32,12 +32,14 @@ GeneralRobotFramework\
   src\grf\
     project.py                  TOML configuration and project discovery
     plugin.py                   product extension contract
+    commands.py                 public command-local path/catalog/suite services for plugins
     cli.py, __main__.py          command orchestration and exit codes
     scaffold.py, templates\      packaged product starter
     capabilities.py, doctor.py  selection and readiness checks
     library.py                  timing, operator and lifecycle helpers
     acceptance.py               strict local requests and post-run acceptance evaluation
     reservation.py              OS file locks for runs sharing a results root
+    deadline.py, process.py      monotonic budgets and owned local subprocess trees
     operator_prompt.py          console/dialog operator interaction
     rigcontrol.py, rig_ssh.py    site protocol and configurable SSH implementation
     pipeline\
@@ -117,7 +119,9 @@ flowchart LR
 
 `ProductPlugin` offers only actual extension points: known message names, extra brief sections, a doctor class,
 additional CLI commands, deployable components (`deploy_components`, see [Deploying builds](DEPLOYMENT.md)),
-and runtime identity extraction/comparison (`runtime_identity`, `identity_matches`, see [Workflows](WORKFLOWS.md)).
+and split build/runtime identity policy (`runtime_identity`, `installed_matches`, `runtime_matches`,
+see [Workflows](WORKFLOWS.md)). Plugin command services and scoped discovery are public contracts;
+see [Configuration](CONFIGURATION.md#plugins-and-libraries), not private CLI helpers.
 Static names, paths, tiers, capabilities and lint rules belong in `grf.toml`.
 Core never imports a named product package. Products may import `grf`; the reverse dependency is forbidden.
 

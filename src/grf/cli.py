@@ -51,24 +51,28 @@ def _default_operator() -> str:
 
 
 def _catalog_path(args) -> Path:
-    if args.catalog:
-        return Path(args.catalog)
-    import tomllib
+    return _context().catalog_path(args)
 
-    with open(args.scope, "rb") as f:
-        name = tomllib.load(f).get("name", "pilot")
-    return project.current().path("catalog_dir") / f"{name}.json"
+
+def _context():
+    from grf.commands import CommandContext
+
+    return CommandContext(project.current())
+
+
+def _reviews(args) -> Path:
+    return _context().reviews_path(args)
 
 
 def _suites(args) -> list[Path]:
-    return [Path(s) for s in args.suites] if args.suites else project.current().paths("suites")
+    return _context().suites(args)
 
 
 def cmd_ingest(args) -> int:
     from grf.pipeline.ingest import ingest
 
     out = _catalog_path(args)
-    catalog = ingest(Path(args.scope), out)
+    catalog = ingest(_context().scope_path(args), out)
     print(f"Catalog written to {out}: {json.dumps(catalog['counts'])}")
     changes = catalog.get("changes")
     if changes and any(changes.get(k) for k in ("added", "removed", "textChanged", "stateChanged", "linksChanged")):
@@ -101,7 +105,7 @@ def cmd_migrate_hashes(args) -> int:
 
     moves, changed = hash_migrations(load_catalog(Path(args.old)), load_catalog(_catalog_path(args)), normalize_text)
     files = sorted({f for s in _suites(args) for f in ([s] if s.is_file() else s.rglob("*.robot"))})
-    done = migrate_hash_tags(moves, files, Path(args.reviews))
+    done = migrate_hash_tags(moves, files, _reviews(args))
     print(f"{len(moves)} specification(s) with the same text and a new hash; "
           f"{sum(done.values())} spechash value(s) replaced in {len(done)} file(s)")
     for f, n in done.items():
@@ -119,8 +123,9 @@ def cmd_briefs(args) -> int:
     catalog = load_catalog(_catalog_path(args))
     tests = collect_tests(_suites(args))
     name = (catalog.get("scope") or {}).get("name") or "pilot"
-    paths = write_briefs(catalog, Path(args.out), tests, [int(s) for s in args.spec] if args.spec else None, name)
-    print(f"{len(paths)} brief(s) written to {args.out}")
+    out = _context().path(args, "briefs", "out")
+    paths = write_briefs(catalog, out, tests, [int(s) for s in args.spec] if args.spec else None, name)
+    print(f"{len(paths)} brief(s) written to {out}")
     return 0
 
 
@@ -130,7 +135,7 @@ def cmd_drift(args) -> int:
     from grf.pipeline.lint import lint
 
     catalog = load_catalog(_catalog_path(args))
-    result = check(catalog, collect_tests(_suites(args)), load_reviews(Path(args.reviews)))
+    result = check(catalog, collect_tests(_suites(args)), load_reviews(_reviews(args)))
     result["lint"] = [v.as_dict() for v in lint(_suites(args), catalog)]
     if args.json:
         Path(args.json).write_text(json.dumps(result, indent=1, ensure_ascii=False), encoding="utf-8")
@@ -154,7 +159,7 @@ def cmd_review(args) -> int:
     human = is_human({"reviewer": args.reviewer})
     for t in chosen:
         try:
-            entry = record_review(Path(args.reviews), t, args.reviewer, args.verdict, date, args.ref or "", args.notes or "")
+            entry = record_review(_reviews(args), t, args.reviewer, args.verdict, date, args.ref or "", args.notes or "")
         except ValueError as err:
             print(f"{t.name}: {err}", file=sys.stderr)
             return 2
@@ -203,7 +208,7 @@ def _report(catalog_path: Path, output_xml: Path, out_dir: Path, suites: list[Pa
 
 def cmd_report(args) -> int:
     output = Path(args.output)
-    _report(_catalog_path(args), output, Path(args.outdir) if args.outdir else output.parent, _suites(args), Path(args.reviews),
+    _report(_catalog_path(args), output, Path(args.outdir) if args.outdir else output.parent, _suites(args), _reviews(args),
             args.deployment)
     return 0
 
@@ -304,7 +309,7 @@ def cmd_run(args, robot_args: list[str]) -> int:
         return 2
     output = out_dir / "output.xml"
     if output.exists() and not args.no_report:
-        _report(_catalog_path(args), output, out_dir, _suites(args), Path(args.reviews), args.deployment)
+        _report(_catalog_path(args), output, out_dir, _suites(args), _reviews(args), args.deployment)
     return _exit_code(rc, output, args.fail_on)
 
 
@@ -347,7 +352,7 @@ def cmd_mutate(args) -> int:
     if not math.isfinite(args.min_score) or not 0 <= args.min_score <= 1:
         raise ValueError("--min-score must be a finite number between 0 and 1")
     try:
-        mutants = load_mutants(Path(args.mutants))
+        mutants = load_mutants(_context().path(args, "mutants"))
     except MutantError as err:
         print(err, file=sys.stderr)
         return 2
@@ -437,7 +442,7 @@ def cmd_gate(args) -> int:
         return 2
     tests, meta = read_results(output)
     catalog_path = _catalog_path(args)
-    result = evaluate(request, tests=tests, meta=meta, known=collect_tests(_suites(args)), reviews=load_reviews(Path(args.reviews)),
+    result = evaluate(request, tests=tests, meta=meta, known=collect_tests(_suites(args)), reviews=load_reviews(_reviews(args)),
                       catalog=load_catalog(catalog_path), catalog_path=catalog_path, records=load_records(record_paths(args.deployment)),
                       observed=p.plugin.runtime_identity(meta), matches=p.plugin.runtime_matches, root=p.root,
                       installed_matches=p.plugin.installed_matches,
@@ -477,20 +482,21 @@ def _main(argv: list[str] | None = None) -> int:
             return bootstrap(argv)
         print(f"grf: {err}", file=sys.stderr)
         return 2
-    tiers = list(p.tiers)
-    parser = argparse.ArgumentParser(prog=p.cli, description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, allow_abbrev=False)
-    scope, reviews = str(p.path("scope")), str(p.path("reviews"))
-    parser.add_argument("--scope", default=str(p.path("scope")), help=f"scope file (default: {scope})")
-    parser.add_argument("--catalog", help="catalog JSON (default: catalog/<scope name>.json)")
-    parser.add_argument("--suites", action="append", help=f"suite file/directory, repeatable (default: {', '.join(p.raw_paths('suites'))})")
-    parser.add_argument("--reviews", default=str(p.path("reviews")), help=f"review ledger (default: {reviews})")
+    tiers = list(p.tiers) if "tiers" in p.data else []
+    common = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    common.add_argument("--scope", help="scope file (default: [paths] scope)")
+    common.add_argument("--catalog", help="catalog JSON (default: catalog/<scope name>.json)")
+    common.add_argument("--suites", action="append", help="suite file/directory, repeatable (default: [paths] suites)")
+    common.add_argument("--reviews", help="review ledger (default: [paths] reviews)")
+    parser = argparse.ArgumentParser(prog=p.cli, parents=[common], description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter, allow_abbrev=False)
     sub = parser.add_subparsers(dest="command", required=True)
     add_parser(sub)
 
     sub.add_parser("ingest", allow_abbrev=False, help="read specifications, requirements, user stories and ETs from RV&S")
     cmd = sub.add_parser("briefs", allow_abbrev=False, help="write generation briefs for the test-authoring agent")
     cmd.add_argument("--spec", nargs="*", help="only these specification IDs")
-    cmd.add_argument("--out", default=str(p.path("briefs")))
+    cmd.add_argument("--out", help="output directory (default: [paths] briefs)")
     cmd = sub.add_parser("drift", allow_abbrev=False, help="compare suites with the catalog")
     cmd.add_argument("--strict", action="store_true", help="exit code 1 on stale/orphan/untagged/uncovered/unrecorded review or a lint violation")
     cmd.add_argument("--json", help="also write the result as JSON")
@@ -508,7 +514,7 @@ def _main(argv: list[str] | None = None) -> int:
     cmd.add_argument("--date", help="YYYY-MM-DD (default: today)")
     sub.add_parser("lint", allow_abbrev=False, help="check the test rules (exit code 1 on violations)")
     cmd = sub.add_parser("run", allow_abbrev=False, help="run suites against a tier and write the traceability report (extra args go to robot)")
-    cmd.add_argument("--tier", choices=tiers, default=tiers[0])
+    cmd.add_argument("--tier", choices=tiers or None, default=tiers[0] if tiers else None)
     cmd.add_argument("--operator", choices=OPERATOR_MODES, default=_default_operator(),
                      help=f"who does manual steps at the instrument (default: ${p.env('OPERATOR')} or none); console/dialog also run "
                           "needs:operator and needs:hardware-action tests")
@@ -528,10 +534,10 @@ def _main(argv: list[str] | None = None) -> int:
     cmd.add_argument("--outdir")
     cmd.add_argument("--deployment", action="append", help="deployment record to show in the report (repeatable)")
     cmd = sub.add_parser("mutate", allow_abbrev=False, help=f"mutation testing: inject defects into the mock {p.product} and check that the tests notice")
-    mock_tiers = [t.name for t in p.tiers.values() if not t.evidence]
+    mock_tiers = [p.tier(name).name for name in tiers if not p.tier(name).evidence]
     cmd.add_argument("--tier", choices=mock_tiers, default=mock_tiers[0] if mock_tiers else None,
                      help=f"only the mock {p.product} supports fault injection")
-    cmd.add_argument("--mutants", default=str(p.path("mutants")))
+    cmd.add_argument("--mutants", help="mutation definitions (default: [paths] mutants)")
     cmd.add_argument("--mutant", action="append", help="only this mutant id (repeatable)")
     cmd.add_argument("--outdir")
     cmd.add_argument("--min-score", type=float, default=0.9, help="exit code 1 when the share of killed mutants is lower (default 0.9)")
@@ -546,7 +552,7 @@ def _main(argv: list[str] | None = None) -> int:
     cmd.add_argument("--deployment", action="append", help="deployment record(s) of the run (repeatable; also GRF_DEPLOYMENT_RECORD)")
     cmd.add_argument("--json", help="where to write the acceptance record (default: acceptance.json next to output.xml)")
     cmd = sub.add_parser("doctor", allow_abbrev=False, help="check that a tier can run before a long run (exit code 1 on FAIL)")
-    cmd.add_argument("--tier", choices=tiers, default=tiers[0])
+    cmd.add_argument("--tier", choices=tiers or None, default=tiers[0] if tiers else None)
     cmd.add_argument("--operator", choices=OPERATOR_MODES, default=_default_operator())
     cmd.add_argument("--deep", action="store_true", help="also start the environment and talk to the product (see the project's doctor; "
                                                        "on a rig this may connect to the instrument)")
@@ -557,7 +563,9 @@ def _main(argv: list[str] | None = None) -> int:
     from grf.deploy.cli import cmd_deploy
 
     add_deploy_parser(sub, p.env_prefix)
-    plugin_commands = p.plugin.add_commands(sub)
+    _, requested = common.parse_known_args(argv)
+    core_commands = set(sub.choices)
+    plugin_commands = p.plugin.add_commands(sub) if not requested or requested[0] not in core_commands else {}
 
     args, extra = parser.parse_known_args(argv)
     if extra and args.command != "run":
@@ -571,13 +579,17 @@ def _main(argv: list[str] | None = None) -> int:
     return {**commands, **plugin_commands}[args.command](args)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, project_root: Path | str | None = None) -> int:
     from robot.errors import DataError, Information
 
     from grf.pipeline.rvs import RvsError
     from grf.rigcontrol import RigControlError
 
     try:
+        if project_root is not None:
+            selected = project.Project.load(os.environ.get(project.PROJECT_ENV) or project_root)
+            with project.using(selected):
+                return _main(argv)
         return _main(argv)
     except Information as info:
         print(info.message)

@@ -6,6 +6,13 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Expose `ProductPlugin.context` / `grf.commands.CommandContext` for command-local scope/catalog,
+  suite and review resolution. Core parser construction no longer requires unrelated feature paths
+  or registers optional product commands for core commands.
+- Add explicit `cli.main(project_root=...)`, side-effect-free `project.discover` and scoped `project.using`.
+  **Migration:** replace private CLI imports with the context; remove product import-time
+  `set_default_root` calls and configure discovery at the executable entry point.
+
 - Read `grf.__version__` from installed distribution metadata (one version source).
   Evidence-tier runs and `gate`, not only doctor, enforce a configured exact `[framework] version`
   before executing/evaluating anything. **Migration:** update the dependency pin and project version together.
