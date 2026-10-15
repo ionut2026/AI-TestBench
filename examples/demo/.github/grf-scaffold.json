@@ -1,0 +1,17 @@
+{
+  "files": {
+    ".github/agents/integration-coordinator.agent.md": "fd6d8b42c8807a64239028df9ef921b0a4166b793c70211247adf77c057fb8a7",
+    ".github/skills/grf-author-test/SKILL.md": "672788d9c4156acd8901c0b518f22692e175df1130e31a0891771e58951775d6",
+    ".github/skills/grf-coordinate-integration/SKILL.md": "653bcd818501cfe1fd9e0adc2cf62ae7bf46f96f6c54f839c338e5f2ee755251",
+    ".github/skills/grf-deploy-build/SKILL.md": "d7fe461e941a306c322e5503025da8f1f300ee48a4b108ecdee035b008d9437f",
+    ".github/skills/grf-doctor-tier/SKILL.md": "92f9e9611ff1e4c9df0e9f90d98b36bc237a0d9846e88571209c5132b8fb2753",
+    ".github/skills/grf-getting-started/SKILL.md": "aacc735197bd9beae2adaaa193787caaf4fbb470723df07483a2c3f7d6af889a",
+    ".github/skills/grf-interpret-report/SKILL.md": "5ed5b03b5d2d8b7724001733ece8ebd3448c690d18f5d5a2109a27b068666d5e",
+    ".github/skills/grf-mutation-testing/SKILL.md": "590427e27cb20d68394372c89e94b31bc70f4022ffd42684d87af2730e1e5a1f",
+    ".github/skills/grf-product-plugin/SKILL.md": "e4945f6d65cb3b4df763609ffec51c786c2179ef8b372b84425722acd75d6719",
+    ".github/skills/grf-review-test/SKILL.md": "301bf925f0a9d8b136f3702459252dd491c7768c1b4dd838515eee0601c36e3b",
+    ".github/skills/grf-spec-drift/SKILL.md": "83a615a37e7164f18de2439c2e1d025485795e65adb1df5faef6990bffb6d530",
+    ".github/skills/grf-template-upgrade/SKILL.md": "45215a290b0f808325cbb44c357d3ce93737308ecfc3129bb00c85f4f3e05bfb"
+  },
+  "schema": 1
+}

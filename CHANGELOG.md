@@ -6,6 +6,10 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Add `grf scaffold --update-skills [--check]`: safely maintain generic skills and the integration coordinator
+  using generated-content digests, without replacing product overlays or customized generic files.
+  Existing forks require manual reviewed comparison before adoption; package installation still rewrites nothing.
+
 - Require the deployment extra for generic developer/CI checks so default Paramiko backend tests never
   silently skip. Check Python 3.11/3.12 on Windows/Linux and enforce a 75% combined line/branch coverage floor.
   Keep pytest/coverage caches under `results`; correct the historical 0.2.0 release-status contradiction.

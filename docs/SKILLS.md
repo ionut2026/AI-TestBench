@@ -61,8 +61,23 @@ repository root and that `.github\skills\<skill-name>\SKILL.md` exists.
 `examples\demo` contains the same files, and tests check that they match.
 
 Existing products, such as SMMAutomationFramework, do **not** receive skills automatically when GRF is
-upgraded. Use `grf-template-upgrade` to compare the new templates with the product's copies, then adopt only
-reviewed changes. Product-specific knowledge belongs in product-owned skills or agents, not in GRF core.
+upgraded. After reviewing a new pinned GRF version, run this from the product root:
+
+```powershell
+grf scaffold --update-skills --check
+grf scaffold --update-skills
+```
+
+`--check` lists changes without writing (exit 1 means updates are needed); the second command applies
+safe generic updates. Only the eleven `grf-*` skills and generic integration coordinator are managed.
+Product-named skills and specialized author/reviewer agents are never replaced or removed.
+The `.github\grf-scaffold.json` manifest records generated content digests: an update replaces an existing
+file only if it still matches that recorded generic version. New/identical legacy generic files can be
+adopted, but conflicting, untracked or product-edited generic files abort the entire preflight without writes
+(exit 2). Compare those manually with `grf init` output under `results`, move product customizations into
+product-owned overlays, and adopt only reviewed changes. Redirected/symlinked managed paths are rejected.
+The updater does not change dependency pins, approval ledgers, suites or evidence status.
+Use `grf-template-upgrade` for the rest of a template upgrade.
 
 ## Coordinated integration
 

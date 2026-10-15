@@ -66,6 +66,7 @@ example. Both examples use the real catalog/report pipeline with fake input; nei
 | [Configuration](docs/CONFIGURATION.md) | Project discovery, paths, tiers, plugins and external Windchill integration |
 | [Testing](docs/TESTING.md) | Traceability, human review, evidence rules, mutation testing and validation commands |
 | [Copilot skills](docs/SKILLS.md) | Available GRF skills, how to invoke them, product copies and safety limits |
+| `grf scaffold --update-skills` | [Reviewed, conflict-safe generic skill updates](docs/SKILLS.md#how-skills-reach-product-projects); product overlays are preserved |
 | [Repositories](docs/REPOSITORIES.md) | Independent repositories and data ownership |
 | [Deploying builds](docs/DEPLOYMENT.md) | `grf deploy`: Jenkins builds to instrument boards, rollback, site config, Jenkins pipeline |
 | [Workflows](docs/WORKFLOWS.md) | Run requests, the acceptance gate (`grf gate`), content-bound reviews and run reservation |

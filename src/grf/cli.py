@@ -470,10 +470,10 @@ def cmd_doctor(args) -> int:
 
 
 def _main(argv: list[str] | None = None) -> int:
-    from grf.scaffold import add_parser, bootstrap, cmd_init
+    from grf.scaffold import add_parser, bootstrap, cmd_init, cmd_scaffold
 
     argv = sys.argv[1:] if argv is None else argv
-    if argv and argv[0] == "init":
+    if argv and argv[0] in ("init", "scaffold"):
         return bootstrap(argv)
     try:
         p = project.current()
@@ -574,7 +574,7 @@ def _main(argv: list[str] | None = None) -> int:
         return cmd_run(args, extra)
     commands = {"init": cmd_init, "ingest": cmd_ingest, "briefs": cmd_briefs, "drift": cmd_drift, "accept": cmd_accept, "migrate-hashes": cmd_migrate_hashes,
                 "review": cmd_review, "lint": cmd_lint, "report": cmd_report, "mutate": cmd_mutate, "doctor": cmd_doctor,
-                "request": cmd_request, "gate": cmd_gate,
+                "request": cmd_request, "gate": cmd_gate, "scaffold": cmd_scaffold,
                 "deploy": lambda a: cmd_deploy(a, p)}
     return {**commands, **plugin_commands}[args.command](args)
 

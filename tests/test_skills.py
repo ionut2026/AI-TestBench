@@ -1,7 +1,10 @@
 import re
 from pathlib import Path
 
-from grf.scaffold import SKILLS, TEMPLATES, init_project
+import pytest
+
+from grf import cli
+from grf.scaffold import SKILL_MANIFEST, SKILLS, TEMPLATES, init_project, update_skills
 
 ROOT = Path(__file__).resolve().parents[1]
 SAFETY = ("product evidence", "read-only", "authorization")
@@ -20,6 +23,87 @@ def test_starter_skills_are_registered():
     for name in SKILLS:
         relative = f".github/skills/grf-{name}/SKILL.md"
         assert TEMPLATES[f"skill-{name}"] == relative
+
+
+def test_updater_tracks_generic_files_and_preserves_product_overlays(tmp_path):
+    generated = init_project(tmp_path / "starter", "Skills", "SPEC")
+    assert update_skills(generated, check=True) == []
+    overlay = generated / ".github/skills/product-safety/SKILL.md"
+    overlay.parent.mkdir()
+    overlay.write_text("Site-owned safety", encoding="utf-8")
+    generic = generated / TEMPLATES["skill-author-test"]
+    generic.unlink()
+    assert generic in update_skills(generated, check=True)
+    assert not generic.exists()
+    update_skills(generated)
+    assert generic.is_file() and overlay.read_text(encoding="utf-8") == "Site-owned safety"
+    assert cli.main(["scaffold", "--update-skills", str(generated), "--check"]) == 0
+
+
+def test_updater_refuses_customized_generic_before_any_writes(tmp_path):
+    generated = init_project(tmp_path / "starter", "Skills", "SPEC")
+    generic = generated / TEMPLATES["skill-author-test"]
+    generic.write_text("Product edits to keep", encoding="utf-8")
+    missing = generated / TEMPLATES["skill-review-test"]
+    missing.unlink()
+    with pytest.raises(ValueError, match="no files changed"):
+        update_skills(generated)
+    assert generic.read_text(encoding="utf-8") == "Product edits to keep" and not missing.exists()
+
+
+def test_updater_adopts_identical_legacy_files_but_rejects_unknown_edits(tmp_path):
+    generated = init_project(tmp_path / "starter", "Skills", "SPEC")
+    manifest = generated / SKILL_MANIFEST
+    manifest.unlink()
+    update_skills(generated)
+    assert manifest.is_file()
+    manifest.unlink()
+    (generated / TEMPLATES["skill-author-test"]).write_text("legacy product fork", encoding="utf-8")
+    assert cli.main(["scaffold", "--update-skills", str(generated)]) == 2
+    assert not manifest.exists()
+
+
+def test_updater_upgrades_unchanged_previously_generated_content(tmp_path, monkeypatch):
+    from grf import scaffold
+
+    generated = init_project(tmp_path / "starter", "Skills", "SPEC")
+    managed = scaffold._managed_skills()
+    relative = TEMPLATES["skill-author-test"]
+    managed[relative] += "\nNew generic guidance.\n"
+    monkeypatch.setattr(scaffold, "_managed_skills", lambda: managed)
+    update_skills(generated)
+    assert (generated / relative).read_text(encoding="utf-8") == managed[relative]
+
+
+@pytest.mark.parametrize("data", ['[]', '{"schema":true,"files":{}}', '{"schema":1,"files":[]}',
+                                 '{"schema":1,"files":{"something":true}}'])
+def test_updater_rejects_malformed_manifest(tmp_path, data):
+    generated = init_project(tmp_path / "starter", "Skills", "SPEC")
+    (generated / SKILL_MANIFEST).write_text(data, encoding="utf-8")
+    with pytest.raises(ValueError, match="manifest"):
+        update_skills(generated)
+
+
+def test_updater_refuses_redirected_paths(tmp_path, monkeypatch):
+    generated = init_project(tmp_path / "starter", "Skills", "SPEC")
+    original = Path.is_symlink
+    monkeypatch.setattr(Path, "is_symlink", lambda path: path.name == "skills" or original(path))
+    with pytest.raises(ValueError, match="symlinks or redirected"):
+        update_skills(generated)
+
+
+def test_atomic_skill_write_failure_preserves_existing_file(tmp_path, monkeypatch):
+    from grf import scaffold
+
+    path = tmp_path / "skill.md"
+    path.write_text("Previous content", encoding="utf-8")
+    def fail_replace(*args):
+        raise OSError("simulated replace failure")
+    monkeypatch.setattr(scaffold.os, "replace", fail_replace)
+    with pytest.raises(OSError, match="replace failure"):
+        scaffold._replace(path, "New content")
+    assert path.read_text(encoding="utf-8") == "Previous content"
+    assert list(tmp_path.iterdir()) == [path]
 
 
 def test_skills_have_valid_frontmatter_and_safety_rules():

@@ -14,6 +14,8 @@ copies, so products must review them deliberately.
 2. In a scratch directory under the product's ignored `results` folder, run `grf init` with the new GRF.
 3. Compare generated `.github\agents`, `.github\skills`, README guidance and other relevant starter files with
    the product copies.
+   `grf scaffold --update-skills --check` previews managed generic updates. After review, use
+   `grf scaffold --update-skills`; it refuses customized/untracked conflicts and leaves product overlays intact.
 4. Classify differences: generic improvement to adopt, product customization to keep, or irrelevant demo code.
 5. Apply minimal changes, preserving product-specific knowledge and stricter local rules.
 6. Update product documentation, dependency pin and `[framework] version` together.

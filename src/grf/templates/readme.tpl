@@ -1,6 +1,8 @@
 # Product automation starter
 
 This is a **mock demo**, not product evidence. It has no SMM dependency and does not contact an instrument or RV&S.
+After a reviewed GRF upgrade, use `grf scaffold --update-skills --check` to inspect copied generic skill updates.
+The updater preserves product-owned overlays and refuses modified generic files; see GRF's `docs\SKILLS.md`.
 Replace the example counter library and fake RV&S fixture with your product adapter and real specifications.
 The display name, paths, tiers, tag prefix and plugin are configured in `grf.toml`.
 

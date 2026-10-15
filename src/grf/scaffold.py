@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import re
 import sys
+import tempfile
 from importlib.resources import files
 from pathlib import Path
 
@@ -49,6 +52,84 @@ DEPLOY_TEMPLATES = {
     "deploy-config": "robot/environments/deploy.example.toml",
     "jenkinsfile-deploy": "jenkins/Jenkinsfile.deploy",
 }
+SKILL_MANIFEST = ".github/grf-scaffold.json"
+
+
+def _managed_skills() -> dict[str, str]:
+    templates = files("grf").joinpath("templates")
+    return {relative: templates.joinpath(name + ".tpl").read_text(encoding="utf-8")
+            for name, relative in TEMPLATES.items() if name.startswith("skill-") or name == "coordinator"}
+
+
+def _manifest(rendered: dict[str, str]) -> str:
+    return json.dumps({"schema": 1, "files": {
+        relative: hashlib.sha256(content.encode("utf-8")).hexdigest() for relative, content in rendered.items()
+    }}, indent=2, sort_keys=True) + "\n"
+
+
+def _replace(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="\n",
+                                         dir=path.parent, suffix=".tmp", delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def update_skills(destination: Path, *, check: bool = False) -> list[Path]:
+    """Update only unchanged tracked generic files; refuse product edits before writing anything."""
+    root = destination.resolve()
+    if not root.is_dir():
+        raise ValueError(f"skill destination must be an existing project directory: {root}")
+    rendered = _managed_skills()
+    manifest = root / SKILL_MANIFEST
+    for relative in (*rendered, SKILL_MANIFEST):
+        path = root / relative
+        if any(parent.is_symlink() or parent.resolve() != parent
+               for parent in (path, *path.parents) if parent.is_relative_to(root)):
+            raise ValueError(f"managed skill path must not use symlinks or redirected directories: {path}")
+    previous: dict[str, str] = {}
+    if manifest.exists():
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        if not isinstance(data, dict) or type(data.get("schema")) is not int or data["schema"] != 1:
+            raise ValueError(f"invalid skill manifest schema: {manifest}")
+        recorded = data.get("files")
+        if not isinstance(recorded, dict) or any(not isinstance(v, str) or not re.fullmatch(r"[0-9a-f]{64}", v)
+                                                 for v in recorded.values()):
+            raise ValueError(f"invalid skill manifest files: {manifest}")
+        previous = recorded
+    changed, conflicts = [], []
+    for relative, content in rendered.items():
+        path = root / relative
+        if not path.exists():
+            changed.append(path)
+            continue
+        current = path.read_bytes()
+        normalized = current.decode("utf-8").replace("\r\n", "\n")
+        if normalized == content:
+            continue
+        digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+        if previous.get(relative) != digest:
+            conflicts.append(str(path))
+        else:
+            changed.append(path)
+    if conflicts:
+        raise ValueError("modified or untracked generic files need manual comparison with a fresh grf init; "
+                         "no files changed:\n" + "\n".join(conflicts))
+    manifest_text = _manifest(rendered)
+    if not manifest.exists() or manifest.read_text(encoding="utf-8") != manifest_text:
+        changed.append(manifest)
+    if not check:
+        for path in changed:
+            _replace(path, manifest_text if path == manifest else rendered[path.relative_to(root).as_posix()])
+    return changed
 
 
 def add_parser(sub: argparse._SubParsersAction) -> None:
@@ -58,6 +139,10 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     cmd.add_argument("--spec-prefix", default="SPEC", help="specification tag prefix (letters, digits, underscores)")
     cmd.add_argument("--with-deploy", action="store_true",
                      help="also create a deployment site config example and a Jenkins deployment pipeline")
+    cmd = sub.add_parser("scaffold", allow_abbrev=False, help="maintain copied generic skills without replacing product overlays")
+    cmd.add_argument("destination", nargs="?", type=Path, default=Path("."))
+    cmd.add_argument("--update-skills", action="store_true", required=True)
+    cmd.add_argument("--check", action="store_true", help="report needed updates without writing (exit 1 if changed)")
 
 
 def init_project(destination: Path, name: str, spec_prefix: str, with_deploy: bool = False) -> Path:
@@ -87,6 +172,7 @@ def init_project(destination: Path, name: str, spec_prefix: str, with_deploy: bo
         for token, value in replacements.items():
             text = text.replace(token, value)
         rendered[relative] = text
+    rendered[SKILL_MANIFEST] = _manifest(_managed_skills())
     destination.mkdir(parents=True, exist_ok=True)
     for relative, text in rendered.items():
         path = destination / relative
@@ -112,4 +198,12 @@ def cmd_init(args: argparse.Namespace) -> int:
 def bootstrap(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="grf", description="General Robot Framework product tooling.", allow_abbrev=False)
     add_parser(parser.add_subparsers(dest="command", required=True))
-    return cmd_init(parser.parse_args(argv))
+    args = parser.parse_args(argv)
+    return cmd_init(args) if args.command == "init" else cmd_scaffold(args)
+
+
+def cmd_scaffold(args: argparse.Namespace) -> int:
+    paths = update_skills(args.destination, check=args.check)
+    for path in paths:
+        print(f"{'Would update' if args.check else 'Updated'} {path}")
+    return int(args.check and bool(paths))
