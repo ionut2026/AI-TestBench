@@ -118,6 +118,16 @@ def test_keyword_defaults_to_current_project(record, widget):
         lib.deployment_record_should_match_product_version(str(record), "app", "1.2.3.4", "board-1", "Other")
 
 
+def test_binding_and_keyword_share_product_runtime_policy(record, widget, monkeypatch):
+    replace(record, installed={"status": "running", "version": "1.2.3.4-main"})
+    def matcher(component, expected, observed):
+        return component == "app" and expected.removesuffix("-main") == observed
+
+    assert check(record, matches=matcher)
+    monkeypatch.setattr(widget.plugin, "runtime_matches", matcher)
+    assert GrfLibrary().deployment_record_should_match_product_version(str(record), "app", "1.2.3.4", "board-1")
+
+
 def test_inherited_keyword_runs_in_robot(record, widget, tmp_path):
     from grf.scaffold import init_project
 

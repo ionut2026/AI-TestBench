@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -16,11 +17,13 @@ def assert_product_version(
     *,
     target: str,
     project: str | None = None,
+    matches: Callable[[str, str, str], bool] | None = None,
 ) -> dict[str, Any]:
     """Return the matching record, or raise ``AssertionError``.
 
     ``record`` is one explicit JSON file, not a folder or an inferred latest record.
-    Versions are exact strings, with no normalization or artifact-version fallback.
+    Versions are exact strings unless an explicit product ``matches`` comparator is supplied.
+    There is no artifact-version fallback.
     The product must obtain a fresh observation and establish the endpoint-to-target
     mapping; matching versions and target labels cannot prove physical board identity.
     ``project=None`` omits only the expected-project comparison.
@@ -60,6 +63,6 @@ def assert_product_version(
     version = installed.get("version")
     if not isinstance(version, str) or not version.strip():
         raise AssertionError(f"{path}: deployment requires a nonempty installed version")
-    if version != actual_version:
+    if not (matches(component, version, actual_version) if matches is not None else version == actual_version):
         raise AssertionError(f"{path}: observed {component} version {actual_version!r}, expected installed version {version!r}")
     return data

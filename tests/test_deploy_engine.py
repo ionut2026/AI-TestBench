@@ -50,6 +50,15 @@ def test_expected_sha256_accepts_exact_bytes(board, tmp_path):
     assert record.outcome == Outcome.DEPLOYED and record.artifact.sha256 == digest
 
 
+def test_filename_cannot_fabricate_installed_version(board, tmp_path):
+    tar = tarball(tmp_path, board=board)
+    board.tar_images[tar.name] = ("vendor/app/arm:9.9", image_id("9.9"))
+    record = deploy(board, tmp_path, local_tar=tar)
+    assert record.outcome == Outcome.ROLLED_BACK
+    assert "contradicts loaded image" in record.message
+    assert board.running_image_id() == image_id("1.2.2")
+
+
 @pytest.mark.parametrize("digest", ["0" * 64, "bad", "A" * 64, "", 123])
 def test_bad_expected_sha256_never_connects(board, tmp_path, digest):
     tar = tarball(tmp_path, board=board)

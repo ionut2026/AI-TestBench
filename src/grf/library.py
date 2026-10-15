@@ -51,7 +51,8 @@ class GrfLibrary:
         GRF project. No deployment or network operation is performed.
         """
         expected_project = project or current_project().name
-        return assert_product_version(record, component, actual_version, target=target, project=expected_project)
+        return assert_product_version(record, component, actual_version, target=target, project=expected_project,
+                                      matches=current_project().plugin.runtime_matches)
 
     # ================================================================== test bookkeeping
 

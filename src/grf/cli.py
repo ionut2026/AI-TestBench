@@ -434,7 +434,8 @@ def cmd_gate(args) -> int:
     catalog_path = _catalog_path(args)
     result = evaluate(request, tests=tests, meta=meta, known=collect_tests(_suites(args)), reviews=load_reviews(Path(args.reviews)),
                       catalog=load_catalog(catalog_path), catalog_path=catalog_path, records=load_records(record_paths(args.deployment)),
-                      observed=p.plugin.runtime_identity(meta), matches=p.plugin.identity_matches, root=p.root,
+                      observed=p.plugin.runtime_identity(meta), matches=p.plugin.runtime_matches, root=p.root,
+                      installed_matches=p.plugin.installed_matches,
                       evidence=p.is_evidence(meta.get("Tier", "?")), project_name=p.name)
     target = Path(args.json) if args.json else output.parent / "acceptance.json"
     write_result(result, target)

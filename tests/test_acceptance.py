@@ -170,6 +170,33 @@ def test_gate_deploy_and_test_binds_build_and_sha(tmp_path):
     assert gate(parse_request(data), kw)[0] == "REJECTED"
 
 
+def test_installed_comparison_is_not_runtime_comparison(tmp_path):
+    kw = case(tmp_path)
+    kw["records"] = [{"component": "widgetd", "outcome": "DEPLOYED", "dryRun": False,
+                     "artifact": {"build_number": 7, "sha256": SHA},
+                     "installed": {"status": "running", "version": "1.2.3-main"}}]
+    kw["matches"] = lambda component, expected, seen: expected == "1.2.3-main" and seen == "1.2.3"
+    kw["observed"] = {"widgetd": "1.2.3"}
+    data = request_data(action="deploy-and-test", component=[
+        {"name": "widgetd", "build": 7, "sha256": SHA, "expected_version": "1.2.3-main"}])
+    assert gate(parse_request(data), kw)[0] == "ACCEPTED"
+    kw["installed_matches"] = lambda *args: False
+    assert gate(parse_request(data), kw)[0] == "REJECTED"
+
+
+def test_duplicate_identity_never_accepted(tmp_path):
+    kw = case(tmp_path)
+    kw["tests"].append(dict(kw["tests"][0]))
+    assert gate(parse_request(request_data()), kw)[1]["test identities"]["status"] == "FAIL"
+
+
+def test_duplicate_source_identity_rejected(widget, tmp_path):
+    suite = tmp_path / "duplicate.robot"
+    suite.write_text("*** Test Cases ***\nSame\n    No Operation\nSame\n    Log    different\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="duplicate test identity"):
+        drift.collect_tests([suite])
+
+
 @pytest.mark.parametrize("change", [
     {"installed": None},
     {"installed": {"status": "exited", "version": "1.2.3"}},

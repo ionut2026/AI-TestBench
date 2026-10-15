@@ -46,5 +46,16 @@ class ProductPlugin:
         return {}
 
     def identity_matches(self, component: str, expected: str, observed: str) -> bool:
-        """Whether the runtime version ``observed`` is the expected build version. Default: equal text."""
+        """Legacy runtime comparator; override ``runtime_matches`` in new plugins."""
         return expected.strip() == observed.strip()
+
+    def installed_matches(self, component: str, expected: str, installed: str) -> bool:
+        """Compare requested and installed build identities, not runtime protocol versions."""
+        return expected == installed
+
+    def runtime_matches(self, component: str, expected: str, observed: str) -> bool:
+        """Compare an installed build with a fresh product observation.
+
+        Delegates to the legacy hook during migration. Installed comparisons never use it.
+        """
+        return self.identity_matches(component, expected, observed)

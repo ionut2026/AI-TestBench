@@ -4,6 +4,17 @@ GRF uses Semantic Versioning. Additive public APIs use a minor release; compatib
 Before 1.0, incompatible API changes also require a minor release. Release tags are `vMAJOR.MINOR.PATCH`.
 Tags and publication are explicit maintainer actions.
 
+## 0.4.0 - Unreleased
+
+- Split product identity policy into `installed_matches` (requested versus installed builds)
+  and `runtime_matches` (installed build versus runtime observation). The Robot deployment binding
+  now shares the runtime policy with acceptance. **Migration:** legacy `identity_matches` overrides
+  remain a runtime-only fallback; migrate overrides to `runtime_matches`. Installed comparisons
+  default to exact text and never invoke runtime protocol comparison.
+- Reject duplicate suite-qualified test identities before collection/report joins and at acceptance.
+  Rename ambiguous tests before recording human reviews; one approval cannot cover different test bodies.
+- Derive deployment identity from the loaded image and roll back filename/image-version contradictions.
+
 ## 0.3.0 - Unreleased
 
 - Added the opt-in `integration-coordinator` custom agent and `grf-coordinate-integration` shared skill,

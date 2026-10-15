@@ -31,7 +31,9 @@ from grf.pipeline.drift import (
     check_reviews,
     hash_for,
     parse_hash_tags,
+    require_unique_tests,
     spec_ids,
+    test_key,
 )
 
 ORDER = ["FAIL", "NOT RUN", "UNCOVERED", "SKIP", "PARTIAL", "DEFERRED", "PASS", "NOT TESTABLE"]
@@ -98,6 +100,7 @@ def read_results(output_xml: Path) -> tuple[list[dict], dict]:
             walk(child, f"{relative}.{child.name}" if relative else child.name)
 
     walk(result.suite)
+    require_unique_tests(tests)
     meta: dict[str, Any] = {str(k): str(v) for k, v in result.suite.metadata.items()}
     stats = result.statistics.total
     meta["_totals"] = {"pass": stats.passed, "fail": stats.failed, "skip": stats.skipped}
@@ -129,16 +132,12 @@ def _worst(verdicts: list[str]) -> str:
     return min(relevant, key=ORDER.index) if relevant else "UNCOVERED"
 
 
-def _test_key(test: TestRef | dict) -> tuple[str, str]:
-    """The CLI renames the root suite, but child suite paths and test names remain stable."""
-    if isinstance(test, TestRef):
-        name, suite, relative = test.name, test.suite, test.suite_path
-    else:
-        name, suite, relative = test["name"], test["suite"], test.get("suitePath")
-    return relative if relative is not None else suite.partition(".")[2], name
+_test_key = test_key  # compatibility for existing report callers; public API lives in drift
 
 
 def build_report(catalog: dict, tests: list[dict], meta: dict, known: list[TestRef], reviews: list[dict] | None = None) -> dict:
+    require_unique_tests(tests)
+    require_unique_tests(known)
     tier = meta.get("Tier", "?")
     product = is_product_tier(tier)
     agent = {a["test"]: a for a in agent_reviews(known, reviews or [])}

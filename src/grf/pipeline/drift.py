@@ -92,6 +92,25 @@ class TestRef:
         return ",".join(sorted(t.split(":", 1)[1].lower() for t in self.tags if t.lower().startswith("spechash:")))
 
 
+def test_key(test: TestRef | dict) -> tuple[str, str]:
+    """Stable child-suite path and test name, independent of the renamed root suite."""
+    if isinstance(test, TestRef):
+        name, suite, relative = test.name, test.suite, test.suite_path
+    else:
+        name, suite, relative = test["name"], test["suite"], test.get("suitePath")
+    return relative if relative is not None else suite.partition(".")[2], name
+
+
+def require_unique_tests(tests: list[TestRef] | list[dict]) -> None:
+    """Reject ambiguous identities before reviews or result joins can collapse them."""
+    seen = set()
+    for test in tests:
+        key = test_key(test)
+        if key in seen:
+            raise ValueError(f"duplicate test identity: {'.'.join(key)}")
+        seen.add(key)
+
+
 def load_reviews(path: Path) -> list[dict]:
     """The review ledger: ``[[review]]`` tables with test, spechash, reviewer, date and ref (PR / commit)."""
     if not path.exists():
@@ -218,6 +237,7 @@ def collect_tests(paths: list[Path]) -> list[TestRef]:
             walk(child, f"{relative}.{child.name}" if relative else child.name)
 
     walk(suite)
+    require_unique_tests(out)
     return out
 
 

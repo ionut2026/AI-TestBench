@@ -431,6 +431,8 @@ class Deployment:
             if not loaded:
                 raise DeployError(f"the tarball does not contain the image {self.recipe.image} (docker load: "
                                   f"{', '.join(images) or out.strip()[:200]})")
+            if artifact.version and docker.tag_of(loaded) != artifact.version:
+                raise DeployError(f"artifact version {artifact.version} contradicts loaded image {loaded}")
             s.detail = loaded
         image_id = self.run(f"docker image inspect --format '{{{{.Id}}}}' {q(loaded)}").strip()
         with self.step(f"docker run {self.name}"):
@@ -450,7 +452,7 @@ class Deployment:
                 s.status = "WARN"
             self.record.installed = Installed(
                 container=self.name, status="running", image=loaded, image_id=image_id,
-                version=artifact.version or docker.tag_of(loaded), sha256=artifact.sha256,
+                version=docker.tag_of(loaded), sha256=artifact.sha256,
                 restarts=int(info.get("RestartCount") or 0))
             s.detail = f"{loaded}, version {self.record.installed.version}" + (f"; drift: {'; '.join(found)}" if found else "")
         return loaded

@@ -30,6 +30,10 @@ Who owns what:
 
 ## How a deployment works
 
+The installed version is derived from the image actually loaded on the board, never merely
+from its tarball filename. A filename/image-tag disagreement fails and restores the previous
+container rather than recording fabricated installed identity.
+
 ```mermaid
 flowchart TD
   A[Resolve the Jenkins build<br/>or --local-tar] --> B[Download, size + SHA-256]

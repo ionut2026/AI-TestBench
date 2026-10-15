@@ -130,7 +130,7 @@ product-observed identity. Missing data never becomes a successful component che
 
 For deployments, the gate requires exactly one record per component, the current project, explicit
 `dryRun=false`, `DEPLOYED`/`UNCHANGED`, requested artifact build/digest, and a running installed version.
-It uses the product comparison hook for requested/installed/observed versions.
+It uses separate product comparison hooks for requested/installed and installed/observed versions.
 Extra or ambiguous component records reject acceptance. `RESTORED` is not accepted as the requested new
 deployment; the optional [Robot diagnostic assertion](DEPLOYMENT.md#checking-the-observed-product-version)
 can check a restored installation separately and is not a second acceptance policy.
@@ -152,6 +152,15 @@ def runtime_identity(self, meta: dict[str, str]) -> dict[str, str]:
 def identity_matches(self, component: str, expected: str, observed: str) -> bool:
     ...
 ```
+
+For 0.4 adoption, override `installed_matches(component, expected, installed)` for requested
+versus installed build identities, and `runtime_matches(component, expected, observed)` for
+installed builds versus product-reported versions. Installed comparison defaults to exact text;
+runtime comparison delegates to the legacy `identity_matches` during migration. Never use
+a runtime protocol comparator to compare two artifact versions. The Robot deployment-binding
+keyword uses the same runtime hook as the gate; the standalone helper accepts `matches=`.
+Duplicate suite-qualified test identities are rejected before collection/report joins and
+cannot satisfy acceptance or share one human approval.
 
 The first extracts component versions from Robot output metadata, not a new network query during the gate.
 Its default `{}` makes required identity checks fail closed. The default comparator checks stripped string

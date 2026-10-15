@@ -269,16 +269,23 @@ def _check(checks: list[Check], name: str, problems: list[str], ok: str) -> None
 
 def evaluate(request: RunRequest, *, tests: list[dict], meta: dict, known: list, reviews: list[dict], catalog: dict,
              catalog_path: Path, records: list[dict], observed: dict[str, str], matches, root: Path,
-             today: dt.date | None = None, evidence: bool = True, project_name: str | None = None) -> dict:
+             today: dt.date | None = None, evidence: bool = True, project_name: str | None = None,
+             installed_matches=None) -> dict:
     """The acceptance result. ``tests``/``meta``: ``report.read_results``; ``known``: the current suites
     (``drift.collect_tests``); ``observed``: component -> runtime version (the plugin); ``matches(component, expected,
     observed)``: the plugin's version comparison."""
     from grf.pipeline.drift import check as drift_check
-    from grf.pipeline.drift import review_problem
-    from grf.pipeline.report import _test_key
+    from grf.pipeline.drift import require_unique_tests, review_problem, test_key
 
     today = today or dt.date.today()
     checks: list[Check] = []
+    identity_problems = []
+    for entries in (tests, known):
+        try:
+            require_unique_tests(entries)
+        except ValueError as err:
+            identity_problems.append(str(err))
+    _check(checks, "test identities", identity_problems, "unique suite-qualified identities")
 
     # authorization window and tier
     problems = []
@@ -349,10 +356,10 @@ def evaluate(request: RunRequest, *, tests: list[dict], meta: dict, known: list,
     _check(checks, "results", problems, "every executed test passed (or is an allowed skip/known failure)")
 
     # reviews of the executed tests at their current content
-    by_key = {_test_key(k): k for k in known}
+    by_key = {test_key(k): k for k in known}
     problems = []
     for t in executed:
-        ref = by_key.get(_test_key(t))
+        ref = by_key.get(test_key(t))
         if ref is None:
             problems.append(f"{t['name']}: not found in the current suites (the run is not from this checkout)")
             continue
@@ -369,7 +376,7 @@ def evaluate(request: RunRequest, *, tests: list[dict], meta: dict, known: list,
 
     # catalog drift of the executed tests' specifications
     problems = []
-    run_refs = [by_key[_test_key(t)] for t in executed if _test_key(t) in by_key]
+    run_refs = [by_key[test_key(t)] for t in executed if test_key(t) in by_key]
     drift = drift_check(catalog, run_refs) if run_refs else {}
     for key in DRIFT_KEYS:
         for item in drift.get(key, []):
@@ -407,7 +414,8 @@ def evaluate(request: RunRequest, *, tests: list[dict], meta: dict, known: list,
                     installed_version = installed.get("version")
                     if not isinstance(installed_version, str) or not installed_version.strip():
                         problems.append("no installed version")
-                    elif expected and not matches(c.name, expected, installed_version):
+                    elif expected and not (installed_matches(c.name, expected, installed_version)
+                                           if installed_matches else expected == installed_version):
                         problems.append(f"installed version {installed_version}, requested {expected}")
                     else:
                         expected = installed_version
