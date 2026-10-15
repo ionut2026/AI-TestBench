@@ -3,7 +3,7 @@
 import hashlib
 
 import pytest
-from deploy_fakes import PREV, WD, Clock, FakeBoard, component, image_id, site, tar_name
+from deploy_fakes import PREV, WD, Clock, FakeBoard, component, image_id, inspect_of, site, tar_name
 
 from grf.deploy.engine import Deployment, Options
 from grf.deploy.model import EXIT_CODES, DeployError, Outcome
@@ -57,6 +57,111 @@ def test_filename_cannot_fabricate_installed_version(board, tmp_path):
     assert record.outcome == Outcome.ROLLED_BACK
     assert "contradicts loaded image" in record.message
     assert board.running_image_id() == image_id("1.2.2")
+
+
+def test_locked_snapshot_is_the_rollback_point(board, tmp_path, monkeypatch):
+    from grf.deploy import lock
+
+    original = lock.acquire
+
+    def acquire(*args):
+        original(*args)
+        board.add_build("1.2.4")
+
+    monkeypatch.setattr(lock, "acquire", acquire)
+    board.fail.append(["^docker load", CommandResult(1, "", "broken archive"), 1])
+    result = deploy(board, tmp_path, local_tar=tarball(tmp_path, board=board))
+    assert result.outcome == Outcome.ROLLED_BACK
+    assert result.previous.version == "1.2.4"
+    assert board.running_image_id() == image_id("1.2.4")
+
+
+def test_hold_is_checked_under_the_lock(board, tmp_path, monkeypatch):
+    from grf.deploy import lock
+
+    original = lock.acquire
+
+    def acquire(*args):
+        original(*args)
+        board.add_file(lock.hold_path(WD), text="new hold")
+
+    monkeypatch.setattr(lock, "acquire", acquire)
+    result = deploy(board, tmp_path, local_tar=tarball(tmp_path, board=board))
+    assert result.outcome == Outcome.HELD
+    assert not board.mutating(include_locks=False)
+
+
+@pytest.mark.parametrize("answer", [
+    CommandResult(1, "", "permission denied"),
+    CommandResult(1, "", "Cannot connect to the Docker daemon"),
+    CommandResult(0, "[]", ""),
+    CommandResult(0, "[null]", ""),
+    CommandResult(0, "not json", ""),
+])
+def test_inspect_uncertainty_is_not_absence(board, tmp_path, answer):
+    board.fail.append(["^docker inspect", answer, 1])
+    result = deploy(board, tmp_path, local_tar=tarball(tmp_path, board=board))
+    assert result.outcome not in (Outcome.DEPLOYED, Outcome.UNCHANGED)
+    assert not board.mutating(include_locks=False)
+    assert board.running_image_id() == image_id("1.2.2")
+
+
+def test_run_conflict_never_deletes_a_foreign_container(board, tmp_path, monkeypatch):
+    original = board.run
+    foreign = inspect_of(board.recipe, "foreign:7", "sha256:foreign")
+
+    def run(command, **kwargs):
+        if command.startswith("docker run"):
+            board.containers["app"] = foreign
+        return original(command, **kwargs)
+
+    monkeypatch.setattr(board, "run", run)
+    result = deploy(board, tmp_path, local_tar=tarball(tmp_path, board=board))
+    assert result.outcome == Outcome.ROLLBACK_FAILED
+    assert board.containers["app"] == foreign
+    assert board.containers["app_grf_previous"]["Image"] == image_id("1.2.2")
+    assert not any(c.startswith("docker rm -f") for c in board.commands)
+
+
+def test_successful_run_with_lost_response_removes_only_owned_id(board, tmp_path, monkeypatch):
+    original = board.run
+
+    def run(command, **kwargs):
+        answer = original(command, **kwargs)
+        if command.startswith("docker run"):
+            raise DeployError("response lost after create")
+        return answer
+
+    monkeypatch.setattr(board, "run", run)
+    result = deploy(board, tmp_path, local_tar=tarball(tmp_path, board=board))
+    assert result.outcome == Outcome.ROLLED_BACK
+    assert any(c == "docker rm -f container-" + image_id("1.2.3") for c in board.commands)
+    assert board.running_image_id() == image_id("1.2.2")
+
+
+def test_unchanged_must_pass_product_health(board, tmp_path):
+    tar = tarball(tmp_path, board=board)
+    assert deploy(board, tmp_path, local_tar=tar).outcome == Outcome.DEPLOYED
+    board.commands.clear()
+    board.fail.append(["^health-probe$", CommandResult(1, "", "not healthy"), 100])
+    result = deploy(board, tmp_path, comp=component(health_command="health-probe"), local_tar=tar)
+    assert result.outcome == Outcome.FAILED
+    assert not any(c.startswith("docker stop") for c in board.commands)
+
+
+def test_mount_access_mode_is_verified(board, tmp_path):
+    board.after_run = lambda c: c["Mounts"][0].update(RW=False)
+    result = deploy(board, tmp_path, local_tar=tarball(tmp_path, board=board))
+    assert result.outcome == Outcome.ROLLED_BACK
+    assert "writable" in result.message
+
+
+def test_cleanup_never_prunes_unrelated_dangling_images(board, tmp_path):
+    board.images.append(("<none>:<none>", "sha256:unrelated"))
+    result = deploy(board, tmp_path, local_tar=tarball(tmp_path, board=board))
+    assert result.outcome == Outcome.DEPLOYED
+    assert ("<none>:<none>", "sha256:unrelated") in board.images
+    assert not any(c.startswith("docker image prune") for c in board.commands)
 
 
 @pytest.mark.parametrize("digest", ["0" * 64, "bad", "A" * 64, "", 123])
@@ -118,7 +223,7 @@ def test_same_artifact_is_unchanged_unless_forced(board, tmp_path):
     board.commands.clear()
     record = deploy(board, tmp_path, local_tar=tar)
     assert record.outcome == Outcome.UNCHANGED and EXIT_CODES[record.outcome] == 0
-    assert not board.mutating()
+    assert not board.mutating(include_locks=False)
     assert deploy(board, tmp_path, local_tar=tar, force=True).outcome == Outcome.DEPLOYED
 
 
@@ -134,7 +239,7 @@ def test_hold_blocks_every_deployment_unless_ignored(board, tmp_path):
     board.add_file(f"{WD}/.grf-deploy.hold", text="calibration until Friday")
     record = deploy(board, tmp_path, local_tar=tarball(tmp_path, board=board))
     assert record.outcome == Outcome.HELD and EXIT_CODES[Outcome.HELD] == 8
-    assert "calibration until Friday" in record.message and board.mutating() == []
+    assert "calibration until Friday" in record.message and board.mutating(include_locks=False) == []
     assert deploy(board, tmp_path, local_tar=tarball(tmp_path, board=board), ignore_hold=True).outcome == Outcome.DEPLOYED
 
 
@@ -167,7 +272,7 @@ def test_preflight_failures_change_nothing(board, tmp_path, setup, expected):
     record = deploy(board, tmp_path, local_tar=tarball(tmp_path, board=board))
     assert record.outcome == Outcome.PREFLIGHT_FAILED and EXIT_CODES[record.outcome] == 3
     assert expected in record.message
-    assert board.mutating() == [] and board.snapshot() == before
+    assert board.mutating(include_locks=False) == [] and board.snapshot() == before
 
 
 def test_missing_companion_is_only_a_warning(board, tmp_path):

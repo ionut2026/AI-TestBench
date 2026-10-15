@@ -49,11 +49,11 @@ def site(**overrides: Any) -> SiteConfig:
 
 def inspect_of(recipe: ContainerRecipe, image: str, image_id: str, status: str = "running", restarts: int = 0) -> dict:
     return {
-        "Image": image_id, "RestartCount": restarts, "State": {"Status": status},
+        "Id": "container-" + image_id, "Image": image_id, "RestartCount": restarts, "State": {"Status": status},
         "Config": {"Image": image, "Env": [f"{k}={v}" for k, v in recipe.env]},
         "HostConfig": {"NetworkMode": recipe.network, "Privileged": recipe.privileged, "Init": recipe.init,
                        "RestartPolicy": {"Name": recipe.restart}, "LogConfig": {"Config": dict(recipe.log_options)}},
-        "Mounts": [{"Source": m.source, "Destination": m.target} for m in recipe.mounts],
+        "Mounts": [{"Source": m.source, "Destination": m.target, "RW": not m.readonly} for m in recipe.mounts],
     }
 
 
@@ -117,10 +117,11 @@ class FakeBoard:
         entry = self.files.get(f"{WD}/.grf-deploy/app.json")
         return json.loads(entry["text"]) if entry else {}
 
-    def mutating(self) -> list[str]:
+    def mutating(self, include_locks: bool = True) -> list[str]:
         keep = ("test ", "cat ", "docker version", "df ", "docker inspect", "ls ", "sha256sum", "wc ", "echo ",
                 "docker image inspect", "docker images")
-        return [c for c in self.commands if not c.startswith(keep)]
+        return [c for c in self.commands if not c.startswith(keep)
+                and (include_locks or ".grf-deploy.lock" not in c)]
 
     # ------------------------------------------------------------- Transport protocol
 
@@ -231,6 +232,7 @@ class FakeBoard:
             return ok
         if head == ["docker", "rm"]:
             name = argv[-1]
+            name = next((n for n, c in self.containers.items() if c.get("Id") == name), name)
             if name not in self.containers:
                 return CommandResult(1, "", "No such container")
             if "-f" not in argv and self.containers[name]["State"]["Status"] == "running":
@@ -266,6 +268,8 @@ class FakeBoard:
             image = argv[-1]
             iid = next(d for i, d in self.images if i == image)
             self.containers[name] = inspect_of(self.recipe, image, iid)
+            labels = [argv[i + 1].split("=", 1) for i, arg in enumerate(argv) if arg == "--label"]
+            self.containers[name]["Config"]["Labels"] = dict(labels)
             if self.after_run:
                 self.after_run(self.containers[name])
             return CommandResult(0, "0123456789ab\n", "")

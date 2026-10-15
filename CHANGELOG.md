@@ -6,6 +6,15 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Read preflight, holds, rollback snapshot and unchanged decisions under the board lock.
+  Unchanged installations must also pass configured health/stability checks.
+- Fail closed on Docker inspection/transport errors; only explicit not-found means absent.
+  Label new containers by operation and remove only a verified operation-owned container ID
+  during rollback, including a successful start whose SSH response was lost. Name conflicts
+  preserve foreign containers and require manual recovery.
+- Compare mount read/write mode during drift checks and remove global Docker image pruning;
+  deployment retention is limited to the component repository.
+
 - Serialize deployment-lock initialization/takeover/release and require the matching owner token
   on release. Incomplete/legacy metadata is never automatically stale. **Migration:** commission
   one GRF version per board; board owners must inspect abandoned guard/legacy locks manually.

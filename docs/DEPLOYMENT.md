@@ -45,17 +45,18 @@ container rather than recording fabricated installed identity.
 flowchart TD
   A[Resolve the Jenkins build<br/>or --local-tar] --> B[Download, size + SHA-256]
   B --> C[Connect: SSH host key checked]
-  C --> D[Read-only preflight<br/>hold, docker, disk, load, companions]
-  D -->|deploy plan| P[DRY_RUN: list the commands]
-  D --> E{Same artifact running?}
+  C -->|deploy plan| D[Read-only preflight<br/>hold, docker, disk, load, companions]
+  D --> P[DRY_RUN: list the commands]
+  C --> L[Acquire board lock]
+  L --> F[Preflight and rollback snapshot<br/>under lock]
+  F --> E{Same artifact running<br/>and healthy?}
   E -->|yes| U[UNCHANGED]
-  E -->|no| F[Lock the board]
-  F --> G[Keep current tarball in previous_builds<br/>upload, verify SHA-256 on the board]
+  E -->|no| G[Keep current tarball in previous_builds<br/>upload, verify SHA-256 on the board]
   G --> H[Stop container, rename to name_grf_previous]
   H --> I[docker load, docker run from the recipe]
   I --> J[Health check, verify image + configuration]
   J -->|OK| K[Commit: remove old container,<br/>keep retention builds, write marker]
-  K --> L[DEPLOYED, unlock]
+  K --> Z[DEPLOYED, unlock]
   J -->|fails| R[Automatic rollback]
   I -->|fails| R
   R --> RB[ROLLED_BACK or ROLLBACK_FAILED]
@@ -70,14 +71,17 @@ Step by step, for one component on one board:
 2. **Download** to the output folder, checking the size and computing the SHA-256. Nothing on the board has
    changed yet; problems end with `ARTIFACT_FAILED`.
 3. **Connect** over SSH; the board's host key is checked against `known_hosts`.
-4. **Preflight** (read-only): the hold file, `docker version`, free disk space in the workdir (`min_free_mb` plus
+4. **Lock and preflight**: a real run first acquires the board lock, then reads the hold file,
+   `docker version`, free disk space in the workdir (`min_free_mb` plus
    the artifact size), 1-minute load (`max_load`), companion containers (`requires_containers`: a missing one is
    only a warning, GRF never starts or changes it), a leftover `<name>_grf_previous` container from an unfinished
    deployment (stops the deployment), and what runs now. Problems end with `PREFLIGHT_FAILED` or `HELD`.
-5. `deploy plan` **stops here** with `DRY_RUN` and lists the board commands a real run would execute.
+5. `deploy plan` does the same read-only checks **without acquiring a lock** and stops here with
+   `DRY_RUN`. Its snapshot is advisory; a real run re-reads state under the lock.
 6. **Unchanged?** If the container runs the same tarball (SHA-256 and image ID from GRF's board marker) with the
-   recipe's configuration, the result is `UNCHANGED` and nothing is restarted. `--force` deploys anyway.
-7. **Lock** the board (see [Lock and hold](#lock-and-hold)).
+   recipe's configuration, it must still pass health/stability checks before `UNCHANGED`.
+   Nothing is restarted on this path, including on a health failure. `--force` deploys anyway.
+7. **Keep the lock** through mutation, rollback and completion (see [Lock and hold](#lock-and-hold)).
 8. **Keep the current tarball**: moved to `<workdir>/previous_builds/`. **Upload** the new one as `<file>.partial`,
    run `sha256sum` on the board, compare, then rename it. A mismatch or upload failure puts the files back and
    ends with `FAILED`: the running container was never touched.
@@ -88,14 +92,20 @@ Step by step, for one component on one board:
 12. **Health check**: the container runs, does not restart, and stays up for `stable_s` seconds; then the
     component's `health_command` and/or `health_port` must succeed within `ready_timeout_s`.
 13. **Verify**: the container runs the loaded image ID, and its configuration (network, privileged, init, restart
-    policy, log options, mounts, environment) equals the recipe. A difference fails the deployment (or is a
+    policy, log options, mounts including read/write mode, environment) equals the recipe. A difference fails the deployment (or is a
     warning with `drift = "warn"` on the component).
 14. **Commit**: write the board marker `<workdir>/.grf-deploy/<name>.json`, remove `<name>_grf_previous`, keep the
-    newest `retention` earlier images and tarballs, `docker image prune -f` (only dangling images). Problems here
+    newest `retention` earlier component images and tarballs. No global image prune is performed. Problems here
     are warnings: the new build already runs.
 15. **Unlock**, write the record.
 
 ### Automatic rollback
+
+New containers carry an operation label. Rollback removes only the inspected container ID
+whose label belongs to this operation, not whichever container currently has the recipe's name.
+A name conflict with an unrelated container is preserved and reported as `ROLLBACK_FAILED`,
+with the original container retained for owner recovery. Docker inspection errors (permission,
+daemon, malformed JSON) never count as a missing container.
 
 A failure in steps 9-13, Ctrl+C, or a Jenkins abort (SIGTERM) rolls back automatically: remove the new
 container, rename `<name>_grf_previous` back, `docker start` it, health-check it, and put the tarballs back.

@@ -9,9 +9,11 @@ from typing import Any
 from grf.deploy.model import ContainerRecipe
 
 
-def run_command(recipe: ContainerRecipe, image: str) -> str:
+def run_command(recipe: ContainerRecipe, image: str, *, operation_id: str | None = None) -> str:
     """``docker run -d`` for ``image`` (``repository:tag``) with exactly the recipe's settings."""
     args = ["docker", "run", "-d", "--name", recipe.name, f"--net={recipe.network}", f"--restart={recipe.restart}"]
+    if operation_id is not None:
+        args += ["--label", f"org.grf.deployment={operation_id}"]
     if recipe.privileged:
         args.append("--privileged")
     if recipe.init:
@@ -45,10 +47,12 @@ def drift(recipe: ContainerRecipe, inspect: dict[str, Any], image: str | None = 
     log = (host.get("LogConfig") or {}).get("Config") or {}
     for key, value in recipe.log_options:
         differs(f"log option {key}", value, log.get(key))
-    mounts = {(m.get("Source"), m.get("Destination")) for m in inspect.get("Mounts") or []}
+    mounts = {(m.get("Source"), m.get("Destination")): m.get("RW") for m in inspect.get("Mounts") or []}
     for mount in recipe.mounts:
         if (mount.source, mount.target) not in mounts:
             found.append(f"mount {mount.source} -> {mount.target} missing")
+        else:
+            differs(f"mount {mount.target} writable", not mount.readonly, mounts[mount.source, mount.target])
     expected_targets = {m.target for m in recipe.mounts}
     for source, destination in sorted(mounts, key=str):
         if destination not in expected_targets:

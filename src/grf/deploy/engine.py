@@ -6,12 +6,12 @@ Steps of ``deploy run`` for one component on one board (docs/DEPLOYMENT.md expla
 2. connect (host key checked) and run the read-only preflight: hold file, Docker, free space, load, companion
    containers, current container, a leftover of an unfinished deployment;
 3. dry run (``deploy plan``) stops here and lists the board commands it would run;
-4. skip with ``UNCHANGED`` when the board already runs exactly this artifact (unless ``--force``);
-5. lock the board; move the component's current tarball to ``previous_builds``; upload, verify the SHA-256 on the
+4. lock the board and read preflight/state/hold under the lock; ``UNCHANGED`` requires product health/stability;
+5. move the component's current tarball to ``previous_builds``; upload, verify the SHA-256 on the
    board;
 6. stop the running container and rename it ``<name>_grf_previous`` (the rollback point);
 7. ``docker load``, ``docker run`` from the recipe, health check, verify image and configuration;
-8. commit: remove the old container, keep ``retention`` earlier images and tarballs, prune dangling images, write the
+8. commit: remove the old container, keep ``retention`` earlier component images and tarballs, write the
    board marker; unlock.
 
 A failure in 6-7 (or Ctrl+C / Jenkins abort) rolls back automatically to the renamed container: ``ROLLED_BACK``.
@@ -83,6 +83,7 @@ class Deployment:
         wd = target.workdir.rstrip("/")
         self.wd, self.prev_dir, self.marker = wd, f"{wd}/{PREVIOUS}", f"{wd}/{MARKERS}/{component.name}.json"
         self.name, self.prev_name = self.recipe.name, self.recipe.name + PREVIOUS_SUFFIX
+        self.operation_id = uuid.uuid4().hex
 
     # ------------------------------------------------------------------ helpers
 
@@ -118,12 +119,19 @@ class Deployment:
         assert self.t is not None
         result = self.t.run(f"docker inspect --type container {q(name)}", check=False)
         if result.returncode != 0:
-            return None
+            if result.returncode == 1 and re.fullmatch(
+                r"(?:Error(?: response from daemon)?: )?No such (?:container|object)(?::[^\n]*)?",
+                result.stderr.strip(),
+            ):
+                return None
+            raise DeployError(self.redact(f"cannot inspect container {name}: {result.stderr or result.stdout}"))
         try:
             data = json.loads(result.stdout)
         except ValueError:
             raise DeployError(f"docker inspect {name} returned no JSON") from None
-        return data[0] if isinstance(data, list) and data else None
+        if not isinstance(data, list) or len(data) != 1 or not isinstance(data[0], dict):
+            raise DeployError(f"docker inspect {name} returned an invalid container object")
+        return data[0]
 
     def state(self, name: str) -> tuple[str, int, str] | None:
         info = self.inspect(name)
@@ -203,6 +211,20 @@ class Deployment:
             if not options.restore:
                 record.artifact = self.resolve(options)
             self.connect()
+            if options.restore and options.dry_run:
+                record.artifact = self.resolve_previous()
+            if options.dry_run:
+                artifact = record.artifact
+                assert artifact is not None
+                info = self.preflight(artifact, options)
+                record.previous = self.installed(info, self.read_marker())
+                record.planned = self.plan(artifact, info)
+                record.outcome, record.message = Outcome.DRY_RUN, "dry run: nothing was changed on the board"
+                return record
+            with self.step("lock the board"):
+                assert self.t is not None
+                lock.acquire(self.t, self.wd, owner, self.site.lock_ttl_s, options.break_stale_lock, self.log)
+                locked = True
             if options.restore:
                 record.artifact = self.resolve_previous()
             artifact = record.artifact
@@ -210,20 +232,15 @@ class Deployment:
             info = self.preflight(artifact, options)
             marker = self.read_marker()
             record.previous = self.installed(info, marker)
-            if options.dry_run:
-                record.planned = self.plan(artifact, info)
-                record.outcome, record.message = Outcome.DRY_RUN, "dry run: nothing was changed on the board"
-                return record
             if not options.force and not options.restore and self.unchanged(artifact, info, marker):
+                with self.step("health check unchanged installation") as health:
+                    health.detail = self.health(fresh=False)
+                record.previous = self.installed(self.inspect(self.name), marker)
                 record.installed = record.previous
                 record.outcome = Outcome.UNCHANGED
                 record.message = f"{self.target.name} already runs {artifact.file_name}; nothing was changed (--force redeploys)"
                 self.log(record.message)
                 return record
-            with self.step("lock the board"):
-                assert self.t is not None
-                lock.acquire(self.t, self.wd, owner, self.site.lock_ttl_s, options.break_stale_lock, self.log)
-                locked = True
             self.change(artifact, info, options)
         except DeployError as err:
             record.outcome, record.message = err.outcome, self.redact(str(err))
@@ -349,7 +366,7 @@ class Deployment:
                   "verify image and configuration"]
         if info:
             steps.append(f"docker rm {self.prev_name}")
-        steps += [f"keep {self.site.retention} earlier {self.recipe.image} images and tarballs; docker image prune -f",
+        steps += [f"keep {self.site.retention} earlier {self.recipe.image} images and tarballs (no global prune)",
                   f"write {self.marker}; rm -r {lock.lock_path(self.wd)}"]
         for line in steps:
             self.log(f"  would run: {line}")
@@ -369,6 +386,7 @@ class Deployment:
         # rollback state
         self.stopped = self.renamed = self.started = False
         self.had_previous = info is not None
+        self.previous_container_id = info.get("Id") if info else None
         try:
             with self.step("keep the current tarball in previous_builds") as s:
                 self.run(f"mkdir -p {q(self.prev_dir)}")
@@ -437,8 +455,8 @@ class Deployment:
             s.detail = loaded
         image_id = self.run(f"docker image inspect --format '{{{{.Id}}}}' {q(loaded)}").strip()
         with self.step(f"docker run {self.name}"):
+            self.run(docker.run_command(self.recipe, loaded, operation_id=self.operation_id), timeout_s=300)
             self.started = True
-            self.run(docker.run_command(self.recipe, loaded), timeout_s=300)
         with self.step("health check") as s:
             s.detail = self.health(fresh=True)
         with self.step("verify image and configuration") as s:
@@ -497,8 +515,17 @@ class Deployment:
         self.log(f"deployment failed ({reason}); rolling back")
         try:
             with self.step("rollback") as s:
-                if self.started or self.renamed:
-                    self.run(f"docker rm -f {q(self.name)}", check=False)
+                current = self.inspect(self.name)
+                if current is not None:
+                    labels = (current.get("Config") or {}).get("Labels") or {}
+                    identifier = current.get("Id")
+                    original = not self.renamed and identifier and identifier == self.previous_container_id
+                    if not isinstance(identifier, str) or not identifier or (
+                        not original and labels.get("org.grf.deployment") != self.operation_id
+                    ):
+                        raise DeployError(f"{self.name} is not owned by this deployment; refusing to remove it")
+                    if not original:
+                        self.run(f"docker rm -f {q(identifier)}")
                 if self.renamed:
                     self.run(f"docker rename {q(self.prev_name)} {q(self.name)}")
                 if self.stopped:
@@ -542,9 +569,6 @@ class Deployment:
                 if self.renamed:
                     self.run(f"docker rm {q(self.prev_name)}")
 
-            def prune() -> None:
-                self.run("docker image prune -f", timeout_s=600)
-
             def remove_tarballs() -> None:
                 for name in self.tarballs(self.prev_dir)[keep:]:
                     self.run(f"rm -f {q(self.prev_dir + '/' + name)}")
@@ -552,7 +576,7 @@ class Deployment:
             actions: list[tuple[str, Callable[[], str | None]]] = [
                 ("write the board marker", write_marker), (f"remove {self.prev_name}", remove_previous),
                 ("remove old images", lambda: self.remove_old_images(running_id, keep)),
-                ("prune dangling images", prune), ("remove old tarballs", remove_tarballs)]
+                ("remove old tarballs", remove_tarballs)]
             for what, action in actions:
                 try:
                     note = action()
