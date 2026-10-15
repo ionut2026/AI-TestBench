@@ -220,6 +220,34 @@ a fingerprint. After actual human review, re-record with the ordinary `grf revie
 command; do not synthesize fingerprints as approval. Agent reviews never count as human approval.
 Changing test/shared-resource content invalidates affected approvals. See [Testing](TESTING.md).
 
+## Product lifecycle and cleanup APIs
+
+`GrfLibrary` exposes `begin_test(started_ms)`, `end_test()`, `set_marks()`, `add_segment(label)`,
+`rig_control()`, `require_rig_control(subcommand, what)` and `ask_operator(instruction, timeout=None)`.
+These are Python extension methods, not automatically exposed Robot keywords. Existing underscored
+implementations remain compatibility fallbacks, so legacy mark/lifecycle overrides still execute.
+New product facades should use the public methods instead of private base helpers.
+`drift.current_review_problem(test, tests, reviews)` provides the strict current-content human-review decision:
+missing fingerprints, pending tests and legacy hash-only approvals cannot approve newly generated content.
+It never records approval or removes pending tags.
+
+`grf.cleanup.CleanupGuard` provides a narrow cleanup contract. Product adapters register named owned-resource
+actions (each returns `None` or raises) and a final-state probe (returns exactly `True` only after verifying
+the approved baseline). `guard.run(actions, verify, publish=...)` attempts **every** action and the probe,
+even after an earlier failure or cancellation, and publishes a `CleanupResult`.
+The result includes every step, `final_state_verified` and `quarantined`. Any failure, malformed successful
+return or publishing error sets quarantine and raises `CleanupError` with `.result`; cancellation is re-raised
+only after remaining cleanup, with the outcome attached as an exception note.
+Cleanup callbacks must implement their own bounded operations; GRF cannot stop a remote action accepted
+before an HTTP/SSH timeout. Never treat process termination as proof of remote final state.
+
+Call `guard.require_ready()` before later tests. A later successful cleanup does **not** automatically
+release quarantine: authorized reconciliation must use `guard.reconcile(verify)` and explicitly verify the
+approved baseline. The guard is in-process only. Product/controller integration must persist the result and
+quarantine across processes, provide resource ownership, time budgets and owner-authorized reconciliation.
+There is no automatic instrument operation, global quarantine registry or distributed lease in this helper.
+Publish failures remain available through `guard.last_result`, not silently ignored.
+
 ## Reservation
 
 A non-parallel tier defaults to `lock = "<tier-name>"`; parallel tiers have no automatic lock unless configured.

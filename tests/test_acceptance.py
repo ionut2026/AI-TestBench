@@ -330,6 +330,10 @@ def test_review_records_fingerprint_and_content_change_invalidates(widget, tmp_p
     legacy = [{k: v for k, v in reviews[0].items() if k != "fingerprint"}]
     assert drift.check_reviews([test], legacy) == []  # drift keeps accepting pre-0.3 reviews ...
     assert "fingerprint" in drift.review_problem(test, [test], legacy, content=True)  # ... the gate does not
+    assert "fingerprint" in drift.current_review_problem(test, [test], legacy)
+    assert drift.current_review_problem(test, [test], reviews) is None
+    test.fingerprint = None
+    assert "no current" in drift.current_review_problem(test, [test], reviews)
 
 
 # ---------------------------------------------------------------- reservation

@@ -72,6 +72,26 @@ def test_lifecycle_and_operator_marks(widget, monkeypatch):
     assert lib._segments == [] and lib._test_started_ms == 2000
 
 
+def test_public_lifecycle_preserves_legacy_overrides_and_new_operator_hooks(widget):
+    class ProductLibrary(GrfLibrary):
+        def _set_marks(self):
+            self._mark = 12
+            return self._mark
+
+        def ask_operator(self, instruction, timeout=None):
+            return f"confirmed: {instruction}"
+
+    lib = ProductLibrary()
+    lib.begin_test(1000)
+    assert lib.set_marks() == 12
+    lib.add_segment("Product action")
+    assert lib._segments == [(12, "Product action")]
+    assert lib.operator_action("Load widget") == "confirmed: Load widget"
+    lib.end_test()
+    lib.add_segment("Outside test")
+    assert len(lib._segments) == 1
+
+
 def test_operator_failure_is_explicit(widget, monkeypatch):
     monkeypatch.setattr(library, "robot_var", lambda name, default: default)
 

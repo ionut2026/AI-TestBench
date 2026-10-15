@@ -56,6 +56,30 @@ class GrfLibrary:
 
     # ================================================================== test bookkeeping
 
+    def begin_test(self, started_ms: int) -> None:
+        """Public lifecycle entry; preserves legacy ``_begin_test`` overrides."""
+        self._begin_test(started_ms)
+
+    def end_test(self) -> None:
+        """Finish bookkeeping; product-owned cleanup must still establish a verified final state."""
+        self._end_test()
+
+    def set_marks(self) -> int | None:
+        """Public stimulus boundary; preserves legacy ``_set_marks`` overrides."""
+        return self._set_marks()
+
+    def add_segment(self, label: str) -> None:
+        self._segment(label)
+
+    def rig_control(self) -> RigControl | None:
+        return self._control()
+
+    def require_rig_control(self, subcommand: str, what: str) -> RigControl:
+        return self._require_control(subcommand, what)
+
+    def ask_operator(self, instruction: str, timeout: str | None = None) -> str:
+        return self._ask_operator(instruction, timeout)
+
     def _begin_test(self, started_ms: int) -> None:
         self._test_started_ms = started_ms
         self._in_test = True
@@ -81,7 +105,7 @@ class GrfLibrary:
         return self._rig_control
 
     def _require_control(self, subcommand: str, what: str) -> RigControl:
-        control = self._control()
+        control = self.rig_control()
         if control is None:
             raise AssertionError(f"Cannot {what} in tier {self._tier or '?'}: no rig control configured "
                                  f"({project.current().env('RIG_CONTROL')})")
@@ -100,15 +124,15 @@ class GrfLibrary:
         ``needs:operator``). Stimulus: waits after it look at what happened from the moment of the request. Fails
         if the operator reports a failure or does not confirm within ``timeout`` (default ``${OPERATOR_TIMEOUT}``).
         Mode from ``${OPERATOR}`` / ``<ENV_PREFIX>_OPERATOR``: console, dialog or none."""
-        self._set_marks()
-        return self._ask_operator(instruction, timeout)
+        self.set_marks()
+        return self.ask_operator(instruction, timeout)
 
     def _operator_mode(self) -> str:
         return operator_prompt.operator_mode(robot_var("${OPERATOR}", "") or None)
 
     def _ask_operator(self, instruction: str, timeout: str | None) -> str:
         timeout = timeout or robot_var("${OPERATOR_TIMEOUT}", "300s")
-        self._segment(f"Operator: {instruction}")
+        self.add_segment(f"Operator: {instruction}")
         logger.info(f"Operator action: {instruction}")
         try:
             answer = operator_prompt.ask_operator(instruction, self._operator_mode(), timestr_to_secs(timeout))

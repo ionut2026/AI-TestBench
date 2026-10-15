@@ -360,7 +360,7 @@ def evaluate(request: RunRequest, *, tests: list[dict], meta: dict, known: list,
     observed)``: the plugin's version comparison."""
     from grf import __version__
     from grf.pipeline.drift import check as drift_check
-    from grf.pipeline.drift import require_unique_tests, review_problem, test_key
+    from grf.pipeline.drift import current_review_problem, require_unique_tests, test_key
 
     today = today or dt.date.today()
     checks: list[Check] = []
@@ -473,7 +473,7 @@ def evaluate(request: RunRequest, *, tests: list[dict], meta: dict, known: list,
         if sorted(ref.tags) != sorted(t["tags"]):
             problems.append(f"{t['name']}: tags differ between the run and the current suites")
             continue
-        reason = review_problem(ref, known, reviews, content=True)
+        reason = current_review_problem(ref, known, reviews)
         if reason:
             problems.append(f"{t['name']}: {reason}")
     _check(checks, "reviews", problems, "every executed test has a current human approval (spechash and content)")

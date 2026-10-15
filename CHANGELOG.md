@@ -6,6 +6,12 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Expose public Robot-library lifecycle/rig/operator Python methods and a strict current-content review
+  decision API, preserving legacy overrides without requiring consumer imports of private helpers.
+- Add `CleanupGuard`: attempt all owned cleanup actions plus a final-state probe, aggregate failures,
+  preserve cancellation and quarantine unresolved environments. Later tests require explicit verified
+  reconciliation; products/controllers own persistence, bounded callbacks and instrument authorization.
+
 - Own neutral catalog/brief/drift/hash-migration regressions in GRF rather than relying on consumer tests;
   use synthetic project/plugin fixtures with no product protocols, service or instrument dependencies.
 

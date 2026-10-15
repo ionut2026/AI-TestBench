@@ -196,6 +196,16 @@ def check_reviews(tests: list[TestRef], reviews: list[dict]) -> list[dict]:
     return out
 
 
+def current_review_problem(test: TestRef, tests: list[TestRef], reviews: list[dict]) -> str | None:
+    """Strict public review decision for generators/gates; legacy hash-only records cannot approve content."""
+    require_unique_tests(tests)
+    if test.pending:
+        return "tagged review:pending"
+    if not test.fingerprint:
+        return "no current test content fingerprint"
+    return review_problem(test, tests, reviews, content=True)
+
+
 def agent_reviews(tests: list[TestRef], reviews: list[dict]) -> list[dict]:
     """The latest agent review of each test for its current ``spechash`` value(s): information for the human
     reviewer, never a review."""
