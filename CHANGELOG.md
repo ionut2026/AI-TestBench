@@ -6,6 +6,10 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Require the deployment extra for generic developer/CI checks so default Paramiko backend tests never
+  silently skip. Check Python 3.11/3.12 on Windows/Linux and enforce a 75% combined line/branch coverage floor.
+  Keep pytest/coverage caches under `results`; correct the historical 0.2.0 release-status contradiction.
+
 - Validate catalog, review-ledger and deployment-record schemas/nested values at file-load boundaries;
   report malformed input with its path. Preserve explicit legacy catalog/review migration behavior
   without weakening strict acceptance or deployment-binding policies.
@@ -195,8 +199,7 @@ Released as `v0.2.0`; the next release remains a maintainer decision after revie
   or guesses a legacy checkout. Malformed/incomplete/pagination responses fail explicitly, and failed
   initialization closes transports. Generic installs and demos need no MCP SDK.
 
-These changes are not yet a tagged release. Consumers must review these behavior changes and run their
-authorized regression before adopting a new approved tag.
+Consumers must review these behavior changes and run their authorized regression before adopting `v0.2.0`.
 
 Migrating a product to 0.2.0:
 

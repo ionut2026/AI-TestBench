@@ -302,7 +302,7 @@ class FakeSsh:
 
 
 def test_paramiko_policies_and_password(tmp_path):
-    paramiko = pytest.importorskip("paramiko")
+    import paramiko
     fake = FakeSsh()
     t = target(password_env="BOARD_PW", known_hosts=str(tmp_path / "ssh" / "kh"))
     ParamikoTransport(t, {"BOARD_PW": "pw123"}, client_factory=lambda: fake)

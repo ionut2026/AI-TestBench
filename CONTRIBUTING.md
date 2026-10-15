@@ -40,6 +40,9 @@ permissions or credentials, trigger Jenkins or operate instruments as part of th
 ## Gates
 
 For a Windows source checkout, `.\scripts\setup.ps1` installs the development environment before these gates.
+Install `.[dev,deploy]` for the full generic checks, including the default SSH backend.
+CI checks Python 3.11/3.12 on Windows/Linux and enforces the coverage floor documented in
+[Testing](docs/TESTING.md#core-validation-windows); caches and coverage data belong under `results`.
 It is an explicit post-clone action, not a Git hook; see [installation](docs/GETTING-STARTED.md#4-prepare-a-safe-practice-project).
 Keep setup scoped to this checkout, preserve existing environments, and report install/check failures.
 

@@ -37,10 +37,15 @@ grf = ["py.typed", "templates/*.tpl"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+cache_dir = "results/.pytest_cache"
 
 [tool.coverage.run]
 source = ["grf"]
 branch = true
+data_file = "results/.coverage"
+
+[tool.coverage.report]
+fail_under = 75
 
 [tool.ruff]
 line-length = 120

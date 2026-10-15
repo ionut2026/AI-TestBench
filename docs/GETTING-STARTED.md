@@ -364,7 +364,8 @@ Setup does the following:
 2. Creates `.venv`, a **virtual environment** holding this project's Python packages rather than installing
    them globally. On subsequent runs it reuses that environment without deleting it. An incomplete `.venv`
    causes an error instead of being overwritten.
-3. Installs GRF, Robot Framework, the parallel-test runner and development tools declared in `pyproject.toml`.
+3. Installs GRF, Robot Framework, the parallel-test runner, SSH backend and development tools declared in
+   `pyproject.toml`. Installing SSH support does not connect to or change an instrument.
 4. Checks installed dependency compatibility and prints the GRF/Robot versions and Robot's actual file location.
 
 Expect `Setup complete` at the end. For this Windows checkout, Robot's code is normally installed under
@@ -399,12 +400,13 @@ disable security policy. The equivalent manual installation is:
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python -m pip install -e ".[dev]"
+.\.venv\Scripts\python -m pip install -e ".[dev,deploy]"
 .\.venv\Scripts\python -m pip check
 ```
 
-`pip` installs packages; `-e` means an editable installation using this checkout's source. `.[dev]` means
-the current project plus development tools. Using the full `.venv` Python path avoids needing to activate it.
+`pip` installs packages; `-e` means an editable installation using this checkout's source. `.[dev,deploy]`
+means the current project plus development tools and the SSH backend needed by the framework's own tests.
+Using the full `.venv` Python path avoids needing to activate it.
 
 ### Create the practice product
 

@@ -99,19 +99,24 @@ This prevents an empty analysis from looking successful.
 
 ## Core validation (Windows)
 
-From the assigned GRF checkout root, following the user's selected Git workflow, after installing `.[dev]`:
+From the assigned GRF checkout root, following the user's selected Git workflow, after installing `.[dev,deploy]`:
+the deployment extra is needed to exercise the default SSH backend without silently skipped tests.
 
 On Windows, `.\scripts\setup.ps1` automates that installation; see the
 [beginner installation guide](GETTING-STARTED.md#4-prepare-a-safe-practice-project).
 
 ```powershell
 .\.venv\Scripts\ruff check src tests
-.\.venv\Scripts\mypy
+.\.venv\Scripts\mypy --cache-dir results\mypy-cache
 .\.venv\Scripts\python -m pytest -q --basetemp results\pytest --cov=grf --cov-report=term-missing
 .\.venv\Scripts\python -m pip wheel --no-deps -w dist .
 ```
 
 Pytest uses synthetic fixtures and temporary products; no product service, live RV&S or instrument is needed.
+Pytest's cache and coverage data default to `results`. CI checks Python 3.11 and 3.12 on both Windows and Linux,
+installs the deployment extra, and enforces 75% combined line/branch coverage. Coverage is an in-process
+regression floor, not proof of all failure paths: subprocess-only smoke checks are deliberately separate.
+The reusable workflow's optional `python-version` input selects one version when a caller explicitly needs it.
 Regression tests cover configuration, capabilities, version pins, timing boundaries, human reviews, reporting,
 mutation orchestration, nested resources, MCP response contracts and a generated product's real CLI/Robot flow,
 including parallel pabot execution and mock non-evidence metadata.

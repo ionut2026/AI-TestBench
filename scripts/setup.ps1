@@ -64,8 +64,8 @@ try {
             Write-Host "Reusing the project's Python environment in $venv"
         }
         Invoke-CheckedPython $venvPython @("-c", "import pathlib, sys; expected = pathlib.Path(sys.argv[1]).resolve(); sys.exit('The interpreter is not using the expected virtual environment; refusing installation.') if pathlib.Path(sys.prefix).resolve() != expected or sys.prefix == sys.base_prefix else None", $venv)
-        Write-Host "Installing GRF, Robot Framework and development tools (internet access may be needed)..."
-        Invoke-CheckedPython $venvPython @("-m", "pip", "install", "-e", ".[dev]")
+        Write-Host "Installing GRF, Robot Framework, SSH backend and development tools (internet access may be needed)..."
+        Invoke-CheckedPython $venvPython @("-m", "pip", "install", "-e", ".[dev,deploy]")
         Invoke-CheckedPython $venvPython @("-m", "pip", "check")
         Invoke-CheckedPython $venvPython @("-c", "from importlib.metadata import version; import grf, robot; print('GRF:', version('general-robot-framework')); print('Robot Framework:', robot.__version__); print('Robot Framework location:', robot.__file__)")
     }
