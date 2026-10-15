@@ -39,8 +39,14 @@ SKILLS = (
     "doctor-tier",
     "product-plugin",
     "template-upgrade",
+    "deploy-build",
 )
 TEMPLATES.update({f"skill-{name}": f".github/skills/grf-{name}/SKILL.md" for name in SKILLS})
+# Only with `grf init --with-deploy`: the site config example and the Jenkins pipeline (docs/DEPLOYMENT.md).
+DEPLOY_TEMPLATES = {
+    "deploy-config": "robot/environments/deploy.example.toml",
+    "jenkinsfile-deploy": "jenkins/Jenkinsfile.deploy",
+}
 
 
 def add_parser(sub: argparse._SubParsersAction) -> None:
@@ -48,9 +54,11 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     cmd.add_argument("destination", type=Path)
     cmd.add_argument("--name", default="Demo Product", help="display name of the product")
     cmd.add_argument("--spec-prefix", default="SPEC", help="specification tag prefix (letters, digits, underscores)")
+    cmd.add_argument("--with-deploy", action="store_true",
+                     help="also create a deployment site config example and a Jenkins deployment pipeline")
 
 
-def init_project(destination: Path, name: str, spec_prefix: str) -> Path:
+def init_project(destination: Path, name: str, spec_prefix: str, with_deploy: bool = False) -> Path:
     """Refuse nonempty destinations; never overwrite a project's files."""
     if not name.strip() or any(ord(c) < 32 for c in name):
         raise ValueError("name must be nonempty and contain no control characters")
@@ -71,7 +79,8 @@ def init_project(destination: Path, name: str, spec_prefix: str) -> Path:
         "__SPEC_HASH__": spec_hash(html_to_text(fixture["specifications"][0]["Text"]))[:8],
     }
     rendered = {}
-    for template, relative in TEMPLATES.items():
+    chosen = {**TEMPLATES, **(DEPLOY_TEMPLATES if with_deploy else {})}
+    for template, relative in chosen.items():
         text = templates.joinpath(template + ".tpl").read_text(encoding="utf-8")
         for token, value in replacements.items():
             text = text.replace(token, value)
@@ -87,11 +96,14 @@ def init_project(destination: Path, name: str, spec_prefix: str) -> Path:
 
 def cmd_init(args: argparse.Namespace) -> int:
     try:
-        root = init_project(args.destination, args.name, args.spec_prefix)
+        root = init_project(args.destination, args.name, args.spec_prefix, args.with_deploy)
     except (ValueError, OSError) as err:
         print(f"grf init: {err}", file=sys.stderr)
         return 2
     print(f"Created product starter in {root}. See README.md for installation and the mock demo.")
+    if args.with_deploy:
+        print("Deployment templates: robot/environments/deploy.example.toml (copy it OUTSIDE the repository) and "
+              "jenkins/Jenkinsfile.deploy; the plugin must define deploy_components(). Guide: docs/DEPLOYMENT.md.")
     return 0
 
 

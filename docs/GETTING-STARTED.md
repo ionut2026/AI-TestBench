@@ -175,6 +175,28 @@ one. This keeps product runs predictable: updating GRF here does not automatical
 During local development a team can install this checkout directly; for controlled runs it selects an approved
 release. See [Configuration](CONFIGURATION.md) and [Contributing](../CONTRIBUTING.md) for the detailed policy.
 
+### What does deploying a build mean?
+
+Before testing, the instrument must run the build you want to test. **Deploying** means installing a new build
+of a product application on the instrument. On SMM, the applications appSMM and STI run as **containers**
+(isolated, packaged programs started by Docker) on small computers inside the instrument called **ARM boards**.
+**Jenkins**, the company build server, compiles each new version and keeps the result as a downloadable
+**artifact**: an image tarball, a `.tar.gz` file holding the whole container image.
+
+`grf deploy` does what a person would otherwise do by hand: download the artifact from Jenkins, copy it to the
+board, stop the old container, start the new one, and check it works. If the new one does not work, it puts the
+old one back automatically (**rollback**). It writes a record of what was installed so the test report can show
+which build was tested. Example, a dry run that changes nothing:
+
+```powershell
+grf deploy plan --component app
+```
+
+GRF contains only the generic steps. Each product says which applications it has (SMM: appSMM and STI); the
+site's Jenkins agent holds the board addresses and passwords, never a repository. **Deploying changes the
+instrument, so it needs the instrument owner's authorization**; normally the owner starts the Jenkins
+deployment job. Agents only explain and plan. See [Deploying builds](DEPLOYMENT.md).
+
 ### What GRF does not do
 
 GRF does not invent specifications, automatically guarantee test coverage, understand every product's
@@ -429,8 +451,8 @@ You can ask for a line-by-line explanation of any diagnostic or test file.
 Read [Architecture](ARCHITECTURE.md) to understand the folder structure, then
 [Configuration](CONFIGURATION.md) to understand `grf.toml`. Use [Testing](TESTING.md) as the reference for
 review, evidence and advanced validation. [Repositories](REPOSITORIES.md) explains where product and server
-code belong.
+code belong. [Deploying builds](DEPLOYMENT.md) explains how a Jenkins build is put on the instrument's boards.
 
-You do not need to learn mutation testing, parallel workers, SSH rig control or CI before running your first test.
+You do not need to learn mutation testing, parallel workers, SSH rig control, deployment or CI before running your first test.
 **CI** means continuous integration: automated checks run by GitHub when code changes. It checks the framework,
 but it cannot replace authorized real-product testing or a human's review.

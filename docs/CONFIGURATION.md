@@ -32,7 +32,7 @@ spec_prefix = "SPEC"
 plugin = "product_automation.plugin:DemoPlugin"
 
 [framework]
-version = "0.1.0"
+version = "0.2.0"
 
 [paths]
 scope = "catalog/demo.scope.toml"
@@ -70,6 +70,7 @@ The starter supplies the referenced files and plugin. See `examples\demo\grf.tom
 | `[catalog]` | Optional `message_pattern` used by catalog enrichment |
 | `[mutation]` | Optional `faults_env` and supported `fault_actions`; implementations belong to the product |
 | `[texts]` | Product-specific report labels such as `non_evidence` and `nospec_skip` |
+| `[deploy]` | Optional `order` (component list) and `default_branch` for `grf deploy`; hosts and credentials belong in the site config ([Deploying builds](DEPLOYMENT.md)) |
 
 Declare `evidence = false` explicitly for every mock/simulator tier. Unknown or missing report tiers are
 non-evidence. Exact tier names take priority; legacy metadata with a dash/space suffix may resolve to a known
@@ -93,7 +94,8 @@ what = "resets the product"
 
 ## Plugins and libraries
 
-`ProductPlugin` subclasses may implement `known_messages`, `brief_sections`, `doctor_class` and `add_commands`.
+`ProductPlugin` subclasses may implement `known_messages`, `brief_sections`, `doctor_class`, `add_commands` and
+`deploy_components` (the deployable applications; see [Deploying builds](DEPLOYMENT.md)).
 Use hooks for product behavior, not static configuration. Product keyword libraries extend `GrfLibrary` and
 own their connections, lifecycle, state isolation and assertions. Timing keywords require finite timestamps;
 invalid values such as NaN cannot silently satisfy a timing requirement.
@@ -104,6 +106,11 @@ without a shell. `<ENV_PREFIX>_RIG_CONTROL_TIMEOUT` must be finite and positive 
 Invalid operator modes fail explicitly rather than silently becoming `none`. `grf.rig_ssh` provides an optional configured
 SSH implementation; site credentials stay outside repositories. Capability discovery may contact a rig, and
 `doctor --deep` may invoke product code: both are owner-authorized product activities.
+
+Deployment reads its site config from `<ENV_PREFIX>_DEPLOY_CONFIG` (a file outside the repository), the optional
+Jenkins login from `JENKINS_USER`/`JENKINS_TOKEN` and records for reports from `GRF_DEPLOYMENT_RECORD`; see
+[Deploying builds](DEPLOYMENT.md#environment-variables). Install `general-robot-framework[deploy]` for the default
+SSH client.
 
 ## External Windchill integration
 

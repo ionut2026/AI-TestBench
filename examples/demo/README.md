@@ -62,6 +62,15 @@ The test starts with `review:pending`: passing the mock is not human approval.
 5. Pin GRF to an approved release for CI, keeping the dependency and `[framework] version` synchronized.
    Validate your adapter before upgrades; mock results alone do not prove product conformance.
 
+## Deploy builds to a board (optional)
+
+If your product's builds come from Jenkins as Docker image tarballs, GRF can put a build on the instrument board,
+check that it runs and roll back automatically: `grf deploy`. The plugin declares what can be deployed in
+`deploy_components()`; this mock starter declares nothing. `grf init --with-deploy` also creates
+`robot\environments\deploy.example.toml` (copy it outside the repository) and `jenkins\Jenkinsfile.deploy`.
+Deploying changes the instrument and needs the instrument owner's authorization. See `docs\DEPLOYMENT.md` in
+your GRF checkout.
+
 ## Maintain the project
 
 Update all relevant README, authoring rules and configuration documentation after every code or suite change.

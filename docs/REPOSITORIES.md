@@ -36,3 +36,13 @@ See [Configuration](CONFIGURATION.md#external-windchill-integration) for setup.
 Products pin an approved GRF release independently. A sibling editable install is useful for coordinated local
 development but is not a source-provenance guarantee. Core validation does not establish product compatibility:
 the product owner must run its own authorized regression before upgrading. See [Contributing](../CONTRIBUTING.md).
+
+## Deployment ownership
+
+Deploying builds to instrument boards is split three ways (see [Deploying builds](DEPLOYMENT.md)):
+
+| Owner | Owns |
+|---|---|
+| GRF | The generic `deploy` engine, rollback, lock, record, report section and starter templates; no hosts or product names |
+| Product repository (SMM) | Its components (Jenkins jobs, artifact patterns, container recipes, health checks), `[deploy]` order and its Jenkins pipeline |
+| Site (Jenkins agent) | The site config, `known_hosts` and credentials, outside every repository |

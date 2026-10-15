@@ -14,6 +14,8 @@ before a long run.
 2. Run `grf doctor --tier <tier>` for static checks. Exit code 1 means at least one FAIL must be fixed.
 3. Explain each PASS, WARN and FAIL with the next safe diagnostic step.
 4. Use `--deep` only when the product project documents what it starts or connects to and the run is safe.
+5. `--deploy` adds deployment readiness checks (site config, credentials present, Jenkins, host keys); see the
+   `grf-deploy-build` skill. `--deploy --deep` logs in to the board.
 
 ## Safety
 

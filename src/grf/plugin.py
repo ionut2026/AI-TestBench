@@ -8,6 +8,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from grf.deploy.model import Component
     from grf.doctor import Doctor
     from grf.project import Project
 
@@ -34,3 +35,7 @@ class ProductPlugin:
     def add_commands(self, sub: argparse._SubParsersAction) -> dict[str, Command]:
         """Adds product commands to the CLI; returns command name -> handler."""
         return {}
+
+    def deploy_components(self) -> list[Component]:
+        """What ``<cli> deploy`` can put on the product's boards (docs/DEPLOYMENT.md). Default: nothing."""
+        return []

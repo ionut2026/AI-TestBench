@@ -241,6 +241,35 @@ def _badge(verdict: str) -> str:
     return f"<span class='v' style='background:{COLORS.get(verdict, '#fff')}'>{html.escape(verdict)}</span>"
 
 
+GOOD_DEPLOY = ("DEPLOYED", "UNCHANGED")
+
+
+def _deployments_html(records: list[dict]) -> str:
+    """'Deployed builds' section: which Jenkins build was on which board when these tests ran."""
+    if not records:
+        return ""
+    e = html.escape
+    rows = []
+    bad = []
+    for d in records:
+        a = d.get("artifact") or {}
+        outcome = str(d.get("outcome", "?"))
+        if outcome.upper() not in GOOD_DEPLOY:
+            bad.append(f"{d.get('component')} ({outcome})")
+        build = f"#{a.get('build_number')}" if a.get("build_number") is not None else a.get("source") or "-"
+        rows.append(
+            f"<tr><td>{e(str(d.get('component')))}</td><td>{e(str(d.get('target')))}</td>"
+            f"<td>{e(str(a.get('version') or '-'))}</td><td>{e(str(a.get('branch') or '-'))} {e(build)}</td>"
+            f"<td><small>{e(str(a.get('file_name') or '-'))}<br>sha256 {e(str(a.get('sha256') or '-')[:16])}</small></td>"
+            f"<td>{e(outcome)}</td><td>{e(str(d.get('finished') or d.get('started') or '-'))}</td></tr>")
+    warn = ""
+    if bad:
+        warn = ("<div class='warn'><b>Deployment did not finish cleanly:</b> " + e(", ".join(bad))
+                + ". The tests may not have run against the intended build.</div>")
+    return (f"<h2>Deployed builds</h2>{warn}<table><tr><th>Component</th><th>Target</th><th>Version</th>"
+            f"<th>Branch / build</th><th>Artifact</th><th>Outcome</th><th>When</th></tr>{''.join(rows)}</table>")
+
+
 def render_html(report: dict) -> str:
     e = html.escape
     p = project.current()
@@ -321,6 +350,7 @@ def render_html(report: dict) -> str:
     for key in ("stale", "orphan", "untagged", "nohash", "unrecorded", "uncovered", "stateChanged", "linksChanged", "retired", "suspect", "pending"):
         if drift.get(key):
             drift_html += f"<h3>{e(key)} ({len(drift[key])})</h3><ul>" + "".join(f"<li><code>{e(json.dumps(i, ensure_ascii=False))}</code></li>" for i in drift[key]) + "</ul>"
+    deploy_html = _deployments_html(report.get("deployments") or [])
     scope = report.get("scope") or {}
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>{e(p.name)} traceability: {e(str(scope.get('name')))} ({e(report['tier'])})</title>
 <style>
@@ -340,6 +370,7 @@ table.meta{{width:auto}}
 <tr><th>Report generated</th><td>{e(report['generatedAt'])}</td></tr>
 <tr><th>Tests</th><td>{e(json.dumps(report['totals']))}</td></tr>
 <tr><th>Coverage</th><td>{cov['automated']} of {cov['testable']} testable specifications automated, {cov['passed']} passed, {cov.get('verified', 0)} verified (passed and reviewed)</td></tr></table>
+{deploy_html}
 <p>{summary}</p>
 <h2>Specifications</h2>
 <table><tr><th>Verdict</th><th>Review</th><th>Spec</th><th>Text</th><th>Tests</th><th>Links / notes</th></tr>{''.join(spec_rows)}</table>
@@ -350,9 +381,11 @@ table.meta{{width:auto}}
 </body></html>"""
 
 
-def write_report(catalog: dict, output_xml: Path, out_dir: Path, known: list[TestRef], reviews: list[dict] | None = None) -> dict:
+def write_report(catalog: dict, output_xml: Path, out_dir: Path, known: list[TestRef], reviews: list[dict] | None = None,
+                 deployments: list[dict] | None = None) -> dict:
     tests, meta = read_results(output_xml)
     report = build_report(catalog, tests, meta, known, reviews)
+    report["deployments"] = list(deployments or [])
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "traceability.json").write_text(json.dumps(report, indent=1, ensure_ascii=False), encoding="utf-8")
     (out_dir / "traceability.html").write_text(render_html(report), encoding="utf-8")

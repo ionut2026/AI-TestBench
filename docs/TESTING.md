@@ -93,6 +93,11 @@ metadata, incomplete environments and failed installation commands without downl
 They also verify that a nonexistent explicit Python path fails without invoking PowerShell command discovery.
 Skill tests check frontmatter, required safety rules, starter registration, agent skill references and that GRF's
 shared skills match `grf init` output. See [Copilot skills](SKILLS.md#change-a-skill).
+Deployment tests (`test_deploy_engine.py`, `test_deploy_parts.py`) use a simulated board (`tests\deploy_fakes.py`),
+a local HTTP server instead of Jenkins and a fake SSH client: success, unchanged, dry run, hold, lock, preflight,
+checksum, every rollback point, rollback failure, restore, redaction, config validation, CLI exit codes, report and
+starter. They need no board, Jenkins or network, and passing them is not evidence that a real board deploys.
+See [Deploying builds](DEPLOYMENT.md).
 
 ## Wheel-only smoke run
 

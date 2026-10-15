@@ -31,6 +31,11 @@ Never regenerate goldens just to make a failure go away: explain and review an i
 Product and hardware runs need the owner's authorization; core changes do not authorize consumer operations.
 Do not publish data to RV&S or introduce archive/history/publishing features excluded from the approved scope.
 
+Deployment code (`src\grf\deploy`) must stay generic: no host names, product names or credentials in core.
+Never weaken host-key, TLS, checksum, lock or rollback checks to make something work; test new behavior with the
+simulated board (`tests\deploy_fakes.py`), and never run a real deployment as part of validating a core change.
+See [Deploying builds](docs/DEPLOYMENT.md).
+
 ## Compatibility and releases
 
 Record user-visible changes in CHANGELOG. Keep public keyword names, configuration and CLI behavior stable

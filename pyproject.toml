@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "general-robot-framework"
-version = "0.1.0"
+version = "0.2.0"
 description = "General Robot Framework: the generic base of product test automation frameworks (project config, CLI, RV&S pipeline, rig control, Robot library base)"
 requires-python = ">=3.11"
 dependencies = [
@@ -13,6 +13,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+deploy = [
+  "paramiko>=3.4",
+]
 windchill = [
   "mcp>=1.2",
 ]

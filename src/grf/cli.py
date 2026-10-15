@@ -11,9 +11,14 @@
   grf run      [--tier <tier>] [--operator none|console|dialog] [--fail-on new|any|none] [--processes N] [robot args...]
                                                             run suites (tests needing a missing capability are excluded),
                                                             then the traceability report
-  grf doctor   [--tier <tier>] [--operator ...] [--deep]    check that a tier can run (the project's checks, then the generic ones)
-  grf report   --output results/.../output.xml              traceability report for an existing run
+  grf doctor   [--tier <tier>] [--operator ...] [--deep] [--deploy]
+                                                            check that a tier can run (the project's checks, then the generic ones);
+                                                            --deploy also checks that this machine can deploy (docs/DEPLOYMENT.md)
+  grf report   --output results/.../output.xml [--deployment deployment.json]
+                                                            traceability report for an existing run
   grf mutate   [--mutant <id> ...] [--min-score 0.9]          mutation testing of the suites on the mock product
+  grf deploy   components|builds|plan|run|status|rollback   put a Jenkins build of a product component on its board
+                                                            (only products whose plugin defines components; docs/DEPLOYMENT.md)
   (plus the commands of the project's plugin, e.g. SMM: matrix, service)
 
 The project is the nearest grf.toml (or GRF_PROJECT); see grf.project.
@@ -166,25 +171,35 @@ def cmd_lint(args) -> int:
     return 1 if violations else 0
 
 
-def _report(catalog_path: Path, output_xml: Path, out_dir: Path, suites: list[Path], reviews: Path | None = None) -> dict:
+def _report(catalog_path: Path, output_xml: Path, out_dir: Path, suites: list[Path], reviews: Path | None = None,
+            deployments: list[str] | None = None) -> dict:
+    from grf.deploy.cli import record_paths
+    from grf.deploy.record import load_records
     from grf.pipeline.drift import collect_tests, load_reviews
     from grf.pipeline.ingest import load_catalog
     from grf.pipeline.report import write_report
 
     reviews = reviews or project.current().path("reviews")
-    report = write_report(load_catalog(catalog_path), output_xml, out_dir, collect_tests(suites), load_reviews(reviews))
+    records = load_records(record_paths(deployments))
+    report = write_report(load_catalog(catalog_path), output_xml, out_dir, collect_tests(suites), load_reviews(reviews),
+                          deployments=records)
     print(f"Traceability report: {out_dir / 'traceability.html'}")
     print("Specifications: " + ", ".join(f"{k} {v}" for k, v in report["summary"].items() if v))
     print(f"Verified (passed and human-reviewed): {report['coverage']['verified']}; "
           f"tests without human review: {report['review']['unreviewed']} of {report['review']['tests']}")
     if not report["productEvidence"]:
         print("NOTE: mock tier - the verdicts check the framework, they are not evidence about the product.")
+    for d in report.get("deployments", []):
+        artifact = d.get("artifact") or {}
+        print(f"Deployed build: {d.get('component')} {artifact.get('version') or artifact.get('file_name')} on "
+              f"{d.get('target')} ({d.get('outcome')})")
     return report
 
 
 def cmd_report(args) -> int:
     output = Path(args.output)
-    _report(_catalog_path(args), output, Path(args.outdir) if args.outdir else output.parent, _suites(args), Path(args.reviews))
+    _report(_catalog_path(args), output, Path(args.outdir) if args.outdir else output.parent, _suites(args), Path(args.reviews),
+            args.deployment)
     return 0
 
 
@@ -285,7 +300,7 @@ def cmd_run(args, robot_args: list[str]) -> int:
         rc = run_cli(argv, exit=False)
     output = out_dir / "output.xml"
     if output.exists() and not args.no_report:
-        _report(_catalog_path(args), output, out_dir, _suites(args), Path(args.reviews))
+        _report(_catalog_path(args), output, out_dir, _suites(args), Path(args.reviews), args.deployment)
     return _exit_code(rc, output, args.fail_on)
 
 
@@ -351,6 +366,11 @@ def cmd_doctor(args) -> int:
     from grf.doctor import format_checks, run_doctor
 
     checks = run_doctor(args.tier, args.operator, args.deep)
+    if args.deploy:
+        from grf.deploy.checks import deploy_checks
+
+        p = project.current()
+        checks += deploy_checks(p.plugin.deploy_components(), args.deploy_config, p.env_prefix, p.root, args.deep)
     print(format_checks(checks))
     failed = [c.name for c in checks if c.status == "FAIL"]
     print(f"{args.tier} tier: " + (f"NOT READY ({', '.join(failed)})" if failed else "ready"))
@@ -413,9 +433,13 @@ def _main(argv: list[str] | None = None) -> int:
     cmd.add_argument("--no-report", action="store_true")
     cmd.add_argument("--processes", type=int, default=1,
                      help="run suites in N parallel processes with pabot (only tiers configured with parallel = true)")
+    cmd.add_argument("--deployment", action="append",
+                     help="deployment record (deployment.json or its folder) to show as 'Deployed builds' in the report; "
+                          "repeatable (also: GRF_DEPLOYMENT_RECORD)")
     cmd = sub.add_parser("report", allow_abbrev=False, help="traceability report for an existing output.xml")
     cmd.add_argument("--output", required=True)
     cmd.add_argument("--outdir")
+    cmd.add_argument("--deployment", action="append", help="deployment record to show in the report (repeatable)")
     cmd = sub.add_parser("mutate", allow_abbrev=False, help=f"mutation testing: inject defects into the mock {p.product} and check that the tests notice")
     mock_tiers = [t.name for t in p.tiers.values() if not t.evidence]
     cmd.add_argument("--tier", choices=mock_tiers, default=mock_tiers[0] if mock_tiers else None,
@@ -430,6 +454,13 @@ def _main(argv: list[str] | None = None) -> int:
     cmd.add_argument("--operator", choices=OPERATOR_MODES, default=_default_operator())
     cmd.add_argument("--deep", action="store_true", help="also start the environment and talk to the product (see the project's doctor; "
                                                        "on a rig this may connect to the instrument)")
+    cmd.add_argument("--deploy", action="store_true", help="also check that this machine can deploy (site config, credentials "
+                                                         "present, Jenkins, host keys; with --deep: ssh + docker version)")
+    cmd.add_argument("--deploy-config", help=f"site deployment config (default: ${p.env('DEPLOY_CONFIG')})")
+    from grf.deploy.cli import add_parser as add_deploy_parser
+    from grf.deploy.cli import cmd_deploy
+
+    add_deploy_parser(sub, p.env_prefix)
     plugin_commands = p.plugin.add_commands(sub)
 
     args, extra = parser.parse_known_args(argv)
@@ -438,7 +469,8 @@ def _main(argv: list[str] | None = None) -> int:
     if args.command == "run":
         return cmd_run(args, extra)
     commands = {"init": cmd_init, "ingest": cmd_ingest, "briefs": cmd_briefs, "drift": cmd_drift, "accept": cmd_accept, "migrate-hashes": cmd_migrate_hashes,
-                "review": cmd_review, "lint": cmd_lint, "report": cmd_report, "mutate": cmd_mutate, "doctor": cmd_doctor}
+                "review": cmd_review, "lint": cmd_lint, "report": cmd_report, "mutate": cmd_mutate, "doctor": cmd_doctor,
+                "deploy": lambda a: cmd_deploy(a, p)}
     return {**commands, **plugin_commands}[args.command](args)
 
 

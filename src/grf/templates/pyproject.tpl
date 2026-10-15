@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = __PACKAGE_JSON__
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["general-robot-framework==0.1.0"]
+dependencies = ["general-robot-framework==0.2.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

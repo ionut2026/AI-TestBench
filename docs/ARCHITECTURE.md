@@ -24,6 +24,7 @@ GeneralRobotFramework\
     TESTING.md                  authoring, evidence and validation
     SKILLS.md                   Copilot skill usage and maintenance
     REPOSITORIES.md              repository boundaries and data ownership
+    DEPLOYMENT.md               deploying Jenkins builds to instrument boards
   examples\demo\                synthetic product generated from the starter
   scripts\setup.ps1             explicit Windows dependency/environment setup after cloning
   src\grf\
@@ -41,6 +42,12 @@ GeneralRobotFramework\
       drift.py, lint.py          traceability, review and Robot authoring gates
       mutation.py               mock fault orchestration
       report.py                 Robot result/catalog join and evidence reporting
+    deploy\                     generic build deployment (docs\DEPLOYMENT.md)
+      model.py, config.py        components/recipes, outcomes, site config validation
+      jenkins.py                build resolution and verified download
+      transport.py, docker.py    SSH (paramiko/OpenSSH), docker commands and drift
+      engine.py, lock.py         deployment steps, rollback, board lock/hold
+      record.py, checks.py, cli.py  deployment record, doctor --deploy, `deploy` command
   tests\                        isolated unit, contract and starter end-to-end tests
   README.md                     entry point, installation and guide index
   CONTRIBUTING.md, CHANGELOG.md  change/release policy and history
@@ -68,6 +75,8 @@ MyProductAutomation\
     reviews.toml                   human/agent review ledger
     mutants.toml                   product-supported mock faults
   fixtures\rvs.json                 synthetic input; remove for real ingestion
+  jenkins\Jenkinsfile.deploy        optional (--with-deploy): deployment job template
+  robot\environments\deploy.example.toml  optional: site config example, copied outside the repo
   robot\
     environments\mock.py            tier variables
     suites\demo\counter.robot       specification-traced tests
@@ -100,8 +109,8 @@ flowchart LR
   CAT --> REP
 ```
 
-`ProductPlugin` offers only actual extension points: known message names, extra brief sections, a doctor class
-and additional CLI commands. Static names, paths, tiers, capabilities and lint rules belong in `grf.toml`.
+`ProductPlugin` offers only actual extension points: known message names, extra brief sections, a doctor class,
+additional CLI commands and deployable components (`deploy_components`, see [Deploying builds](DEPLOYMENT.md)). Static names, paths, tiers, capabilities and lint rules belong in `grf.toml`.
 Core never imports a named product package. Products may import `grf`; the reverse dependency is forbidden.
 
 Agent templates are starter files, not runtime orchestration: GRF generates briefs but does not automatically

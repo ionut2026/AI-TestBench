@@ -3,10 +3,31 @@
 GRF uses Semantic Versioning. Before 1.0, incompatible API changes require a minor release; compatible fixes use
 a patch release. Release tags are `vMAJOR.MINOR.PATCH`. Tags and publication are explicit maintainer actions.
 
-## Unreleased
+## 0.2.0 - Unreleased
 
+The package version is 0.2.0; the maintainer tags `v0.2.0` after review.
+
+- Added `grf deploy` (`<cli> deploy` in products): deploys a Jenkins build (an image tarball) of a product
+  component to an instrument board over SSH with Docker, and records it. Subcommands `components`, `builds`,
+  `plan` (dry run), `run`, `status` and `rollback`. Only `SUCCESS` builds with exactly one matching artifact,
+  SHA-256 checked locally and on the board; read-only preflight (hold file, docker, disk, load, companions);
+  board lock; health check and configuration verification; automatic rollback to the previous container
+  (`ROLLED_BACK`), `ROLLBACK_FAILED` with recovery commands; retained earlier builds and `deploy rollback`.
+  Distinct exit codes 0/2/3/4/5/6/7/8. Real deployments need the instrument owner's authorization; agents
+  never start one. See `docs\DEPLOYMENT.md`.
+- Added the `ProductPlugin.deploy_components()` hook (default: none) and the optional `[deploy]` section
+  (`order`, `default_branch`) in `grf.toml`. Hosts and credentials live only in a site config outside the
+  repository (`<ENV_PREFIX>_DEPLOY_CONFIG`); secret keys and in-repository credential files are rejected.
+- Added the optional extra `general-robot-framework[deploy]` (paramiko) for the default SSH client; the
+  `openssh` client needs no extra. Jenkins is read with the standard library (no new runtime dependency).
+- `grf run` and `grf report` accept `--deployment <file or folder>` (or `GRF_DEPLOYMENT_RECORD`) and show a
+  "Deployed builds" section in the HTML report and a `deployments` list in the JSON report.
+- `grf doctor --deploy [--deploy-config F] [--deep]` checks a machine's deployment setup (read-only).
+- `grf init --with-deploy` also creates `robot\environments\deploy.example.toml` and
+  `jenkins\Jenkinsfile.deploy` (parameters, nightly cron, credentials, deploy then test). Added the
+  `grf-deploy-build` skill and deployment guidance in `grf-doctor-tier`.
 - Added Copilot skills for setup, authoring, review, report interpretation, drift, mutation testing, tier checks,
-  product plugins, template upgrades and GRF validation. `grf init` now creates nine generic skills in
+  product plugins, template upgrades, GRF validation and deployment. `grf init` now creates ten generic skills in
   `.github\skills`; existing products must adopt them manually. See `docs\SKILLS.md`.
 - Checked explicit Python executable paths directly during Windows setup and disabled module auto-discovery
   for named-command lookup, avoiding unnecessary discovery when Python is missing. Added a regression test
@@ -48,8 +69,17 @@ a patch release. Release tags are `vMAJOR.MINOR.PATCH`. Tags and publication are
   or guesses a legacy checkout. Malformed/incomplete/pagination responses fail explicitly, and failed
   initialization closes transports. Generic installs and demos need no MCP SDK.
 
-These changes are not a published release. Consumers must review these behavior changes and run their
+These changes are not yet a tagged release. Consumers must review these behavior changes and run their
 authorized regression before adopting a new approved tag.
+
+Migrating a product to 0.2.0:
+
+1. Change the GRF dependency pin and `[framework] version` in `grf.toml` to `0.2.0` together.
+2. Nothing else is required: without `deploy_components()` the product has no deployable components, and
+   `--deployment` is optional.
+3. To deploy: implement `deploy_components()`, optionally add `[deploy]`, install `general-robot-framework[deploy]`
+   on the Jenkins agent, and create the site config and Jenkins job (`docs\DEPLOYMENT.md`).
+4. Adopt the new or changed skills (`grf-deploy-build`, `grf-doctor-tier`) with `grf-template-upgrade`.
 
 ## 0.1.0 - 2026-10-12
 

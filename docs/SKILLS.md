@@ -27,7 +27,8 @@ Agents can use skills. For example, the starter `test-author` agent tells Copilo
 | `grf-interpret-report` | Understanding failed runs, Robot logs or traceability reports | GRF and new products |
 | `grf-spec-drift` | Handling `grf drift`, `accept` and `migrate-hashes` findings | GRF and new products |
 | `grf-mutation-testing` | Running or interpreting `grf mutate` on mock tiers | GRF and new products |
-| `grf-doctor-tier` | Checking whether a tier is ready with `grf doctor` | GRF and new products |
+| `grf-doctor-tier` | Checking whether a tier is ready with `grf doctor`, or a machine with `grf doctor --deploy` | GRF and new products |
+| `grf-deploy-build` | Explaining or planning a deployment, reading `deploy status` or a deployment record | GRF and new products |
 | `grf-product-plugin` | Implementing `ProductPlugin` hooks | GRF and new products |
 | `grf-template-upgrade` | Reviewing copied agents, skills and starter files after a GRF upgrade | GRF and new products |
 | `grf-validate-change` | Validating GRF core, templates, setup or documentation changes | GRF repository only |
@@ -55,7 +56,7 @@ repository root and that `.github\skills\<skill-name>\SKILL.md` exists.
 
 ## How skills reach product projects
 
-`grf init` copies the nine generic skills into the new project's `.github\skills` folder. The checked-in
+`grf init` copies the ten generic skills into the new project's `.github\skills` folder. The checked-in
 `examples\demo` contains the same files, and tests check that they match.
 
 Existing products, such as SMMAutomationFramework, do **not** receive skills automatically when GRF is
@@ -70,6 +71,9 @@ Every skill follows these rules:
 - RV&S access is read-only.
 - Real-product, rig or instrument actions require the instrument owner's authorization.
 - Agent review never replaces current-hash human approval.
+- Agents never start a deployment (`deploy run` or `deploy rollback`); they may explain, run `deploy plan` or
+  `deploy status`, and read records. Starting the authorized Jenkins deployment job is the owner's decision.
+  See [Deploying builds](DEPLOYMENT.md).
 
 Skills guide Copilot but do not grant permissions. A skill cannot authorize instrument use, RV&S writes or
 human approval.

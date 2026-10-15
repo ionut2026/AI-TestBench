@@ -94,6 +94,8 @@ class Project:
                 raise ProjectError("[capabilities] must map nonempty tags to nonempty capability names")
         if "capabilities" in self._section("operator"):
             self._strings(self._section("operator")["capabilities"], "[operator] capabilities")
+        if "deploy" in self.data:
+            _ = self.deploy_order, self.deploy_branch
 
     # ------------------------------------------------------------------ names
 
@@ -266,6 +268,22 @@ class Project:
     def text(self, key: str, default: str = "") -> str:
         """Free texts the generic modules show (``[texts]``)."""
         return str(self._section("texts").get(key, default))
+
+    # ------------------------------------------------------------------ deployment
+
+    @property
+    def deploy_order(self) -> list[str]:
+        """``[deploy] order``: the order ``deploy run`` deploys several components in (others follow by name)."""
+        return self._strings(self._section("deploy").get("order", []), "[deploy] order")
+
+    @property
+    def deploy_branch(self) -> str | None:
+        """``[deploy] default_branch``: the Jenkins branch job used when ``--branch`` is not given (None: the job
+        itself is not a multibranch job)."""
+        value = self._section("deploy").get("default_branch")
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise ProjectError("[deploy] default_branch must be a nonempty string")
+        return value
 
     # ------------------------------------------------------------------ plugin
 
