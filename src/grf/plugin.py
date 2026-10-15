@@ -43,6 +43,14 @@ class ProductPlugin:
         """What ``<cli> deploy`` can put on the product's boards (docs/DEPLOYMENT.md). Default: nothing."""
         return []
 
+    def product_version(self) -> str | None:
+        """Installed consumer package version for provenance; None explicitly means unavailable."""
+        from importlib.metadata import packages_distributions, version
+
+        package = type(self).__module__.partition(".")[0]
+        distributions = packages_distributions().get(package, []) if package != "grf" else []
+        return version(distributions[0]) if len(distributions) == 1 else None
+
     def runtime_identity(self, meta: dict[str, str]) -> dict[str, str]:
         """Component -> version that the product reported during a run, read from the Robot run metadata
         (``<cli> gate``). Default: nothing (a gate that needs runtime identity fails closed)."""

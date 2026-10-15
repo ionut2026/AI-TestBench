@@ -241,6 +241,9 @@ Robot Framework's PASS says its checks passed. GRF's **acceptance gate** asks a 
 did the intended tests actually run, with current human approval and the requested software?
 A **run request** is a small saved settings file describing that intention, not a command or permission.
 `grf request check <request-file>` validates the file locally; successful output says `Request is valid`.
+The owner's controller uses `grf run --request <request-file>` to select exactly the requested tests and
+save a request copy and digest with the run. A **digest** identifies the exact file bytes; changing even a
+comment changes it. This prevents accidentally accepting output belonging to a different request.
 After an owner-authorized run, `grf gate --request <request-file> --output <output-file>` reads saved results
 and writes `acceptance.json` with ACCEPTED or REJECTED and explanations. Run these from the product checkout.
 The mock counter cannot become accepted product evidence: it checks framework wiring, not a real application.

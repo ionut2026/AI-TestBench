@@ -80,6 +80,8 @@ gate failures return 1. Robot execution error codes above 250 are preserved.
 A finished run is not yet an accepted result. `grf gate --request <request.toml> --output <output.xml>` checks the
 run against a run request (tier, required tests and specifications, skips/failures, current content-bound human
 reviews, drift, exact deployed builds and runtime versions) and writes `acceptance.json`; see [Workflows](WORKFLOWS.md).
+Run controlled requests with `grf run --request <request.toml>`: this applies exact selection and preserves
+the request bytes/digest. Legacy unbound XML cannot pass strict acceptance.
 
 ## Mutation testing
 

@@ -203,15 +203,18 @@ class DeployRecord:
         return path
 
 
+def record_files(paths: list[Path]) -> list[Path]:
+    """Expand record directories deterministically, retaining caller order."""
+    return [file for path in paths for file in (sorted(path.rglob(RECORD_FILE)) if path.is_dir() else [path])]
+
+
 def load_records(paths: list[Path]) -> list[dict[str, Any]]:
     """Deployment records for the report (a folder means its ``deployment.json`` files, newest last)."""
     records = []
-    for path in paths:
-        files = sorted(path.rglob(RECORD_FILE)) if path.is_dir() else [path]
-        for file in files:
-            try:
-                data = validate_record(json.loads(file.read_text(encoding="utf-8")))
-            except (OSError, ValueError) as err:
-                raise ValueError(f"cannot read the deployment record {file}: {err}") from err
-            records.append(data)
+    for file in record_files(paths):
+        try:
+            data = validate_record(json.loads(file.read_text(encoding="utf-8")))
+        except (OSError, ValueError) as err:
+            raise ValueError(f"cannot read the deployment record {file}: {err}") from err
+        records.append(data)
     return records

@@ -12,10 +12,12 @@ acceptance evaluator. The product supplies runtime version semantics, observable
 There is no generic unattended workflow engine, protected profile store, distributed lease, authenticated
 review service or automatic AI author/reviewer chain. A valid request does not execute anything.
 
-`grf run` has **no `--request` option**. The controller validates and binds the request to its actual
-source/catalog, selection, targets and builds **before** deployment or product stimuli; then it calls the ordinary
-run command and evaluates the output with `grf gate`. The gate is post-run: it cannot prevent an incorrectly
-configured runner from contacting the wrong product first.
+`grf run --request <file>` validates authorization expiry, tier, exact selection, optional source/catalog
+pins and supplied deployment identities **before** capability discovery or Robot execution. It saves the
+exact request bytes as `request.toml` in a fresh run output and stamps the request ID/digest, GRF version,
+available product-package version and deployment-record digests into managed Robot metadata.
+The controller still protects targets, authenticates authorization and holds the site reservation.
+The post-run gate cannot authenticate metadata or prevent a product adapter from addressing the wrong endpoint.
 
 For controlled evidence, the product's controller should require immutable `source_revision` and
 `catalog_sha256`, protect the exact request digest and private endpoint/target mapping, authenticate owner approval,
@@ -85,8 +87,13 @@ unknown fields, invalid types, duplicate selections/components, non-evidence tie
 
 For `deploy-and-test`, declare at least one component with an exact build and digest resolved during planning.
 `expected_version` may be omitted: the gate uses the deployment's **installed** version, not a filename or
-requested artifact fallback. Request fields do not filter the Robot run: the controller must translate the
-approved selection into ordinary `grf run` options and verify the resulting output.
+requested artifact fallback. `run --request` selects the **union** of requested specifications and exact test
+names, or all configured tests when both lists are empty. It rejects missing specifications, missing/ambiguous
+names and selections below `min_tests` before execution. Selection uses exact suite-qualified identities, not
+Robot wildcard matching; literal `*`, `?` and brackets in names remain literal.
+Unselected empty child suites are removed before their suite setup can run. Capability exclusions still apply,
+and required tests excluded or skipped cannot satisfy acceptance. Forwarded Robot selectors and pre-run
+modifiers are rejected with `--request` so they cannot bypass the bounded selection.
 Tests-only requests pass **no deployment records** for their components; they check fresh runtime versions
 against explicit expected versions. Keep read-only installation/status snapshots separately when needed.
 
@@ -106,7 +113,8 @@ Use a fresh output path: an older JSON file is not removed when validation fails
 current command's exit code and must not reuse stale normalized output.
 
 The owner-controlled runner then performs the authorized tests, for example
-`grf run --tier <authorized-tier> --outdir results\run-1` with the approved filters. This is **not** an instruction
+`grf run --request <request-file> --outdir results\run-1`. The request supplies the tier;
+an explicitly supplied `--tier` must agree. This is **not** an instruction
 for an agent to run an instrument. After execution, evaluate the saved XML locally:
 
 ```powershell
@@ -114,6 +122,7 @@ grf gate --request <request-file> --output results\run-1\output.xml
 ```
 
 For deploy-and-test, also supply exactly one `--deployment <record-file>` per requested component.
+Supply those same records to both `run --request` and `gate`; their exact byte digests must match the run stamp.
 The command also reads `GRF_DEPLOYMENT_RECORD`; clear unrelated inherited records.
 `--json <file>` overrides the default `acceptance.json` next to `output.xml`.
 
@@ -123,7 +132,15 @@ The command also reads `GRF_DEPLOYMENT_RECORD`; clear unrelated inherited record
 | `gate` | `0` ACCEPTED; `1` REJECTED; `2` invalid request, missing/malformed input or integration error |
 
 The JSON result has `schema=1`, request/action/tier, `status`, `evaluatedAt`, source revision/modified flag,
-catalog digest, recorded authorization, executed count and named `checks` with PASS/FAIL details.
+catalog digest, `requestSha256`, `outputSha256`, deployment file paths/digests, framework and product package
+versions (explicitly unavailable when the product distribution cannot be identified), recorded authorization,
+executed count and named `checks` with PASS/FAIL details.
+The product can override `ProductPlugin.product_version()` to identify its installed distribution; the default
+uses unambiguous installed package metadata for the plugin's package. If available, the run/evaluator versions
+must agree. All `GRF ...` metadata and `Tier` are managed and cannot be supplied through forwarded options.
+**0.4 migration:** old XML without matching request/deployment/GRF stamps is rejected. Re-run with
+`run --request`; do not retrofit stamps into historical results. Even whitespace/comment changes alter the
+request's exact byte digest, so keep and gate the saved request snapshot.
 It checks authorization expiry, evidence tier, optional source/catalog binding/freshness, required nonempty
 execution, results/skip policy, current human content reviews, specification drift, deployment provenance and
 product-observed identity. Missing data never becomes a successful component check.

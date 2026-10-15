@@ -20,7 +20,7 @@ import json
 import re
 import subprocess
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -72,6 +72,15 @@ class RunRequest:
     reference: str = ""
     valid_until: dt.date | None = None
     raw: dict[str, Any] = field(default_factory=dict, compare=False)
+    source_bytes: bytes | None = field(default=None, compare=False, repr=False)
+
+    @property
+    def sha256(self) -> str:
+        """Exact input bytes for file requests; canonical normalized bytes for in-memory requests."""
+        content = self.source_bytes
+        if content is None:
+            content = json.dumps(self.as_dict(), sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(content).hexdigest()
 
     def summary(self) -> list[str]:
         lines = [f"Request {self.id}: {self.action} on the {self.tier} tier",
@@ -229,12 +238,12 @@ def parse_request(data: dict, tiers: dict[str, Any] | None = None, components: l
 
 def load_request(path: Path, tiers: dict[str, Any] | None = None, components: list[str] | None = None) -> RunRequest:
     try:
-        with open(path, "rb") as f:
-            data = tomllib.load(f)
-    except tomllib.TOMLDecodeError as err:
+        raw = path.read_bytes()
+        data = tomllib.loads(raw.decode("utf-8"))
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as err:
         raise RequestError(f"{path}: {err}") from err
     try:
-        return parse_request(data, tiers, components)
+        return replace(parse_request(data, tiers, components), source_bytes=raw)
     except RequestError as err:
         raise RequestError(f"{path}: {err}") from err
 
@@ -267,18 +276,81 @@ def _check(checks: list[Check], name: str, problems: list[str], ok: str) -> None
     checks.append(Check(name, "FAIL" if problems else "PASS", "; ".join(problems) if problems else ok))
 
 
+def deployment_identity(component: ComponentRequest, action: str, records: list[dict], *,
+                        project_name: str | None = None, installed_matches=None) -> tuple[str | None, list[str]]:
+    """Check pinned deployment provenance without contacting a board or asserting a runtime observation."""
+    c, problems = component, []
+    mine = [r for r in records if r.get("component") == c.name]
+    expected = c.expected_version
+    if action == "deploy-and-test":
+        if len(mine) != 1:
+            problems.append(f"expected exactly one deployment record, got {len(mine)}")
+        else:
+            r = mine[0]
+            art = r.get("artifact")
+            if not isinstance(art, dict):
+                art = {}
+                problems.append("no artifact object")
+            if project_name is not None and r.get("project") != project_name:
+                problems.append(f"deployment project {r.get('project')!r}, expected {project_name!r}")
+            if r.get("dryRun") is not False:
+                problems.append("the deployment record is a dry run")
+            if r.get("outcome") not in GOOD_DEPLOY:
+                problems.append(f"deployment outcome {r.get('outcome')}")
+            if art.get("build_number") != c.build:
+                problems.append(f"deployed build {art.get('build_number')}, requested {c.build}")
+            if art.get("sha256") != c.sha256:
+                problems.append(f"deployed sha256 {art.get('sha256')}, requested {c.sha256}")
+            installed = r.get("installed")
+            if not isinstance(installed, dict) or installed.get("status") != "running":
+                problems.append("no installed running component")
+            else:
+                installed_version = installed.get("version")
+                if not isinstance(installed_version, str) or not installed_version.strip():
+                    problems.append("no installed version")
+                elif expected and not (installed_matches(c.name, expected, installed_version)
+                                       if installed_matches else expected == installed_version):
+                    problems.append(f"installed version {installed_version}, requested {expected}")
+                else:
+                    expected = installed_version
+    elif mine:
+        problems.append("a tests-only request must not come with a deployment record of this component")
+    return expected, problems
+
+
 def evaluate(request: RunRequest, *, tests: list[dict], meta: dict, known: list, reviews: list[dict], catalog: dict,
              catalog_path: Path, records: list[dict], observed: dict[str, str], matches, root: Path,
              today: dt.date | None = None, evidence: bool = True, project_name: str | None = None,
-             installed_matches=None) -> dict:
+             installed_matches=None, output_sha256: str | None = None, record_digests: list[dict] | None = None,
+             product_version: str | None = None) -> dict:
     """The acceptance result. ``tests``/``meta``: ``report.read_results``; ``known``: the current suites
     (``drift.collect_tests``); ``observed``: component -> runtime version (the plugin); ``matches(component, expected,
     observed)``: the plugin's version comparison."""
+    from grf import __version__
     from grf.pipeline.drift import check as drift_check
     from grf.pipeline.drift import require_unique_tests, review_problem, test_key
 
     today = today or dt.date.today()
     checks: list[Check] = []
+    problems = []
+    if meta.get("GRF Request ID") != request.id:
+        problems.append("run request ID is missing or does not match")
+    if meta.get("GRF Request SHA256") != request.sha256:
+        problems.append("run request digest is missing or does not match")
+    if not isinstance(output_sha256, str) or not _SHA256.fullmatch(output_sha256):
+        problems.append("Robot output digest is unavailable")
+    if records and (record_digests is None or len(record_digests) != len(records)):
+        problems.append("deployment record file digests are unavailable")
+    digests = [item.get("sha256") for item in record_digests or []]
+    if any(not isinstance(value, str) or not _SHA256.fullmatch(value) for value in digests):
+        problems.append("deployment record file digest is invalid")
+    elif meta.get("GRF Deployment SHA256") != json.dumps(sorted(digests), separators=(",", ":")):
+        problems.append("run deployment record digests are missing or do not match")
+    if meta.get("GRF Version") != __version__:
+        problems.append("run GRF version is missing or differs from the evaluator")
+    if product_version is not None and meta.get("GRF Product Version") != product_version:
+        problems.append("run product package version is missing or differs from the evaluator")
+    _check(checks, "provenance", problems, "run metadata binds the request; output and deployment digests recorded")
     identity_problems = []
     for entries in (tests, known):
         try:
@@ -385,42 +457,8 @@ def evaluate(request: RunRequest, *, tests: list[dict], meta: dict, known: list,
 
     # deployments and identity
     for c in request.components:
-        problems = []
-        mine = [r for r in records if r.get("component") == c.name]
-        expected = c.expected_version
-        if request.action == "deploy-and-test":
-            if len(mine) != 1:
-                problems.append(f"expected exactly one deployment record, got {len(mine)}")
-            else:
-                r = mine[0]
-                art = r.get("artifact")
-                if not isinstance(art, dict):
-                    art = {}
-                    problems.append("no artifact object")
-                if project_name is not None and r.get("project") != project_name:
-                    problems.append(f"deployment project {r.get('project')!r}, expected {project_name!r}")
-                if r.get("dryRun") is not False:
-                    problems.append("the deployment record is a dry run")
-                if r.get("outcome") not in GOOD_DEPLOY:
-                    problems.append(f"deployment outcome {r.get('outcome')}")
-                if art.get("build_number") != c.build:
-                    problems.append(f"deployed build {art.get('build_number')}, requested {c.build}")
-                if art.get("sha256") != c.sha256:
-                    problems.append(f"deployed sha256 {art.get('sha256')}, requested {c.sha256}")
-                installed = r.get("installed")
-                if not isinstance(installed, dict) or installed.get("status") != "running":
-                    problems.append("no installed running component")
-                else:
-                    installed_version = installed.get("version")
-                    if not isinstance(installed_version, str) or not installed_version.strip():
-                        problems.append("no installed version")
-                    elif expected and not (installed_matches(c.name, expected, installed_version)
-                                           if installed_matches else expected == installed_version):
-                        problems.append(f"installed version {installed_version}, requested {expected}")
-                    else:
-                        expected = installed_version
-        elif mine:
-            problems.append("a tests-only request must not come with a deployment record of this component")
+        expected, problems = deployment_identity(c, request.action, records, project_name=project_name,
+                                                 installed_matches=installed_matches)
         if c.runtime_identity:
             seen = observed.get(c.name)
             if not expected:
@@ -437,11 +475,12 @@ def evaluate(request: RunRequest, *, tests: list[dict], meta: dict, known: list,
         _check(checks, "deployments", [f"deployment record(s) of component(s) not in the request: {', '.join(unexpected)}"], "")
 
     accepted = all(c.status == "PASS" for c in checks)
-    from grf import __version__
-
     return {
         "schema": RESULT_SCHEMA,
         "request": request.id,
+        "requestSha256": request.sha256,
+        "outputSha256": output_sha256,
+        "deploymentRecords": record_digests or [],
         "action": request.action,
         "tier": tier,
         "status": "ACCEPTED" if accepted else "REJECTED",
@@ -450,6 +489,7 @@ def evaluate(request: RunRequest, *, tests: list[dict], meta: dict, known: list,
         "sourceModified": dirty,
         "catalogSha256": digest,
         "framework": {"grf": __version__},
+        "product": {"version": product_version, "runVersion": meta.get("GRF Product Version")},
         "authorization": {"owner": request.owner, "reference": request.reference, "validUntil": str(request.valid_until)},
         "executed": len(executed),
         "checks": [vars(c) for c in checks],

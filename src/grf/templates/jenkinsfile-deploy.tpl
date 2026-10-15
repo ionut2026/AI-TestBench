@@ -57,7 +57,7 @@ pipeline {
                         error('Request must match the exact single component, numeric build, digest and tier')
                     }
                     // Site controller must also enforce protected source/catalog/approval/target policy here.
-                    // Translate the approved request selection into run filters in the Test stage below.
+                    // run --request applies the approved specification/test selection.
                 }
             }
         }
@@ -82,8 +82,11 @@ pipeline {
         stage('Test') {
             when { expression { params.RUN_TESTS && !params.PLAN_ONLY } }
             steps {
-                // --deployment puts the deployed builds into the traceability report.
-                runCommand("grf run --tier \"${params.TIER}\" --outdir results/test-${env.BUILD_NUMBER} --deployment results/deploy")
+                // Preserve a failed Test stage but still evaluate saved output in the acceptance stage.
+                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                    runCommand("grf run --request \"${params.REQUEST}\" --tier \"${params.TIER}\" " +
+                               "--outdir results/test-${env.BUILD_NUMBER} --deployment results/deploy")
+                }
             }
         }
         stage('Acceptance gate') {

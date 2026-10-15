@@ -73,6 +73,10 @@ example. Both examples use the real catalog/report pipeline with fake input; nei
 | [Contributing](CONTRIBUTING.md) | Change scope, documentation maintenance, compatibility and review policy |
 | [Changelog](CHANGELOG.md) | User-visible changes and migration notes |
 
+Controlled product runs use `grf run --request <file>` to bind exact selection and provenance, then
+`grf gate --request <file> --output <output.xml>` for acceptance. See [Workflows](docs/WORKFLOWS.md);
+neither a request nor a mock pass authorizes an instrument operation.
+
 ## Workflow
 
 `ingest -> briefs -> author -> independent review -> human approval -> run -> report`

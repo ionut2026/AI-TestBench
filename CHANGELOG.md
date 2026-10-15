@@ -6,6 +6,13 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Add `run --request` with exact specification/test-name selection, request snapshot and protected digest/
+  version metadata. Validate expiry, tier, optional source/catalog pins and supplied deployment identities
+  before capability discovery or Robot actions; reject additional Robot selectors/pre-run modifiers.
+- Bind strict acceptance to request/deployment run stamps and record exact request/output/deployment digests
+  plus framework/product-package versions. Add public `deployment_identity` and product version hook.
+  **Migration:** re-run historical unbound XML with `run --request`; never manufacture provenance stamps.
+
 - Add `grf scaffold --update-skills [--check]`: safely maintain generic skills and the integration coordinator
   using generated-content digests, without replacing product overlays or customized generic files.
   Existing forks require manual reviewed comparison before adoption; package installation still rewrites nothing.

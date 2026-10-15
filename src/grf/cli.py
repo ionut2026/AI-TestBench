@@ -241,14 +241,26 @@ def cmd_run(args, robot_args: list[str]) -> int:
     from robot.run import RobotFramework
 
     p = project.current()
+    request = _load_request(args.request) if args.request else None
+    if request:
+        if args.tier is not None and args.tier != request.tier:
+            raise ValueError("--tier does not match the request")
+        args.tier = request.tier
+        if request.valid_until is None or dt.date.today() > request.valid_until:
+            raise ValueError(f"request authorization expired on {request.valid_until}")
+    elif args.tier is None:
+        args.tier = next(iter(p.tiers), None)
     if p.tier(args.tier).evidence:
         p.require_framework()
     forwarded, sources = RobotFramework().parse_arguments([*robot_args, "__grf_managed_suite__.robot"])
     for key in ("outputdir", "output", "variablefile", "name"):
         if key in forwarded:
             raise ValueError(f"Robot option {key!r} is managed by GRF; use --outdir and tier configuration")
-    if any(value.split(":", 1)[0].lower() in ("tier", "grf version") for value in forwarded.get("metadata", [])):
-        raise ValueError("Tier metadata and GRF version metadata are managed by GRF")
+    if any(value.split(":", 1)[0].lower() == "tier" or value.split(":", 1)[0].lower().startswith("grf ")
+           for value in forwarded.get("metadata", [])):
+        raise ValueError("Tier metadata and GRF provenance metadata are managed by GRF")
+    if request and any(key in forwarded for key in ("include", "exclude", "test", "suite", "prerunmodifier")):
+        raise ValueError("request selection is managed by GRF; do not forward Robot selectors or prerun modifiers")
     if forwarded.get("dryrun") and p.tier(args.tier).evidence:
         raise ValueError("Robot dry runs require a non-evidence tier")
     if sources != ["__grf_managed_suite__.robot"]:
@@ -262,10 +274,36 @@ def cmd_run(args, robot_args: list[str]) -> int:
         print(f"--processes {args.processes}: parallel runs are only possible on the {', '.join(parallel) or 'no'} tier "
               f"(see [tiers] in {p.root / project.CONFIG_FILE})", file=sys.stderr)
         return 2
-    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     out_dir = Path(args.outdir) if args.outdir else p.path("results") / f"{args.tier}-{stamp}"
     if (out_dir / "output.xml").exists():
         raise ValueError(f"refusing to reuse existing Robot output: {out_dir / 'output.xml'}; choose a new --outdir")
+    chosen = None
+    deployment_digests: list[str] = []
+    if request:
+        from grf.acceptance import deployment_identity, file_sha256, git_state
+        from grf.deploy.cli import record_paths
+        from grf.deploy.record import load_records, record_files
+        from grf.selection import select
+
+        chosen = select(request, _context().collect_tests(args))
+        files = record_files(record_paths(args.deployment))
+        records = load_records(files)
+        unexpected = {record["component"] for record in records} - {c.name for c in request.components}
+        if unexpected:
+            raise ValueError(f"request has unexpected deployment components: {', '.join(sorted(unexpected))}")
+        for component in request.components:
+            _, problems = deployment_identity(component, request.action, records, project_name=p.name,
+                                              installed_matches=p.plugin.installed_matches)
+            if problems:
+                raise ValueError(f"request deployment {component.name}: {'; '.join(problems)}")
+        deployment_digests = sorted(file_sha256(path) for path in files)
+        if request.source_revision:
+            head, dirty = git_state(p.root)
+            if head != request.source_revision or dirty is not False:
+                raise ValueError("request requires the pinned clean source revision before execution")
+        if request.catalog_sha256 and file_sha256(_catalog_path(args)) != request.catalog_sha256:
+            raise ValueError("request catalog digest does not match before execution")
     from grf.operator_prompt import env_name as operator_env_name
     from grf.rigcontrol import RigControlError
 
@@ -283,18 +321,28 @@ def cmd_run(args, robot_args: list[str]) -> int:
         excludes.append("review:pending")
     from grf import __version__
 
+    metadata = [f"Run:{stamp}", f"Tier:{args.tier}", f"GRF Version:{__version__}"]
+    if (product_version := p.plugin.product_version()) is not None:
+        metadata.append(f"GRF Product Version:{product_version}")
+    if request:
+        metadata += [f"GRF Request ID:{request.id}", f"GRF Request SHA256:{request.sha256}"]
+        metadata.append("GRF Deployment SHA256:" + json.dumps(deployment_digests, separators=(",", ":")))
     options = {
         "variablefile": [str(p.path("environments") / f"{args.tier}.py")],
         "exclude": excludes,
         "outputdir": str(out_dir),
         "name": f"{p.name} {args.tier}",
-        "metadata": [f"Run:{stamp}", f"Tier:{args.tier}", f"GRF Version:{__version__}"],
+        "metadata": metadata,
     }
     argv: list[str] = []
     for key, values in options.items():
         for value in values if isinstance(values, list) else [values]:
             argv += [f"--{key}", str(value)]
     argv += robot_args + [str(suite) for suite in _suites(args)]
+    if chosen is not None:
+        from grf.selection import modifier
+
+        argv = ["--prerunmodifier", modifier(chosen), *argv]
     from grf.reservation import ReservationError, exclusive
 
     lock = p.tier(args.tier).lock
@@ -303,6 +351,14 @@ def cmd_run(args, robot_args: list[str]) -> int:
                 else contextlib.nullcontext():
             if lock:
                 print(f"Reserved '{lock}' on this machine for the run")
+            if request:
+                out_dir.mkdir(parents=True, exist_ok=True)
+                if request.source_bytes is None:
+                    raise ValueError("request run requires the original file bytes")
+                with (out_dir / "request.toml").open("xb") as snapshot:
+                    snapshot.write(request.source_bytes)
+                    snapshot.flush()
+                    os.fsync(snapshot.fileno())
             rc = _robot(argv, args.processes)
     except ReservationError as err:
         print(f"Reservation: {err}", file=sys.stderr)
@@ -422,9 +478,9 @@ def cmd_request(args) -> int:
 
 
 def cmd_gate(args) -> int:
-    from grf.acceptance import RequestError, evaluate, format_result, write_result
+    from grf.acceptance import RequestError, evaluate, file_sha256, format_result, write_result
     from grf.deploy.cli import record_paths
-    from grf.deploy.record import load_records
+    from grf.deploy.record import load_records, record_files
     from grf.pipeline.drift import collect_tests, load_reviews
     from grf.pipeline.ingest import load_catalog
     from grf.pipeline.report import read_results
@@ -441,11 +497,14 @@ def cmd_gate(args) -> int:
         print(f"no Robot output: {output}", file=sys.stderr)
         return 2
     tests, meta = read_results(output)
+    files = record_files(record_paths(args.deployment))
+    digests = [{"file": str(path.resolve()), "sha256": file_sha256(path)} for path in files]
     catalog_path = _catalog_path(args)
     result = evaluate(request, tests=tests, meta=meta, known=collect_tests(_suites(args)), reviews=load_reviews(_reviews(args)),
-                      catalog=load_catalog(catalog_path), catalog_path=catalog_path, records=load_records(record_paths(args.deployment)),
+                      catalog=load_catalog(catalog_path), catalog_path=catalog_path, records=load_records(files),
                       observed=p.plugin.runtime_identity(meta), matches=p.plugin.runtime_matches, root=p.root,
                       installed_matches=p.plugin.installed_matches,
+                      output_sha256=file_sha256(output), record_digests=digests, product_version=p.plugin.product_version(),
                       evidence=p.is_evidence(meta.get("Tier", "?")), project_name=p.name)
     target = Path(args.json) if args.json else output.parent / "acceptance.json"
     write_result(result, target)
@@ -514,7 +573,8 @@ def _main(argv: list[str] | None = None) -> int:
     cmd.add_argument("--date", help="YYYY-MM-DD (default: today)")
     sub.add_parser("lint", allow_abbrev=False, help="check the test rules (exit code 1 on violations)")
     cmd = sub.add_parser("run", allow_abbrev=False, help="run suites against a tier and write the traceability report (extra args go to robot)")
-    cmd.add_argument("--tier", choices=tiers or None, default=tiers[0] if tiers else None)
+    cmd.add_argument("--tier", choices=tiers or None, default=None)
+    cmd.add_argument("--request", help="validated run request; applies exact selection and binds run metadata to its digest")
     cmd.add_argument("--operator", choices=OPERATOR_MODES, default=_default_operator(),
                      help=f"who does manual steps at the instrument (default: ${p.env('OPERATOR')} or none); console/dialog also run "
                           "needs:operator and needs:hardware-action tests")

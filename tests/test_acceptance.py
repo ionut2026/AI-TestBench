@@ -93,6 +93,13 @@ def case(tmp_path):
 
 
 def gate(request, kw):
+    from grf import __version__
+
+    digests = [{"file": f"record-{i}.json", "sha256": SHA} for i, _ in enumerate(kw["records"])]
+    kw = {**kw, "meta": {"GRF Request ID": request.id, "GRF Request SHA256": request.sha256,
+                        "GRF Version": __version__,
+                        "GRF Deployment SHA256": json.dumps(sorted(d["sha256"] for d in digests), separators=(",", ":")),
+                        **kw["meta"]}, "record_digests": digests, "output_sha256": SHA}
     result = evaluate(request, **kw)
     return result["status"], {c["name"]: c for c in result["checks"]}
 
@@ -364,10 +371,13 @@ def test_cli_request_check_and_gate(widget, tmp_path, capsys):
     catalog = tmp_path / "catalog" / "demo.json"
     catalog.write_text(json.dumps({"generatedAt": dt.datetime.now(dt.UTC).isoformat(), "specifications": {"1": SPEC}}),
                        encoding="utf-8")
-    from robot import run as robot_run
-
     out = tmp_path / "results" / "bench"
-    assert robot_run(str(suites), outputdir=str(out), metadata=["Tier:bench"], stdout=None, report=None, log=None) == 0
+    environment = tmp_path / "robot" / "environments"
+    environment.mkdir()
+    (environment / "bench.py").write_text("", encoding="utf-8")
+    assert cli.main(["--catalog", str(catalog), "run", "--request", str(req),
+                     "--operator", "none", "--outdir", str(out)]) == 0
+    assert (out / "request.toml").read_bytes() == req.read_bytes()
     gate_args = ["--catalog", str(catalog), "gate", "--request", str(req), "--output", str(out / "output.xml")]
     assert cli.main(gate_args) == 1  # no human review yet
     text = capsys.readouterr().out
@@ -377,6 +387,37 @@ def test_cli_request_check_and_gate(widget, tmp_path, capsys):
     assert cli.main(gate_args) == 0, capsys.readouterr().out
     result = json.loads((out / "acceptance.json").read_text(encoding="utf-8"))
     assert result["status"] == "ACCEPTED" and result["executed"] == 1
+    assert result["requestSha256"] and result["outputSha256"] and result["framework"]["grf"]
+
+
+@pytest.mark.parametrize("metadata", [
+    {"GRF Request ID": "another-request"}, {"GRF Request SHA256": "b" * 64},
+    {"GRF Deployment SHA256": '["wrong"]'}, {"GRF Version": "old"},
+])
+def test_gate_rejects_missing_or_mismatched_run_provenance(tmp_path, metadata):
+    kw = case(tmp_path)
+    kw["meta"].update(metadata)
+    assert gate(parse_request(request_data()), kw)[1]["provenance"]["status"] == "FAIL"
+
+
+def test_unbound_legacy_output_is_rejected(tmp_path):
+    result = evaluate(parse_request(request_data()), **case(tmp_path), output_sha256=SHA)
+    assert result["status"] == "REJECTED"
+    assert next(c for c in result["checks"] if c["name"] == "provenance")["status"] == "FAIL"
+
+
+def test_request_file_digest_covers_exact_snapshot_bytes(tmp_path):
+    from grf.acceptance import load_request
+
+    path = tmp_path / "request.toml"
+    content = f'schema = 1\nid = "bound"\naction = "test"\ntier = "bench"\n[authorization]\n' \
+              f'owner = "Owner"\nreference = "TICKET"\nvalid_until = {TOMORROW}\n'
+    path.write_text(content, encoding="utf-8")
+    first = load_request(path)
+    path.write_text(content + "\n# Reviewed change\n", encoding="utf-8")
+    second = load_request(path)
+    assert first.as_dict() == second.as_dict() and first.sha256 != second.sha256
+    assert first.source_bytes != second.source_bytes
 
 
 def test_run_holds_tier_reservation(widget, tmp_path, capsys):
