@@ -6,6 +6,15 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.3.0 - Unreleased
 
+- Added the opt-in `integration-coordinator` custom agent and `grf-coordinate-integration` shared skill,
+  shipped in core, starter templates and demo. They guide affected-repository-only delegation, exact contracts,
+  immutable-commit consumer validation and framework/consumer release sequencing; they do not launch workers,
+  reconnect sessions, grant permissions or provide authenticated/human approval.
+  **Adoption:** existing products copy both files from one reviewed immutable GRF commit and retain product
+  mappings separately; package upgrades do not rewrite them. Coordination honors user-selected direct-main
+  or branch/PR work, preserving uncommitted work and protections. Direct-main uses one writer per repository
+  and asks on conflicts. Push/merge/tag each require matching explicit authorization.
+
 - Added schema-1 TOML run requests (`grf request check FILE [--json FILE]`) and the post-run
   `grf gate --request FILE --output output.xml [--deployment FILE]` command, writing `acceptance.json`.
   Exit codes distinguish ACCEPTED (0), REJECTED (1), and input/integration errors (2).

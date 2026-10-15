@@ -99,7 +99,8 @@ test and does not start an AI process on its own.
 
 GRF ships general `test-author` and `test-reviewer` instruction templates in `src\grf\templates`.
 `grf init` copies them into a new product's `.github\agents` folder. The checked-in demo has matching example
-copies in `examples\demo\.github\agents`; GRF does not currently have agents in its root `.github\agents`.
+copies in `examples\demo\.github\agents`. GRF's root `.github\agents` contains one reusable
+`integration-coordinator` role, also copied into new starters.
 
 SMM keeps its own product-specific instructions, such as
 [`smm-test-author.agent.md`](https://github.com/ionut2026/SMMAutomationFramework/blob/main/.github/agents/smm-test-author.agent.md).
@@ -115,6 +116,34 @@ rewrite an existing product's agent files. Product maintainers must review relev
 incorporate them deliberately and keep product-specific guidance accurate. Link to shared policy where useful
 rather than maintaining unnecessary copies. No agent instruction authorizes instrument use just because an
 environment is available; current owner permission is still required.
+
+### How do I ask for coordinated changes?
+
+A **coordinator** keeps related changes in separate repositories aligned. It does not replace the product's
+test author or reviewer. For example, a shared GRF report change may need an SMM adapter update: GRF owns
+the report contract, while SMM owns its adapter and tests. An unaffected product needs no worker.
+
+In a Copilot client that supports custom agents, open the assigned checkout and explicitly select
+`integration-coordinator` (in Copilot CLI, `/agent` opens the agent selector). Then ask:
+
+```text
+Use grf-coordinate-integration to coordinate this framework change and its affected consumer.
+Agree the exact contract before implementation and honor my selected Git workflow.
+For direct-main commits, use one writer per repository and ask on conflicts with existing work.
+```
+
+Expect an ownership/contract agreement and later a handoff with exact commits, PRs and check outcomes.
+An **immutable commit** is a specific Git SHA identifying fixed source, unlike a branch that can move.
+The consumer must check that exact framework source; matching version numbers alone are not enough.
+The demo's counter mock can check wiring, not a real product.
+
+Agent files do not launch workers, reconnect old sessions or grant permission. Some clients cannot create
+or message project sessions; then the coordinator must explain the limitation and provide manual handoffs.
+Push, merge and release tags need explicit matching authorization, separate from previous deployment approval.
+You can choose direct `main` commits instead of branches/PRs. The coordinator must inspect existing work,
+coordinate one writer per repository and ask on conflicts, not switch or clean up dirty main.
+Repository protections still apply; instructions cannot bypass them.
+See [the shared procedure and adoption guide](SKILLS.md#coordinated-integration).
 
 ### What are Copilot skills?
 

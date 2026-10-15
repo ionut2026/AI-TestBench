@@ -83,7 +83,7 @@ This prevents an empty analysis from looking successful.
 
 ## Core validation (Windows)
 
-From `D:\projects\GeneralRobotFramework`, after installing `.[dev]`:
+From the assigned GRF checkout root, following the user's selected Git workflow, after installing `.[dev]`:
 
 On Windows, `.\scripts\setup.ps1` automates that installation; see the
 [beginner installation guide](GETTING-STARTED.md#4-prepare-a-safe-practice-project).
@@ -106,6 +106,8 @@ Diagnostic assertions tolerate PowerShell's line wrapping in long worktree paths
 fixture preserves native Python string quoting on Windows PowerShell 5.1.
 Skill tests check frontmatter, required safety rules, starter registration, agent skill references and that GRF's
 shared skills match `grf init` output. See [Copilot skills](SKILLS.md#change-a-skill).
+Coordinator checks also enforce supported minimal frontmatter, root/template/demo parity, generic content,
+contract/authorization boundaries and the immutable-commit consumer handoff procedure.
 Deployment tests (`test_deploy_engine.py`, `test_deploy_parts.py`) use a simulated board (`tests\deploy_fakes.py`),
 a local HTTP server instead of Jenkins and a fake SSH client: success, unchanged, dry run, hold, lock, preflight,
 checksum, every rollback point, rollback failure, restore, redaction, config validation, CLI exit codes, report and

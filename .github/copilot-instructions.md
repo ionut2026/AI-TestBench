@@ -1,9 +1,18 @@
 # Copilot working instructions
 
-- Always work on the D: drive, specifically `D:\projects\GeneralRobotFramework` (the root of this
-  repository). Never read from or write to the C: drive for task output, scratch files,
-  or any other work related to this project.
-- Use this direct checkout on `main`; do not create a worktree or switch branches unless the user requests it.
+- Work in the assigned GRF checkout on D:, including an app-managed isolated worktree when assigned.
+  Keep task output, scratch files and caches in that checkout's ignored `results` directory, never on C:.
+- Preserve the direct `D:\projects\GeneralRobotFramework` main checkout and all uncommitted user work.
+  Honor the user's selected workflow: direct-main commits or isolated branches/PRs, only for affected repositories.
+  For direct-main work, use one writer per repository; inspect dirty state and ownership first, do not switch
+  or clean up user-owned dirty main, and ask on conflicts. Do not create branches/PRs against the user's choice
+  or edit another session's checkout. Follow the shared integration procedure and coordinate a safe handoff.
+- Use `integration-coordinator` and `grf-coordinate-integration` for requested coordination. Instructions do
+  not spawn workers, reconnect sessions, grant permission or authenticate approval. Discover available client
+  capabilities first; if session tools are absent, report the limitation and use explicit handoffs.
+- Push, merge and tag only with explicit authorization matching the repository, change and action.
+  Approval for a previous deployment or PR is not permission for a new PR or release. Preserve branch
+  protections; never force-push, bypass review or treat agent review as human approval.
 - The user is new to Robot Framework. Explain concepts in plain language, define unfamiliar terms on first
   use, and use small examples from this project's demo. Explain what a command does, why it is needed, where
   to run it, and what successful output looks like. Distinguish Robot Framework, GRF and product code.

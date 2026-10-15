@@ -91,6 +91,14 @@ specification drift. Removing `review:pending` alone is not approval. New review
 legacy name-only reviews apply only to unique test names.
 
 The generic author/reviewer agents are in `.github\agents`. They preserve human sign-off and read-only RV&S access.
+For requested cross-repository changes, explicitly select `integration-coordinator` in a supporting Copilot
+client and ask it to use `grf-coordinate-integration`. The agent discovers available capabilities; files alone
+do not start workers or reconnect sessions. Honor the user-selected direct-main or branch/PR workflow,
+agree exact contracts first and validate consumers against an immutable framework commit.
+Direct-main work requires one writer per repository, preserving user edits and asking on conflicts.
+Product mappings stay in your own instructions.
+Push/merge/tag need explicit matching authorization; no Jenkins, instrument or credential actions are implied.
+See `docs\SKILLS.md#coordinated-integration` in your GRF checkout for invocation, adoption and limits.
 Reusable Copilot skills are in `.github\skills`; see `docs\SKILLS.md` in your GRF checkout for how to use them.
 This starter's Python package is `product_automation`; rename it and the plugin/library references if multiple
 product adapters need to be installed in the same environment.

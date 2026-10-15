@@ -18,6 +18,24 @@ of commands, and describe expected results. Keep beginner walkthroughs in
 [Getting started](docs/GETTING-STARTED.md), with detailed policies in their reference guides.
 When starter templates change, update `examples\demo` in the same change; the parity test enforces this.
 For shared skills, also update the matching GRF `.github\skills` copy; see [Copilot skills](docs/SKILLS.md).
+The shared integration coordinator also has identical root, template and demo copies. Preserve its supported
+`name`/`description` frontmatter and generic ownership boundaries; keep product mapping in product instructions.
+
+## Coordinated repository work
+
+Preserve direct main checkouts, uncommitted user work and other sessions. Honor the user's selected direct-main
+or isolated branch/PR workflow only for affected repositories; do not switch or edit another owner's checkout.
+Direct-main work has one writer per repository. Inspect branch, dirty state and ownership, coordinate transfers
+and ask on conflicts before writing. Never switch or clean up user-owned dirty main or silently include unrelated
+edits. If protections block direct-main work, ask rather than bypassing them or creating unwanted branches/PRs.
+Use [the shared integration procedure](docs/SKILLS.md#coordinated-integration): agree exact contracts and
+dependency direction before implementation, then have consumer owners validate the immutable framework commit.
+Report both source identities and unperformed gates; version equality alone is not source provenance.
+Instructions do not spawn workers, reconnect sessions, grant permission or authenticate approvals.
+
+Push, merge and tag each need explicit matching authorization; prior deployment or PR approval is not blanket
+approval. Preserve branch protections and current human review. Do not change model/account/OS settings,
+permissions or credentials, trigger Jenkins or operate instruments as part of this coordination procedure.
 
 ## Gates
 
@@ -53,11 +71,13 @@ within a release line. Deprecate compatibility shims deliberately, with migratio
 Use SemVer (`vX.Y.Z` tags): additive public APIs use a minor release, compatible fixes a patch;
 before 1.0, incompatible changes also use a minor release. Release creation/push requires a maintainer decision.
 Products pin an approved GRF version in both `pyproject.toml` and `[framework] version` in `grf.toml`.
-`grf doctor` checks the installed distribution against the latter. During local development install the sibling
-checkout editable; version equality is not a commit-identity check. CI must also pin the approved
+`grf doctor` checks the installed distribution against the latter. During local development an explicitly selected sibling
+checkout may be installed editable, but final integration checks must use the agreed immutable framework
+commit in an isolated consumer environment, not a moving sibling; version equality is not a commit-identity check.
+CI must also pin the approved
 Git commit/release tag and use read-only authentication for private repositories.
 
-Propose upgrades by PR: update both pins, install the proposed core, run the owner's authorized product gates
+Propose upgrades using the selected Git workflow: update both pins, install the proposed core, run the owner's authorized product gates
 and review the CHANGELOG. Consumer release automation belongs to the consumer repository, not core.
 
 ## Review ownership

@@ -13,8 +13,10 @@ Product projects such as SMMAutomationFramework install GRF as a dependency rath
 See [why GRF exists and how products use it](docs/GETTING-STARTED.md#why-does-this-framework-exist)
 for an explained SMM example and the workflow for future products.
 
-This checkout is **`D:\projects\GeneralRobotFramework`**, used directly on **`main`**. Core does not contain SMM
-product code or a Windchill MCP server. The included counter demo is synthetic and does not contact either.
+The direct checkout is **`D:\projects\GeneralRobotFramework`**. Preserve it and its uncommitted work;
+coordinated changes honor the user's direct-main or branch/PR workflow, not edits to another session's checkout.
+Direct-main work has one writer per repository; inspect existing work and ask on conflicts before transferring edits.
+Core does not contain SMM product code or a Windchill MCP server. The counter demo contacts neither.
 
 ## Install and try the mock starter (Windows)
 
@@ -94,5 +96,8 @@ its connection settings. Generic development and the demo do not need the server
 ## Development
 
 See [Testing](docs/TESTING.md#core-validation-windows) for the core checks and wheel-only smoke run.
+For explicitly requested cross-repository work, select the reusable `integration-coordinator` agent and use
+`grf-coordinate-integration`; see [invocation, adoption and limits](docs/SKILLS.md#coordinated-integration).
+These files do not start workers, grant permissions or automatically reconnect sessions.
 `.github\workflows\grf-ci.yml` provides reusable Windows/Linux checks through `workflow_call`. Product CI
 separately installs its approved GRF release and validates its own adapter.

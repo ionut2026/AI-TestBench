@@ -28,6 +28,7 @@ TEMPLATES = {
     "suite": "robot/suites/demo/counter.robot",
     "author": ".github/agents/test-author.agent.md",
     "reviewer": ".github/agents/test-reviewer.agent.md",
+    "coordinator": ".github/agents/integration-coordinator.agent.md",
 }
 SKILLS = (
     "getting-started",
@@ -40,6 +41,7 @@ SKILLS = (
     "product-plugin",
     "template-upgrade",
     "deploy-build",
+    "coordinate-integration",
 )
 TEMPLATES.update({f"skill-{name}": f".github/skills/grf-{name}/SKILL.md" for name in SKILLS})
 # Only with `grf init --with-deploy`: the site config example and the Jenkins pipeline (docs/DEPLOYMENT.md).

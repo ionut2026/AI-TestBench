@@ -10,8 +10,11 @@ dependency and keep their own configuration and test code. See
 | [SMMAutomationFramework](https://github.com/ionut2026/SMMAutomationFramework) | SMM service, interfaces, keywords, catalogs, suites and product CI |
 | [WindchillMcpServer](https://github.com/ionut2026/WindchillMcpServer) | Read-only RV&S MCP server, Java bridge, server tools and `rvs` CLI |
 
-The split was completed on 2026-10-12. This project's active local checkout is
-`D:\projects\GeneralRobotFramework`, used directly on `main`. Historical split plans and one-time extraction
+The split was completed on 2026-10-12. The direct local checkout is
+`D:\projects\GeneralRobotFramework`; preserve its main branch and uncommitted work. Requested coordinated
+changes honor user-selected direct-main or branch/PR work, never another session's checkout. Direct-main
+requires one writer per repository, existing-work discovery and asking on conflicts; see
+[coordinated integration](SKILLS.md#coordinated-integration). Historical split plans and one-time extraction
 utilities are retained only in Git history; they are not current installation instructions.
 The original repository history can still contain pre-split product files.
 
@@ -35,7 +38,8 @@ See [Configuration](CONFIGURATION.md#external-windchill-integration) for setup.
 
 Products pin an approved GRF release independently. A sibling editable install is useful for coordinated local
 development but is not a source-provenance guarantee. Core validation does not establish product compatibility:
-the product owner must run its own authorized regression before upgrading. See [Contributing](../CONTRIBUTING.md).
+the product owner must run its own authorized regression against the exact immutable framework commit before
+upgrading, and revalidate a changed merge/release commit. See [Contributing](../CONTRIBUTING.md).
 
 ## Deployment ownership
 
