@@ -6,6 +6,14 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Terminate owned descendant process trees on local rig/SSH/SCP and mutation timeout/cancellation,
+  including inherited output-pipe holders. Windows ownership uses a kill-on-close job established
+  before launching the site command; ownership setup failure aborts without launching it.
+- Enforce operator dialog timeout using an owned subprocess; expiry closes the dialog and fails
+  the step. Console timeout behavior is unchanged.
+- Compensating rollback proceeds even if its first journal checkpoint fails; persistent errors remain
+  explicit. Retry only bounded transient Windows sharing/permission failures during atomic snapshots.
+
 - Drain both SSH command streams before waiting for exit, avoiding channel backpressure deadlock.
   Bound SCP and readiness/stability/retries with one monotonic deadline. Expose
   `grf.deadline.Deadline` for product adapters; late successes cannot reset an expired budget.

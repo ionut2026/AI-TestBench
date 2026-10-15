@@ -471,3 +471,23 @@ def test_checkpoint_failure_after_stop_does_not_block_rollback(board, tmp_path, 
     assert "cannot persist" in result.message and "cleanup may be unjournaled" in "\n".join(result.log)
     assert board.running_image_id() == image_id("1.2.2")
     assert lock_free(board)
+
+
+def test_first_checkpoint_failure_in_rollback_still_compensates(board, tmp_path, monkeypatch):
+    from grf.deploy.record import DeployRecord
+
+    original = DeployRecord.write
+    failed = []
+
+    def write(record, *args, **kwargs):
+        if not failed and record.steps and record.steps[-1].name == "rollback":
+            failed.append(True)
+            raise OSError("evidence store unavailable during recovery")
+        return original(record, *args, **kwargs)
+
+    monkeypatch.setattr(DeployRecord, "write", write)
+    board.after_run = _crash
+    result = deploy(board, tmp_path, local_tar=tarball(tmp_path, board=board))
+    assert result.outcome == Outcome.ROLLED_BACK
+    assert board.running_image_id() == image_id("1.2.2")
+    assert "cleanup may be unjournaled" in "\n".join(result.log)

@@ -23,6 +23,7 @@ from typing import Any, NamedTuple, Protocol
 from grf.deadline import Deadline
 from grf.deploy.config import Target
 from grf.deploy.model import DeployError
+from grf.process import run as run_process
 
 
 class CommandResult(NamedTuple):
@@ -180,8 +181,7 @@ class OpenSshTransport:
             self.options += ["-i", target.identity]
         self.port = target.port
         self.login = f"{target.user}@{target.host}"
-        self.runner = runner or (lambda argv, timeout: subprocess.run(argv, capture_output=True, text=True,
-                                                                     timeout=timeout, check=False))
+        self.runner = runner or run_process
 
     def _call(self, argv: list[str], timeout_s: float) -> CommandResult:
         try:

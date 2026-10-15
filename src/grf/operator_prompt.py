@@ -11,12 +11,15 @@ from __future__ import annotations
 
 import os
 import queue
+import subprocess
 import sys
 import threading
 import time
 from typing import Any, TextIO
 
 from grf import project
+from grf.process import run as run_process
+from grf.validation import number
 
 MODES = ("none", "console", "dialog")
 
@@ -46,12 +49,17 @@ def operator_mode(configured: str | None = None) -> str:
 def ask_operator(instruction: str, mode: str, timeout_s: float, stdin: TextIO | None = None, stdout: TextIO | None = None) -> str:
     """Shows ``instruction`` and waits for the operator. Returns what they confirmed; raises AssertionError when they
     report a failure or do not answer within ``timeout_s``, OperatorUnavailable when there is no operator."""
+    number(timeout_s, "operator timeout", positive=True)
+    mode = operator_mode(mode)
     if mode == "none":
         raise OperatorUnavailable(f"This step needs an operator at the instrument (run with --operator console|dialog): {instruction}")
     if mode == "dialog":
-        from robot.libraries.Dialogs import execute_manual_step
-
-        execute_manual_step(f"{instruction}\n\nPASS when done, FAIL if it could not be done.", "The operator could not do it")
+        try:
+            result = run_process([sys.executable, "-m", "grf.operator_prompt", instruction], timeout_s)
+        except subprocess.TimeoutExpired:
+            raise AssertionError(f"The operator did not confirm within {timeout_s:g} s: {instruction}") from None
+        if result.returncode != 0:
+            raise AssertionError(f"The operator dialog failed: {(result.stderr or result.stdout).strip()}")
         return "done"
     return _ask_console(instruction, timeout_s, stdin or sys.__stdin__, stdout or sys.__stdout__)
 
@@ -112,3 +120,13 @@ def _answers(stdin: TextIO) -> queue.Queue[str | None]:
             threading.Thread(target=read, name="operator-console", daemon=True).start()
             return answers
         return entry[1]
+
+
+if __name__ == "__main__":
+    from robot.libraries.Dialogs import execute_manual_step
+
+    try:
+        execute_manual_step(f"{sys.argv[1]}\n\nPASS when done, FAIL if it could not be done.", "The operator could not do it")
+    except AssertionError as error:
+        print(error, file=sys.stderr)
+        raise SystemExit(1) from error

@@ -30,6 +30,7 @@ from typing import Any
 
 from grf import project
 from grf.deadline import Deadline
+from grf.process import run as run_process
 from grf.validation import integer, number, table, text
 
 
@@ -53,7 +54,7 @@ class RigSshError(RuntimeError):
 
 
 def _run(argv: list[str], timeout_s: float) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(argv, capture_output=True, text=True, timeout=timeout_s, check=False)
+    return run_process(argv, timeout_s)
 
 
 def _port_open(host: str, port: int, timeout_s: float) -> bool:

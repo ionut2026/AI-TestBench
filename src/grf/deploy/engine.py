@@ -99,7 +99,7 @@ class Deployment:
     def step(self, name: str) -> Iterator[Step]:
         current = Step(name, "IN_PROGRESS")
         self.record.steps.append(current)
-        self.checkpoint()
+        self.checkpoint(compensating=name == "rollback")
         start = self.monotonic()
         try:
             yield current
@@ -112,9 +112,9 @@ class Deployment:
         finally:
             current.seconds = round(self.monotonic() - start, 2)
             self.log(f"[{current.status}] {name}" + (f": {current.detail}" if current.detail else ""))
-            self.checkpoint()
+            self.checkpoint(compensating=name == "rollback")
 
-    def checkpoint(self) -> None:
+    def checkpoint(self, *, compensating: bool = False) -> None:
         if not self.journaling or self.journal_failed:
             return  # the first error aborts normal execution; compensating cleanup must remain possible
         try:
@@ -122,7 +122,8 @@ class Deployment:
         except OSError as err:
             self.journal_failed = True
             self.log(f"ERROR: deployment evidence checkpoint failed: {err}; aborting, cleanup may be unjournaled")
-            raise DeployError(f"cannot persist deployment evidence: {err}") from err
+            if not compensating:
+                raise DeployError(f"cannot persist deployment evidence: {err}") from err
 
     def run(self, command: str, timeout_s: float = 120, check: bool = True) -> str:
         assert self.t is not None

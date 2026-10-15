@@ -138,6 +138,17 @@ Product integrations can share `grf.deadline.Deadline(seconds)` across substeps:
 pass `remaining()` to blocking calls and use `sleep(seconds)` for bounded polling.
 Expiry raises `TimeoutError`; a late successful response does not renew the budget.
 
+Local rig/SSH/SCP and mutation subprocesses run in an owned process tree. Timeout or cancellation
+terminates descendants as well as the initial command, so inherited output pipes cannot keep the call
+blocked or leave a local restart script running. Windows uses a helper inside a kill-on-close Job Object
+(an OS-managed process group); failure to establish ownership fails before spawning the site command.
+This controls local processes, not a remote command already accepted by an SSH server: product/site
+recovery must still account for uncertain remote effects.
+
+Console and dialog operator prompts both enforce the requested timeout. Dialogs run in an owned
+subprocess so expiry closes the dialog and fails the step rather than waiting indefinitely.
+No response, a closed/failed dialog and an explicit operator failure never count as confirmation.
+
 Deployment reads its site config from `<ENV_PREFIX>_DEPLOY_CONFIG` (a file outside the repository), the optional
 Jenkins login from `JENKINS_USER`/`JENKINS_TOKEN` and records for reports from `GRF_DEPLOYMENT_RECORD`; see
 [Deploying builds](DEPLOYMENT.md#environment-variables). Install `general-robot-framework[deploy]` for the default

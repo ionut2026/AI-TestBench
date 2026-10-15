@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from grf import project
+from grf.process import run as run_process
 from grf.validation import integer, number
 
 
@@ -177,7 +178,7 @@ class RigControl:
     def _run(self, *args: str, timeout_s: float | None = None) -> str:
         timeout = self.timeout_s if timeout_s is None else timeout_s
         try:
-            done = subprocess.run([*self.command, *args], capture_output=True, text=True, timeout=timeout, check=False)
+            done = run_process([*self.command, *args], timeout)
         except FileNotFoundError as err:
             raise RigControlError(f"Rig control '{self}' not found: {err}") from err
         except subprocess.TimeoutExpired as err:

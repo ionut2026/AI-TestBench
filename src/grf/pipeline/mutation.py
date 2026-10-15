@@ -130,7 +130,9 @@ Runner = Callable[[list[str], dict[str, str], Path, int], int]
 def _subprocess_runner(argv: list[str], env: dict[str, str], console: Path, timeout_s: int) -> int:
     with open(console, "w", encoding="utf-8") as out:
         try:
-            return subprocess.run(argv, env=env, stdout=out, stderr=subprocess.STDOUT, timeout=timeout_s).returncode
+            from grf.process import run
+
+            return run(argv, timeout_s, env=env, stdout=out, stderr=subprocess.STDOUT).returncode
         except subprocess.TimeoutExpired:
             out.write(f"\nTIMEOUT after {timeout_s} s\n")
             return 255

@@ -9,6 +9,7 @@ import getpass
 import json
 import os
 import tempfile
+import time
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -126,7 +127,14 @@ class DeployRecord:
                 json.dump(data, f, indent=1, ensure_ascii=False)
                 f.flush()
                 os.fsync(f.fileno())
-            os.replace(temporary, path)
+            for attempt in range(6):
+                try:
+                    os.replace(temporary, path)
+                    break
+                except PermissionError as err:
+                    if getattr(err, "winerror", None) not in (5, 32, 33) or attempt == 5:
+                        raise
+                    time.sleep(0.01 * 2**attempt)
             if os.name != "nt":
                 descriptor = os.open(out_dir, os.O_RDONLY)
                 try:
