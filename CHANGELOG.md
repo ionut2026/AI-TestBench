@@ -6,6 +6,12 @@ Tags and publication are explicit maintainer actions.
 
 ## 0.4.0 - Unreleased
 
+- Resolve static Robot resources consistently for lint/review fingerprints, including `${CURDIR}`,
+  `${/}` and keyword-only `.robot` imports. Scope keyword resolution to each suite/import graph;
+  ambiguous definitions and unresolved imports report lint rule `00`, never silently overwrite one body.
+- Include default/inherited test and suite lifecycle calls in sleep/timing/capability lint checks.
+  **Migration:** fix newly exposed lifecycle violations and ambiguous or dynamic resource imports.
+
 - Validate nested project rig/lint/catalog/mutation settings during load instead of raising late
   `AttributeError`/`KeyError`. Reject misspelled core fields, including evidence-tier flags.
   Product-specific settings belong in separate product-owned top-level tables.

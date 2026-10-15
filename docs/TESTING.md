@@ -28,6 +28,14 @@ No command creates or migrates an approval automatically. See [Workflows](WORKFL
 `lint` checks documentation, forbidden sleeps, literal timing values and configured capability/keyword rules,
 following nested resource imports with cycle protection. `drift --strict` checks hashes, missing coverage,
 orphan/untagged tests, changed state/links, retired specifications, missing human approval and lint violations.
+
+Static resource imports support `${CURDIR}`, `${/}` and either `.resource` or keyword-only `.robot` files.
+Keyword resolution is local to each suite/import context, including qualified resource names and transitive
+calls. Duplicate callable definitions are never overwritten: ambiguous user calls report rule `00` and
+all possible bodies are conservatively analyzed. Missing or dynamically unresolved resources also report
+`00` rather than implying complete analysis. Use resolvable static resource paths for strict lint.
+Default test setup/teardown, suite setup/teardown and inherited directory initializers participate in
+timing/sleep and capability checks; explicit `NONE` cancels an inherited test lifecycle setting.
 Pending and suspect entries are reported for review; pending alone does not fail the strict drift gate.
 
 ## Execution and reports

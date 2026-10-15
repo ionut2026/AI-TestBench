@@ -20,6 +20,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from grf.pipeline.resources import resolve_resource
+
 FINGERPRINT_SCHEME = "grf-content-1"
 _DROP = {"lineno", "source", "error"}
 _PENDING = "review:pending"
@@ -33,22 +35,13 @@ def _clean(value: Any) -> Any:
     return value
 
 
-def _resolve(name: str, directory: Path) -> Path | None:
-    name = name.replace("${CURDIR}", str(directory)).replace("${/}", "/")
-    if "${" in name:
-        return None
-    path = Path(name)
-    path = path if path.is_absolute() else directory / path
-    return path.resolve() if path.is_file() else None
-
-
 def _resource_texts(imports, directory: Path, seen: dict[Path, str], unresolved: list[str]) -> None:
     from robot.running import ResourceFileBuilder
 
     for imp in imports:
         if imp.type != "RESOURCE":
             continue
-        path = _resolve(str(imp.name), Path(imp.directory or directory))
+        path = resolve_resource(str(imp.name), Path(imp.directory or directory))
         if path is None:
             unresolved.append(str(imp.name))
             continue

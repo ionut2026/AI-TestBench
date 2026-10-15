@@ -20,10 +20,11 @@ resource wrappers count as use of their underlying keywords. A templated test (`
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from grf import project
+from grf.pipeline.resources import resolve_resource
 from grf.project import norm_keyword as norm
 
 QUOTE_WORDS = 5
@@ -72,6 +73,7 @@ class Call:
     args: tuple[str, ...]
     line: int
     conditional: bool
+    source: Path | None = None
 
 
 def _calls(body, conditional: bool = False):
@@ -110,40 +112,72 @@ def _section_items(model, section: str):
 
 
 class KeywordIndex:
-    """User keywords (name -> calls) from resource files and suites, for following calls transitively."""
+    """Resolve user calls in their actual import context; never merge unrelated suite namespaces."""
 
-    def __init__(self):
-        self.keywords: dict[str, list[Call]] = {}
+    def __init__(self, models: dict, imports: dict[Path, list[Path]]):
+        self.imports = imports
+        self.keywords: dict[Path, dict[str, list[list[Call]]]] = {}
         self.tagged: frozenset[str] = frozenset().union(*(r.satisfied_by for r in project.current().lint_tag_rules))
+        self.ambiguities: set[tuple[Path, int, str]] = set()
+        for source, model in models.items():
+            definitions: dict[str, list[list[Call]]] = {}
+            for kw in _section_items(model, "KeywordSection"):
+                definitions.setdefault(norm(kw.name), []).append(
+                    [replace(call, source=source) for call in _calls(kw.body)])
+            self.keywords[source] = definitions
 
-    def add(self, model) -> None:
-        for kw in _section_items(model, "KeywordSection"):
-            self.keywords[norm(kw.name)] = list(_calls(kw.body))
+    def closure(self, source: Path) -> list[Path]:
+        seen: set[Path] = set()
+        pending = [source]
+        while pending:
+            path = pending.pop()
+            if path not in seen:
+                seen.add(path)
+                pending.extend(self.imports.get(path, []))
+        return sorted(seen)
+
+    def resolve(self, call: Call) -> list[list[Call]]:
+        assert call.source is not None
+        name = norm(call.name)
+        namespace, dot, _ = call.name.rpartition(".")
+        sources = self.closure(call.source)
+        if dot:
+            normalized = re.sub(r"[\s_]", "", namespace).lower()
+            sources = [source for source in sources if re.sub(r"[\s_]", "", source.stem).lower() == normalized]
+        elif name in self.keywords[call.source]:
+            sources = [call.source]
+        definitions = [body for source in sources for body in self.keywords[source].get(name, [])]
+        if len(definitions) > 1:
+            self.ambiguities.add((call.source, call.line, call.name))
+        return definitions
 
     def _sub_calls(self, call: Call) -> list[Call]:
         n = norm(call.name)
         if n.startswith("runkeyword") or n in ("waituntilkeywordsucceeds", "repeatkeyword"):
             cond = call.conditional or n in RUN_KEYWORD_CONDITIONAL
-            return [Call(a, (), call.line, cond) for a in call.args if norm(a) in self.keywords or norm(a) in self.tagged]
+            candidates = [Call(a, (), call.line, cond, call.source) for a in call.args]
+            return [candidate for candidate in candidates if norm(candidate.name) in self.tagged or self.resolve(candidate)]
         return []
 
     def uses(self, calls: list[Call], targets: frozenset[str]) -> tuple[bool, bool]:
         """(used at all, used unconditionally) of any keyword in ``targets``."""
         any_use = uncond = False
-        seen: set[tuple[str, bool]] = set()
+        seen: set[tuple[Path | None, str, bool]] = set()
         stack = list(calls)
         while stack:
             call = stack.pop()
             n = norm(call.name)
-            if (n, call.conditional) in seen:
+            key = (call.source, call.name.lower(), call.conditional)
+            if key in seen:
                 continue
-            seen.add((n, call.conditional))
+            seen.add(key)
             if n in targets:
                 any_use = True
                 uncond = uncond or not call.conditional
             stack += self._sub_calls(call)
-            for inner in self.keywords.get(n, []):
-                stack.append(Call(inner.name, inner.args, inner.line, inner.conditional or call.conditional))
+            for definition in self.resolve(call):
+                for inner in definition:
+                    stack.append(replace(inner, conditional=inner.conditional or call.conditional))
         return any_use, uncond
 
 
@@ -166,16 +200,19 @@ def _robot_files(paths: list[Path]) -> list[Path]:
     return out
 
 
-def _resources(model, source: Path) -> list[Path]:
-    out = []
+def _resources(model, source: Path, out: list[Violation]) -> list[Path]:
+    resources = []
     for s in model.sections:
         if type(s).__name__ == "SettingSection":
             for node in s.body:
                 if type(node).__name__ == "ResourceImport" and node.name:
-                    path = (source.parent / node.name).resolve()
-                    if path.exists():
-                        out.append(path)
-    return out
+                    path = resolve_resource(node.name, source.parent)
+                    if path is not None:
+                        resources.append(path)
+                    else:
+                        out.append(Violation(project.current().rule(0), str(source), node.lineno, "Resource",
+                                             f"Cannot statically resolve resource {node.name!r}"))
+    return resources
 
 
 def _check_calls(calls: list[Call], source: str, item: str, out: list[Violation]) -> None:
@@ -201,33 +238,57 @@ def lint(paths: list[Path], catalog: dict | None = None) -> list[Violation]:
     models = {}
     for f in files:
         models[f.resolve()] = get_resource_model(str(f)) if f.suffix == ".resource" else get_model(str(f))
-    shared = KeywordIndex()
+    roots = [path.resolve() for path in paths if path.is_dir()]
+    for source in list(models):
+        for directory in (source.parent, *source.parent.parents):
+            if not any(directory == root or directory.is_relative_to(root) for root in roots):
+                break
+            initializer = directory / "__init__.robot"
+            if initializer.is_file() and initializer not in models:
+                models[initializer] = get_model(str(initializer))
+    out: list[Violation] = []
+    imports: dict[Path, list[Path]] = {}
     pending = list(models)
     while pending:
         f = pending.pop()
         m = models[f]
-        for r in _resources(m, f):
+        imports[f] = _resources(m, f, out)
+        for r in imports[f]:
             if r not in models:
                 models[r] = get_resource_model(str(r))
                 pending.append(r)
-    for f, m in models.items():
-        if f.suffix == ".resource":
-            shared.add(m)
-
     p = project.current()
-    out: list[Violation] = []
+    index = KeywordIndex(models, imports)
     for f, model in models.items():
         src = str(f)
         for kw in _section_items(model, "KeywordSection"):
             _check_calls(list(_calls(kw.body)), src, kw.name, out)
         if f.suffix == ".resource":
             continue
-        index = KeywordIndex()
-        index.keywords = dict(shared.keywords)
-        index.add(model)
         suite_tags = list(getattr(_setting(model, "TestTags"), "values", ()) or ()) + list(getattr(_setting(model, "ForceTags"), "values", ()) or ())
         suite_setup, suite_teardown = _setting(model, "TestSetup"), _setting(model, "TestTeardown")
         suite_template = _setting(model, "TestTemplate")
+        lifecycle = []
+        ancestors = [model]
+        for directory in (f.parent, *f.parent.parents):
+            initializer = directory / "__init__.robot"
+            if initializer in models and initializer != f:
+                ancestors.append(models[initializer])
+        for ancestor in ancestors:
+            origin = Path(ancestor.source).resolve()
+            for kind in ("SuiteSetup", "SuiteTeardown"):
+                setting = _setting(ancestor, kind)
+                if setting is not None and setting.name and setting.name.upper() != "NONE":
+                    lifecycle.append(Call(setting.name, tuple(setting.args), setting.lineno, False, origin))
+        setup_origin = teardown_origin = f
+        for ancestor in ancestors[1:]:
+            origin = Path(ancestor.source).resolve()
+            if suite_setup is None and (setting := _setting(ancestor, "TestSetup")) is not None:
+                suite_setup, setup_origin = setting, origin
+            if suite_teardown is None and (setting := _setting(ancestor, "TestTeardown")) is not None:
+                suite_teardown, teardown_origin = setting, origin
+            if suite_template is None:
+                suite_template = _setting(ancestor, "TestTemplate")
         for test in _section_items(model, "TestCaseSection"):
             nodes = {type(n).__name__: n for n in test.body}
             tags = [t.lower() for t in suite_tags + list(getattr(nodes.get("Tags"), "values", ()) or ())]
@@ -243,14 +304,17 @@ def lint(paths: list[Path], catalog: dict | None = None) -> list[Violation]:
             template_name = template.value if template is not None else (suite_template.value if suite_template is not None else None)
             if template_name and template_name.upper() != "NONE":
                 # data rows of a templated test are arguments, not keyword calls
-                calls = [Call(template_name, (), test.lineno, False)]
+                calls = [Call(template_name, (), test.lineno, False, f)]
             else:
-                calls = list(_calls(test.body))
-            _check_calls(calls, src, test.name, out)
+                calls = [replace(call, source=f) for call in _calls(test.body)]
             if "Setup" not in nodes and suite_setup is not None and suite_setup.name:
-                calls.append(Call(suite_setup.name, tuple(suite_setup.args), suite_setup.lineno, False))
+                calls.append(Call(suite_setup.name, tuple(suite_setup.args), suite_setup.lineno, False, setup_origin))
             if "Teardown" not in nodes and suite_teardown is not None and suite_teardown.name:
-                calls.append(Call(suite_teardown.name, tuple(suite_teardown.args), suite_teardown.lineno, False))
+                calls.append(Call(suite_teardown.name, tuple(suite_teardown.args), suite_teardown.lineno, False, teardown_origin))
+            calls += lifecycle
+            for call in calls:
+                _check_calls([call], str(call.source or f), test.name, out)
+            index.ambiguities.clear()
             for tag_rule in p.lint_tag_rules:
                 _, uncond = index.uses(calls, tag_rule.keywords)
                 used, _ = index.uses(calls, tag_rule.satisfied_by)
@@ -258,6 +322,10 @@ def lint(paths: list[Path], catalog: dict | None = None) -> list[Violation]:
                     out.append(Violation(tag_rule.rule, src, test.lineno, test.name, f"Test {tag_rule.what} but is not tagged {tag_rule.tag}"))
                 elif tag_rule.tag in tags and not used:
                     out.append(Violation(tag_rule.rule, src, test.lineno, test.name, f"Tagged {tag_rule.tag} but never {tag_rule.what}"))
+            # Resolve even without tag rules so duplicate wrappers cannot silently select one body.
+            index.uses(calls, frozenset())
+            for origin, line, name in sorted(index.ambiguities):
+                out.append(Violation(p.rule(0), str(origin), line, test.name, f"Ambiguous user keyword {name!r}"))
     return out
 
 
