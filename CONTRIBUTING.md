@@ -22,7 +22,7 @@ of commands, and describe expected results. Keep beginner walkthroughs in
 [Getting started](docs/GETTING-STARTED.md), with detailed policies in their reference guides.
 When starter templates change, update `examples\demo` in the same change; the parity test enforces this.
 For shared skills, also update the matching GRF `.github\skills` copy; see [Copilot skills](docs/SKILLS.md).
-The shared integration coordinator also has identical root, template and demo copies. Preserve its supported
+The shared main agent orchestrator also has identical root, template and demo copies. Preserve its supported
 `name`/`description` frontmatter and generic ownership boundaries; keep product mapping in product instructions.
 
 ## Coordinated repository work

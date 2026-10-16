@@ -15,7 +15,7 @@ for how a product selects them.
 GeneralRobotFramework\
   .github\
     copilot-instructions.md     working and documentation-maintenance rules
-    agents\integration-coordinator.agent.md  opt-in cross-repository coordination role
+    agents\main-agent-orchestrator.agent.md  opt-in cross-repository coordination role
     skills\                     Copilot task procedures for GRF and generic product work
     workflows\                  core/reusable Windows and Linux CI
   docs\
@@ -92,7 +92,7 @@ MyProductAutomation\
   robot\
     environments\mock.py            tier variables
     suites\demo\counter.robot       specification-traced tests
-  .github\agents\                   author, independent reviewer and integration coordinator instructions
+  .github\agents\                   author, independent reviewer and main agent orchestrator instructions
   .github\skills\                   generic Copilot procedures copied from GRF
   generated\briefs\, results\       generated inputs and execution output
 ```
@@ -134,7 +134,7 @@ draft product tests or invoke a chain of author/reviewer agents. Existing produc
 maintained in the product repository and are not overwritten by a GRF package upgrade. See
 [the beginner explanation of agents](GETTING-STARTED.md#why-are-agent-files-in-both-repositories).
 Starter skills follow the same copy-and-review update model; see [Copilot skills](SKILLS.md).
-The opt-in integration coordinator uses the shared `grf-coordinate-integration` procedure, not a GRF runtime
+The opt-in main agent orchestrator uses the shared `main-agent-orchestrator` procedure, not a GRF runtime
 service. Client capabilities determine whether project/session delegation is available; instructions cannot
 create tools, reconnect sessions or grant authorization. Framework/consumer owners agree contracts first,
 validate consumers against immutable framework commits and sequence authorized releases separately.

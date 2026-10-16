@@ -118,7 +118,7 @@ test and does not start an AI process on its own.
 GRF ships general `test-author` and `test-reviewer` instruction templates in `src\grf\templates`.
 `grf init` copies them into a new product's `.github\agents` folder. The checked-in demo has matching example
 copies in `examples\demo\.github\agents`. GRF's root `.github\agents` contains one reusable
-`integration-coordinator` role, also copied into new starters.
+`main-agent-orchestrator` role, also copied into new starters.
 
 SMM keeps its own product-specific instructions, such as
 [`smm-test-author.agent.md`](https://github.com/ionut2026/SMMAutomationFramework/blob/main/.github/agents/smm-test-author.agent.md).
@@ -142,10 +142,10 @@ test author or reviewer. For example, a shared GRF report change may need an SMM
 the report contract, while SMM owns its adapter and tests. An unaffected product needs no worker.
 
 In a Copilot client that supports custom agents, open the assigned checkout and explicitly select
-`integration-coordinator` (in Copilot CLI, `/agent` opens the agent selector). Then ask:
+`main-agent-orchestrator` (in Copilot CLI, `/agent` opens the agent selector). Then ask:
 
 ```text
-Use grf-coordinate-integration to coordinate this framework change and its affected consumer.
+Use the main-agent-orchestrator skill to coordinate this framework change and its affected consumer.
 Agree the exact contract before implementation and honor my selected Git workflow.
 For direct-main commits, use one writer per repository and ask on conflicts with existing work.
 ```

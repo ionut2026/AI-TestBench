@@ -31,7 +31,7 @@ TEMPLATES = {
     "suite": "robot/suites/demo/counter.robot",
     "author": ".github/agents/test-author.agent.md",
     "reviewer": ".github/agents/test-reviewer.agent.md",
-    "coordinator": ".github/agents/integration-coordinator.agent.md",
+    "coordinator": ".github/agents/main-agent-orchestrator.agent.md",
 }
 SKILLS = (
     "getting-started",
@@ -44,9 +44,10 @@ SKILLS = (
     "product-plugin",
     "template-upgrade",
     "deploy-build",
-    "coordinate-integration",
+    "main-agent-orchestrator",
 )
 TEMPLATES.update({f"skill-{name}": f".github/skills/grf-{name}/SKILL.md" for name in SKILLS})
+TEMPLATES["skill-main-agent-orchestrator"] = ".github/skills/main-agent-orchestrator/SKILL.md"
 # Only with `grf init --with-deploy`: the site config example and the Jenkins pipeline (docs/DEPLOYMENT.md).
 DEPLOY_TEMPLATES = {
     "deploy-config": "robot/environments/deploy.example.toml",

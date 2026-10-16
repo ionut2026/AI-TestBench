@@ -6,6 +6,10 @@ Tags and publication are explicit maintainer actions.
 
 ## Unreleased
 
+- Rename the shared coordinator agent and integration skill to `main-agent-orchestrator`, including
+  starter files and documentation. Existing products must adopt the renamed pair and update references;
+  the scaffold updater does not remove old files. See the migration notes in `docs\SKILLS.md`.
+
 - Clarify simulator ownership in the beginner and repository guides: GRF does not require SMM TestBench;
   product adapters define the simulator build, interface and runtime-resource requirements.
 

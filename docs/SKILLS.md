@@ -31,7 +31,7 @@ Agents can use skills. For example, the starter `test-author` agent tells Copilo
 | `grf-deploy-build` | Explaining or planning a deployment, reading `deploy status` or a deployment record | GRF and new products |
 | `grf-product-plugin` | Implementing `ProductPlugin` hooks | GRF and new products |
 | `grf-template-upgrade` | Reviewing copied agents, skills and starter files after a GRF upgrade | GRF and new products |
-| `grf-coordinate-integration` | Coordinating explicitly requested framework/consumer changes | GRF and new products |
+| `main-agent-orchestrator` | Coordinating explicitly requested framework/consumer changes | GRF and new products |
 | `grf-validate-change` | Validating GRF core, templates, setup or documentation changes | GRF repository only |
 
 ## How to use a skill
@@ -69,7 +69,7 @@ grf scaffold --update-skills
 ```
 
 `--check` lists changes without writing (exit 1 means updates are needed); the second command applies
-safe generic updates. Only the eleven `grf-*` skills and generic integration coordinator are managed.
+safe generic updates. Only the ten shared `grf-*` skills, the `main-agent-orchestrator` skill and its agent are managed.
 Product-named skills and specialized author/reviewer agents are never replaced or removed.
 The `.github\grf-scaffold.json` manifest records generated content digests: an update replaces an existing
 file only if it still matches that recorded generic version. New/identical legacy generic files can be
@@ -81,8 +81,8 @@ Use `grf-template-upgrade` for the rest of a template upgrade.
 
 ## Coordinated integration
 
-Select `integration-coordinator`, stored in `.github\agents\integration-coordinator.agent.md`, and request
-`grf-coordinate-integration`, stored in `.github\skills\grf-coordinate-integration\SKILL.md`.
+Select `main-agent-orchestrator`, stored in `.github\agents\main-agent-orchestrator.agent.md`, and request
+the matching skill, stored in `.github\skills\main-agent-orchestrator\SKILL.md`.
 See [the beginner example](GETTING-STARTED.md#how-do-i-ask-for-coordinated-changes).
 In Copilot CLI, [`/agent` selects an agent](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/invoke-custom-agents);
 other clients have their own agent picker. Supported agent
@@ -104,6 +104,12 @@ New `grf init` starters already include both. Installing a newer Python package 
 For example, GRF owns generic infrastructure and SMMAutomationFramework owns SMM adapters/suites;
 this mapping is an example, not hard-coded into the reusable agent or skill.
 Do not replace a product's specialized author/reviewer with the coordinator.
+
+The agent was previously named `integration-coordinator` and the skill `grf-coordinate-integration`.
+For existing products, review and adopt the renamed pair together and update references in local instructions.
+The scaffold updater creates the new paths but does not delete obsolete files: after reviewing any local
+customizations, remove the old agent and skill files deliberately to avoid duplicate selectable roles.
+Do not run an older pinned GRF scaffold updater over the renamed files; it still generates the old names.
 
 Keep direct main checkouts and uncommitted work safe. Honor the user-selected direct-main or branch/PR workflow.
 Direct-main work uses one writer per repository, with branch/dirty-state/ownership discovery before writing.
@@ -134,6 +140,9 @@ For a shared skill, edit `src\grf\templates\skill-<name>.tpl`, then copy the sam
 
 - `.github\skills\grf-<name>\SKILL.md`
 - `examples\demo\.github\skills\grf-<name>\SKILL.md`
+
+For `main-agent-orchestrator`, use `skill-main-agent-orchestrator.tpl` and the unprefixed
+`main-agent-orchestrator` skill folder in both locations.
 
 Keep the frontmatter `name` equal to the folder name and make the `description` clearly state when to use it.
 Run `tests\test_skills.py` and `tests\test_scaffold.py`; see [Testing](TESTING.md#core-validation-windows).

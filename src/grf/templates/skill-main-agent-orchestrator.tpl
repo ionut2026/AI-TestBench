@@ -1,11 +1,11 @@
 ---
-name: grf-coordinate-integration
+name: main-agent-orchestrator
 description: Coordinates requested framework and consumer changes through exact contracts, user-selected Git workflow, clear repository ownership and immutable-commit validation.
 ---
 
-# Coordinate a framework integration
+# Main agent orchestrator
 
-Use this procedure with the integration-coordinator role for explicitly requested coordinated work.
+Use this procedure with the main-agent-orchestrator role for explicitly requested coordinated work.
 This is an instruction pack, not an executable orchestrator or GRF CLI command.
 Repository instructions do not spawn workers, grant permission, authenticate approval or automatically
 reconnect sessions. Product mappings belong in product-owned instructions.
@@ -55,8 +55,8 @@ reconnect sessions. Product mappings belong in product-owned instructions.
 ## Safety and adoption
 
 - Keep generic copies free of product names, local paths, credentials and instrument details.
-- Adopt `.github\agents\integration-coordinator.agent.md` and
-  `.github\skills\grf-coordinate-integration\SKILL.md` together from one reviewed immutable framework commit.
+- Adopt `.github\agents\main-agent-orchestrator.agent.md` and
+  `.github\skills\main-agent-orchestrator\SKILL.md` together from one reviewed immutable framework commit.
   Keep shared copies unchanged; document product-specific mappings separately. Package upgrades do not
   rewrite repository files. New starters receive both files; existing products review and copy deliberately.
 - Do not change models, account settings, OS settings, credentials or permissions. Do not trigger Jenkins,

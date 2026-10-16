@@ -7,7 +7,7 @@
   For direct-main work, use one writer per repository; inspect dirty state and ownership first, do not switch
   or clean up user-owned dirty main, and ask on conflicts. Do not create branches/PRs against the user's choice
   or edit another session's checkout. Follow the shared integration procedure and coordinate a safe handoff.
-- Use `integration-coordinator` and `grf-coordinate-integration` for requested coordination. Instructions do
+- Use the `main-agent-orchestrator` agent and matching skill for requested coordination. Instructions do
   not spawn workers, reconnect sessions, grant permission or authenticate approval. Discover available client
   capabilities first; if session tools are absent, report the limitation and use explicit handoffs.
 - Push, merge and tag only with explicit authorization matching the repository, change and action.

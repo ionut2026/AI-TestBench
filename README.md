@@ -109,8 +109,8 @@ its connection settings. Generic development and the demo do not need the server
 ## Development
 
 See [Testing](docs/TESTING.md#core-validation-windows) for the core checks and wheel-only smoke run.
-For explicitly requested cross-repository work, select the reusable `integration-coordinator` agent and use
-`grf-coordinate-integration`; see [invocation, adoption and limits](docs/SKILLS.md#coordinated-integration).
+For explicitly requested cross-repository work, select the reusable `main-agent-orchestrator` agent and use
+the matching skill; see [invocation, adoption and limits](docs/SKILLS.md#coordinated-integration).
 These files do not start workers, grant permissions or automatically reconnect sessions.
 `.github\workflows\grf-ci.yml` provides reusable Windows/Linux checks through `workflow_call`. Product CI
 separately installs its approved GRF release and validates its own adapter.

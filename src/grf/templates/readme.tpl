@@ -94,8 +94,8 @@ See GRF's WORKFLOWS evidence contract before adopting real tiers. Removing `revi
 legacy name-only reviews apply only to unique test names.
 
 The generic author/reviewer agents are in `.github\agents`. They preserve human sign-off and read-only RV&S access.
-For requested cross-repository changes, explicitly select `integration-coordinator` in a supporting Copilot
-client and ask it to use `grf-coordinate-integration`. The agent discovers available capabilities; files alone
+For requested cross-repository changes, explicitly select `main-agent-orchestrator` in a supporting Copilot
+client and ask it to use the matching skill. The agent discovers available capabilities; files alone
 do not start workers or reconnect sessions. Honor the user-selected direct-main or branch/PR workflow,
 agree exact contracts first and validate consumers against an immutable framework commit.
 Direct-main work requires one writer per repository, preserving user edits and asking on conflicts.

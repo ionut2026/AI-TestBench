@@ -21,7 +21,8 @@ def frontmatter(path: Path) -> dict[str, str]:
 
 def test_starter_skills_are_registered():
     for name in SKILLS:
-        relative = f".github/skills/grf-{name}/SKILL.md"
+        folder = name if name == "main-agent-orchestrator" else f"grf-{name}"
+        relative = f".github/skills/{folder}/SKILL.md"
         assert TEMPLATES[f"skill-{name}"] == relative
 
 
@@ -108,7 +109,8 @@ def test_atomic_skill_write_failure_preserves_existing_file(tmp_path, monkeypatc
 
 def test_skills_have_valid_frontmatter_and_safety_rules():
     paths = sorted((ROOT / ".github/skills").glob("*/SKILL.md"))
-    assert {path.parent.name for path in paths} == {f"grf-{name}" for name in SKILLS} | {"grf-validate-change"}
+    expected = {name if name == "main-agent-orchestrator" else f"grf-{name}" for name in SKILLS}
+    assert {path.parent.name for path in paths} == expected | {"grf-validate-change"}
     for path in paths:
         fields = frontmatter(path)
         assert fields["name"] == path.parent.name
@@ -120,23 +122,24 @@ def test_skills_have_valid_frontmatter_and_safety_rules():
 def test_repository_shared_skills_match_starter_skills(tmp_path):
     generated = init_project(tmp_path / "starter", "Skills", "SPEC")
     for name in SKILLS:
-        relative = f".github/skills/grf-{name}/SKILL.md"
+        relative = TEMPLATES[f"skill-{name}"]
         assert (ROOT / relative).read_text(encoding="utf-8") == (generated / relative).read_text(encoding="utf-8")
 
 
 def test_agents_reference_existing_skills(tmp_path):
     generated = init_project(tmp_path / "starter", "Skills", "SPEC")
     for agent in (generated / ".github/agents").glob("*.agent.md"):
-        for skill in re.findall(r"\bgrf-[a-z-]+\b", agent.read_text(encoding="utf-8")):
+        for skill in re.findall(r"\b(?:grf-[a-z-]+|main-agent-orchestrator)\b",
+                                agent.read_text(encoding="utf-8")):
             assert (generated / ".github/skills" / skill / "SKILL.md").is_file(), (agent, skill)
 
 
 def test_coordinator_is_shared_generic_and_uses_supported_frontmatter(tmp_path):
     generated = init_project(tmp_path / "starter", "Skills", "SPEC")
-    relative = Path(".github/agents/integration-coordinator.agent.md")
+    relative = Path(".github/agents/main-agent-orchestrator.agent.md")
     source = ROOT / relative
     assert frontmatter(source) == {
-        "name": "integration-coordinator",
+        "name": "main-agent-orchestrator",
         "description": (
             "Coordinates explicitly requested framework and consumer changes with clear ownership, "
             "user-selected Git workflow, exact contracts and evidence-based handoffs."
@@ -147,11 +150,11 @@ def test_coordinator_is_shared_generic_and_uses_supported_frontmatter(tmp_path):
     assert text == (generated / relative).read_text(encoding="utf-8")
     assert text == (ROOT / "examples/demo" / relative).read_text(encoding="utf-8")
     assert {path.name for path in (ROOT / ".github/agents").glob("*.agent.md")} == {relative.name}
-    skill = (ROOT / ".github/skills/grf-coordinate-integration/SKILL.md").read_text(encoding="utf-8")
+    skill = (ROOT / ".github/skills/main-agent-orchestrator/SKILL.md").read_text(encoding="utf-8")
     for content in (text, skill):
         assert len(content) < 30_000
         assert all(term not in content.lower() for term in ("smm", "d:\\", "c:\\", "ionut2026"))
-        assert "grf-coordinate-integration" in content
+        assert "main-agent-orchestrator" in content
         assert "human approval" in content
         assert "authorization" in content
         assert "read-only" in content
@@ -159,7 +162,7 @@ def test_coordinator_is_shared_generic_and_uses_supported_frontmatter(tmp_path):
 
 
 def test_integration_procedure_preserves_contract_and_handoff_boundaries():
-    text = (ROOT / ".github/skills/grf-coordinate-integration/SKILL.md").read_text(encoding="utf-8")
+    text = (ROOT / ".github/skills/main-agent-orchestrator/SKILL.md").read_text(encoding="utf-8")
     for clause in (
         "Discover the current client's available tools and their schemas",
         "Without them, report the limitation",
